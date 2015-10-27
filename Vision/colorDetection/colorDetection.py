@@ -23,7 +23,6 @@ def colorDetection(image, lowerBound, upperBound, erosionValue = 15):
     #Finding the contours of the image
     contours = cv2.findContours(noiseFilter2, cv2.cv.CV_RETR_TREE, cv2.cv.CV_CHAIN_APPROX_SIMPLE)[0]
 
-    (rows, cols) = testImage.shape
     croppedImages = []
     centroids = []
     #Given at least one yellow contour
@@ -48,10 +47,10 @@ def colorDetection(image, lowerBound, upperBound, erosionValue = 15):
                     print rectY
                     print rectW
                     print rectH
-                    if rectX > 0 and rectY > 0 and rectW < rows and rectH < cols:
+                    if rectX > 0 and rectY > 0: #and rectW < rows and rectH < cols:
                         cImage = testImage[rectX:rectY,rectW:rectH]
                         cImage = testImage[rectY:rectH, rectX:rectW]
-                    cv2.imshow("TEST", testImage)
+                    #cv2.imshow("TEST", testImage)
 
                         #cv2.imshow("TestWindow", cImage)
                     cv2.waitKey(8)
@@ -67,8 +66,8 @@ def main():
     while camera.isOpened():
         _, image = camera.read()
         cv2.imshow('Original', image)
-        lowerBlue = numpy.array([85,100,100])
-        upperBlue = numpy.array([124,255,255])
+        lowerBlue = numpy.array([0,100,100])
+        upperBlue = numpy.array([50,255,255])
         #image = cv2.imread("/home/chris/Desktop/opencvtest/TopView.JPG")
         rectImg, centroids, circleImg = colorDetection(image, lowerBlue, upperBlue)
 
