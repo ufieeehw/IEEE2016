@@ -60,7 +60,7 @@ def GenericCascade(image, classifierPath, erosionFactor = 0.05):
 
 def main():
     #Put Path to Cascade locally until os.path is implemented
-    cascade_path = '../CascadeRC1/cascade.xml'
+    cascade_path = 'CascadeRC1/cascade.xml'
     camera = cv2.VideoCapture(-1)
 
     while(True):
