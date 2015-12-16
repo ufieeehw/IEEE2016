@@ -38,39 +38,55 @@ def line_intersection(line1, line2):
 
     
 # read in image
-img = cv2.imread('Images/card.png')
+img = cv2.imread('card.png')
+cv2.imshow('window', img)
+cv2.waitKey(2)
 
 # convert it to bw
 bw_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+cv2.imshow('BWimg', bw_img)
 
 # actual run canny edge 
 # parameters are subject to change/testing
 # 2nd param in minVal
 # 3rd param is max Val
 # they form the interval for acceptable intensity gradients
-edge_img = cv2.Canny(bw_img, 100, 200)
+edge_img = cv2.Canny(bw_img, 300, 200)
+cv2.imshow('EM',edge_img)
+
+kernel = np.ones((3,3),np.uint8)
+dilate = cv2.dilate(edge_img, kernel, iterations = 1)
+cv2.imshow('Dilate', dilate)
 
 # 2nd input is rho
 # 3rd param is theta
 # 4th param is min accpetance value for a line
 # 3rd and 4th param is going to be the major difference
+
+#pi/80, 120
 lines = cv2.HoughLines(edge_img,1,np.pi/80,120)
+print "lines"
+print lines
+# print "afsfsf"
 for rho,theta in lines[0]:
-    a = np.cos(theta)
-    b = np.sin(theta)
-    x0 = a*rho
-    y0 = b*rho
-    x1 = int(x0 + 1000*(-b))
-    y1 = int(y0 + 1000*(a))
-    x2 = int(x0 - 1000*(-b))
-    y2 = int(y0 - 1000*(a))
+	# print rho 
+	# print theta
+	a = np.cos(theta)
+	b = np.sin(theta)
+	x0 = a*rho
+	y0 = b*rho
+	x1 = int(x0 + 1000*(-b))
+	y1 = int(y0 + 1000*(a))
+	x2 = int(x0 - 1000*(-b))
+	y2 = int(y0 - 1000*(a))
 
-    point1 = [x1, y1]
-    point2 = [x2, y2]
+	point1 = [x1, y1]
+	edge_img = cv2.Canny(bw_img, 260, 200)
+	point2 = [x2, y2]
 
-    segment = [point1, point2]
-    line_segments.append(segment)
-    cv2.line(img,(x1,y1),(x2,y2),(0,0,255),2)
+	segment = [point1, point2]
+	line_segments.append(segment)
+	cv2.line(img,(x1,y1),(x2,y2),(0,0,255),2)
 
 for lineSeg1 in line_segments:
     for lineSeg2 in line_segments:
@@ -89,7 +105,7 @@ for lineSeg1 in line_segments:
 isQuad = True
 #check to make sure detected shape is a quadrilateral
 
-
+print len(corners)
 if (len(corners) < 4):
     print 'object detected is not a quadrilateral'
     isQuad = False
@@ -116,6 +132,7 @@ for currentCorner in corners:
 
 # average them to find center of mass
 centerX = (leftmostX + rightmostX) / 2
+# use low + (high - low) / 2
 centerY = (topmostY + bottommostY) / 2
 
 # just a display for the center point
@@ -135,13 +152,29 @@ BL = []
 # bottom right corner
 BR = []
 
+print "CenterY" + str(centerY)
+# print corners
+
+corners.sort(key=lambda x : x[1])
+# print corners
+
+counter = 0
 for currentCorner in corners:
-    if currentCorner[1] > centerY:
-        bottomCorners.append(currentCorner)
-    elif currentCorner[1] < centerY:
-        topCorners.append(currentCorner)
+	if counter < 2:
+		bottomCorners.append(currentCorner)
+	else:
+		topCorners.append(currentCorner)
+	counter = counter + 1
+# for currentCorner in corners:
+#     if currentCorner[1] > centerY:
+#         bottomCorners.append(currentCorner)
+#     else:
+#     # elif currentCorner[1] < centerY:
+#         topCorners.append(currentCorner)
 
 # determine top left and top right corners
+
+# print topCorners
 if topCorners[0][0] < topCorners[1][0]:
     TL = (topCorners[0])
     TR = (topCorners[1])
@@ -149,7 +182,8 @@ elif topCorners[1][0] < topCorners[0][0]:
     TL = (topCorners[1])
     TR = (topCorners[0])
 
-if bottomCorners[0][0] < bottomCorners[1][0]:
+# print bottomCorners
+if bottomCorners[0][0] <= bottomCorners[1][0]:
     BL = (bottomCorners[0])
     BR = (bottomCorners[1])
 elif bottomCorners[1][0] < bottomCorners[0][0]:
