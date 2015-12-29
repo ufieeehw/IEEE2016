@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+    <node name="hokuyo_left" pkg="hokuyo_node" type="hokuyo_node">
+        <param name="port" type="string" value="/dev/ttyACM0" />
+        <remap from="scan" to="scan_left" />
+	<param name="frame_id" type="string" value="laser_left" />
+    </node>
+
+    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_left" args="0 .125349 0 -1.570796 3.14159 0 base_link laser_left 10" />
+    <node pkg="ieee2016_navigation" type="laser_trimmer.py" name="laser_trimmer" args="125"/>
+</launch>
+  
