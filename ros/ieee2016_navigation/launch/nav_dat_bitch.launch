@@ -1,12 +1,15 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="tf_map_scanmatch_transform_frame_name" default="scanmatcher_frame"/>
-  <arg name="base_frame" default="laser_left"/>
+  <arg name="laser" default="middle"/>
+
+  <arg name="tf_map_scanmatch_transform_frame_name" default="scanmaster"/>
+  <arg name="base_frame" default="laser_$(arg laser)"/>
   <arg name="odom_frame" default="base_link"/>
   <arg name="pub_map_odom_transform" default="true"/>
   <arg name="scan_subscriber_queue_size" default="5"/>
-  <arg name="scan_topic" default="scan_trimmed"/>
   <arg name="map_size" default="2048"/>
+  <arg name="scan_topic" default="scan_trimmed_$(arg laser)"/>
+
 
   <node pkg="hector_mapping" type="hector_mapping" name="hector_mapping" output="screen">
     
@@ -21,7 +24,7 @@
     <param name="pub_map_odom_transform" value="$(arg pub_map_odom_transform)"/>
     
     <!-- Map size / start point -->
-    <param name="map_resolution" value="0.005"/>
+    <param name="map_resolution" value=".01"/>
     <param name="map_size" value="$(arg map_size)"/>
     <param name="map_start_x" value="0.5"/>
     <param name="map_start_y" value="0.5" />

@@ -34,8 +34,14 @@ else:
 
 print "New FOV Angle (rads):",new_fov_angle
 
-pub = rospy.Publisher('scan_trimmed', LaserScan, queue_size=5)
+pub_left = rospy.Publisher('scan_trimmed_left', LaserScan, queue_size=5)
+pub_middle = rospy.Publisher('scan_trimmed_middle', LaserScan, queue_size=5)
+pub_right = rospy.Publisher('scan_trimmed_right', LaserScan, queue_size=5)
+
 rospy.init_node('laser_trimmer')
-rospy.Subscriber('scan_left',LaserScan,trim_scan,(pub,new_fov_angle))
+
+rospy.Subscriber('scan_left',LaserScan,trim_scan,(pub_left,new_fov_angle))
+rospy.Subscriber('scan_middle',LaserScan,trim_scan,(pub_middle,new_fov_angle))
+rospy.Subscriber('scan_right',LaserScan,trim_scan,(pub_right,new_fov_angle))
 
 rospy.spin()
