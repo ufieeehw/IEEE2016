@@ -5,32 +5,11 @@ Robot Diagnostics
 This package contains ROS tools for debugging the robot, automating out some of the tedium involved in test/debug.
 
 
-# Utilities
-Spacenav 3d Mouse control of the robot
-    roslaunch ieee2016_diagnostics_ported base_spacenav_control.launch 
-If you want to run the spacenav node on a different computer (to remotely control Shia) tack "remote:=true"
+# Manual Robot Control
+Allows you to manually control the robot with a spacenav 3d mouse plugged into Shia.
 
-NOT CURRENTLY UPDATED:
-Arm click-control
-    roslaunch ieee2015_diagnostics arm_click_control.launch
+    roslaunch ieee2016_diagnostics_ported base_spacenav_control.launch
+    
+If you want to run the spacenav node on a different computer (to remotely control Shia) tack ```remote:=true``` to the end. This also means the other computer will need to be connected to the same roscore and have a spacenav node running:
 
-Arm state visualization (Includes torques, angles, velocities)
-    rosrun ieee2015_diagnostics visualize_arm_behavior topic='/robot/elbow_controller'
-
-Magnetometer visualization (Includes X,Y Mag)
-    rosrun ieee2015_diagnostics viualize_imu_output topic='/robot/imu'
-
-
-## TODO
-
-- Visualize angle-error vs. time for all servos
-- Visualize position with printed angles
-- Visualize target angles and error
-- Visualize torque-vs-angle
-- Send a sequence of test instructions
-- Send a user-inputted location instruction
-- Test servo PID
-- Test send-to-position with a calibration view
-
-### Plots
-- Make a unified plotting package for plotting ROS stuff....RVIZ?
+    rosrun spacenav_node spacenav_node
