@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import numpy as np
-import cv2
 import math
 import rospy
 import tf
@@ -16,7 +15,7 @@ def nothing(x):
 def logData(data,logID):
     global ranges,logging
     if logID == 0:
-        ranges[0] = returnRange(125,data)
+        ranges[0] = returnRange(90,data)
         logging[0] = True  
         #print "ranges0 updated"
     if logID == 1:
@@ -24,7 +23,7 @@ def logData(data,logID):
         logging[1] = True 
         #print "ranges1 updated"
     if logID == 2:
-        ranges[2] = returnRange(125,data)
+        ranges[2] = returnRange(90,data)
         logging[2] = True 
         #print "ranges2 updated"        
 
@@ -171,15 +170,15 @@ def convertToCart(ranges,trans,scanNum):
         u.append(utemp)
         v.append(vtemp)
 
-    if scanNum == 0:
-        for i in range(dataPoints):
-            cv2.circle(img,(int(u[i]),int(v[i])),2,(0,0,255),-1)
-    if scanNum == 1:
-        for i in range(dataPoints):
-            cv2.circle(img,(int(u[i]),int(v[i])),2,(0,255,0),-1)
-    if scanNum == 2:
-        for i in range(dataPoints):
-            cv2.circle(img,(int(u[i]),int(v[i])),2,(255,0,0),-1)
+    # if scanNum == 0:
+    #     for i in range(dataPoints):
+    #         cv2.circle(img,(int(u[i]),int(v[i])),2,(0,0,255),-1)
+    # if scanNum == 1:
+    #     for i in range(dataPoints):
+    #         cv2.circle(img,(int(u[i]),int(v[i])),2,(0,255,0),-1)
+    # if scanNum == 2:
+    #     for i in range(dataPoints):
+    #         cv2.circle(img,(int(u[i]),int(v[i])),2,(255,0,0),-1)
 
     return cartMod#[::-1]
 
@@ -232,7 +231,7 @@ listener = tf.TransformListener()
 #t0 = (0 ,-.125, 0, -1.570796, 0, 3.141592) 
 #t1 = (.1, 0, 0, 0, 0, 3.141592) 
 #t2 = (0, .125, 0, 1.570796, 0, 3.141592) 
-cv2.waitKey(2000)
+#cv2.waitKey(2000)
 while not rospy.is_shutdown():
     startTime = time.time()
 
@@ -240,8 +239,8 @@ while not rospy.is_shutdown():
     img = np.zeros((h,w,3), np.uint8)+255
 
     #draw axis
-    cv2.line(img,(0,h/2),(w,h/2),(0,0,0),2)
-    cv2.line(img,(w/2,0),(w/2,h),(0,0,0),2)
+    #cv2.line(img,(0,h/2),(w,h/2),(0,0,0),2)
+    #cv2.line(img,(w/2,0),(w/2,h),(0,0,0),2)
 
     #create a blank array to hold the composed cartesian coordinates
     cartComp = np.array([np.empty(0),np.empty(0)])
@@ -276,7 +275,7 @@ while not rospy.is_shutdown():
             continue   
 
     #display everything
-    cv2.imshow('img',img)
+    #cv2.imshow('img',img)
 
 
     #print cartComp[0]
@@ -287,4 +286,4 @@ while not rospy.is_shutdown():
 
     print "Hz:",1.0/(time.time()-startTime)
 
-cv2.destroyAllWindows()
+#cv2.destroyAllWindows()
