@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(ieee2016_xmega_connector)
+project(ieee2016_xmega_connector_ported)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
