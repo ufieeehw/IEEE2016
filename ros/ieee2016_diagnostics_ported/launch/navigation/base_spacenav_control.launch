@@ -1,0 +1,29 @@
+<!-- -*- mode: XML -*- -->
+
+<launch>
+    
+    <arg name="remote" default="false" />
+    
+    <!-- param name="remote_run" value="$(arg remote)" type="bool" /-->
+
+    <group ns="robot">
+	
+        <node pkg="spacenav_node" type="spacenav_node" name="spacenav" output="screen" unless="$(arg remote)">
+    		<param name="zero_when_static" value="true"/>
+    		<param name="static_count_threshold" value="30"/>
+  	    </node>
+    
+        <node name="mecanum_control" pkg="ieee2016_controller" type="mecanum_controller.py" 
+            output="screen" />
+        <node name="vehicle_control" pkg="ieee2016_controller" type="vehicle_controller.py" 
+            output="screen" />
+        <node name="xmega_connector" pkg="ieee2016_xmega_connector_ported" type="xmega_connector_publisher.py" 
+            respawn="true" output="screen" >
+            <rosparam>
+                port: /dev/xmega_tty
+            </rosparam>
+        </node>
+
+    </group>
+</launch>
+

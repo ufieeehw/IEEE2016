@@ -6,7 +6,11 @@ This package contains ROS tools for debugging the robot, automating out some of 
 
 
 # Utilities
+Spacenav 3d Mouse control of the robot
+    roslaunch ieee2016_diagnostics_ported base_spacenav_control.launch 
+If you want to run the spacenav node on a different computer (to remotely control Shia) tack "remote:=true"
 
+NOT CURRENTLY UPDATED:
 Arm click-control
     roslaunch ieee2015_diagnostics arm_click_control.launch
 
