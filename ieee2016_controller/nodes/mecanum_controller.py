@@ -11,6 +11,7 @@ import rospy
 from std_msgs.msg import Header
 from geometry_msgs.msg import (Pose, PoseStamped, TwistStamped, Pose2D, PoseWithCovariance, Point, Quaternion, Vector3,
     TwistWithCovariance, Twist)
+from sensor_msgs.msg import Joy
 from nav_msgs.msg import Odometry
 from ieee2015_msgs.msg import Mecanum
 from ieee2015_msgs.srv import StopMecanum, StopMecanumResponse, ResetOdom, ResetOdomResponse
@@ -21,7 +22,7 @@ class Controller(object):
         '''Initialize Controller Object'''
         rospy.init_node('mecanum_controller')
     
-        wheel_diameter = 54e-3 # 54 mm
+        wheel_diameter = 104e-3 # 54 mm
         self.wheel_radius = wheel_diameter / 2.0
 
         ang_scale = 5.172
@@ -36,21 +37,22 @@ class Controller(object):
         self.odom_pub = rospy.Publisher('odom', Odometry, queue_size=1)
 
         rospy.loginfo("----------Attempting to find set_wheel_speeds service-------------")
-        rospy.wait_for_service('/xmega_connector/set_wheel_speeds')
+        rospy.wait_for_service('/robot/xmega_connector/set_wheel_speeds')
         rospy.loginfo("----------Wheel speed service found--------------")
-        self.wheel_speed_proxy = rospy.ServiceProxy('/xmega_connector/set_wheel_speeds', SetWheelSpeeds)
+        self.wheel_speed_proxy = rospy.ServiceProxy('/robot/xmega_connector/set_wheel_speeds', SetWheelSpeeds)
         
         # Twist subscriber
-        self.twist_sub = rospy.Subscriber('twist', TwistStamped, self.got_twist)
-
+        self.twist_sub = rospy.Subscriber('/spacenav/twist', Twist, self.got_twist, queue_size=2)
+	#self.shutoff_buttons = rospy.Subscriber('/robot/spacenav/joy', Joy, self.got_joy, queue_size=2)
         rospy.loginfo("----------Attempting to find odometry service-------------")
-        rospy.wait_for_service('/xmega_connector/get_odometry')
+        rospy.wait_for_service('/robot/xmega_connector/get_odometry')
         rospy.loginfo("----------Odometry service found--------------")
 
-        self.odometry_proxy = rospy.ServiceProxy('/xmega_connector/get_odometry', GetOdometry)
-        rospy.Service('/mecanum/stop', StopMecanum, self.stop)
-
+        self.odometry_proxy = rospy.ServiceProxy('/robot/xmega_connector/get_odometry', GetOdometry)
+        rospy.Service('mecanum/stop', StopMecanum, self.stop)
+	stop_proxy = rospy.ServiceProxy('/mecanum/stop', StopMecanum)
         rospy.Service('reset_odom', ResetOdom, self.reset)
+
 
         self.on = True
         self.get_odom()
@@ -64,17 +66,27 @@ class Controller(object):
             rospy.logwarn("ENABLING MECANUM DRIVE")
         return StopMecanumResponse()
 
-
-    def got_twist(self, twist_stamped_msg):
+    def got_joy(self, joy_msg):
+	if joy_msg.buttons[0]:
+	    rospy.loginfo("STOP!")
+	    stop_proxy(True)
+	
+    def got_twist(self, twist_msg):
         if not self.on:
             return
-        twist_msg = twist_stamped_msg.twist
+        #twist_msg = twist_stamped_msg.twist
+	# Adding a deadzone to the spacenav controller
+	dead_zone = .1
+	if abs(twist_msg.linear.x) < dead_zone: twist_msg.linear.x = 0
+	if abs(twist_msg.linear.y) < dead_zone: twist_msg.linear.y = 0
+	if abs(twist_msg.angular.z) < dead_zone: twist_msg.angular.z = 0
         desired_action = np.array([
-            twist_msg.linear.x,
-            twist_msg.linear.y,
+            -twist_msg.linear.x*2,
+            -twist_msg.linear.y,
             twist_msg.angular.z,
         ],
         dtype=np.float32)
+        rospy.loginfo(desired_action)
         self.send_mecanum(desired_action)
 
     def send_mecanum(self, desired_action):
