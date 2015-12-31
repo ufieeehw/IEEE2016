@@ -20,8 +20,7 @@ def trim_scan(scan,(pub,new_fov_angle)):
     trimmed_scan.angle_min = -new_fov_angle/2
     trimmed_scan.angle_max = new_fov_angle/2
 
-    print "Publishing."
-    print trimmed_scan.ranges
+    rospy.loginfo("Publishing")
     pub.publish(trimmed_scan)
 
 # User can pass new fov if they want (in degrees)
@@ -32,7 +31,6 @@ else:
     # 125 degree field of view if nothing is specified
     new_fov_angle = 2.18166
 
-print "New FOV Angle (rads):",new_fov_angle
 
 pub_left = rospy.Publisher('scan_trimmed_left', LaserScan, queue_size=5)
 pub_middle = rospy.Publisher('scan_trimmed_middle', LaserScan, queue_size=5)
@@ -40,8 +38,12 @@ pub_right = rospy.Publisher('scan_trimmed_right', LaserScan, queue_size=5)
 
 rospy.init_node('laser_trimmer')
 
+rospy.loginfo(new_fov_angle)
+
 rospy.Subscriber('scan_left',LaserScan,trim_scan,(pub_left,new_fov_angle))
 rospy.Subscriber('scan_middle',LaserScan,trim_scan,(pub_middle,new_fov_angle))
 rospy.Subscriber('scan_right',LaserScan,trim_scan,(pub_right,new_fov_angle))
+
+rospy.loginfo("Ready for scan data...")
 
 rospy.spin()

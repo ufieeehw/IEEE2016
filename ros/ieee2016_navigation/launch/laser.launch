@@ -16,10 +16,14 @@
 	<param name="frame_id" type="string" value="laser_right" />
     </node>
 
-    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_left" args="0 .125368 0 -1.570796 0 0 base_link laser_left 10" />
-    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_middle" args=".09997 0 0 3.14159 0 0 base_link laser_middle 10" />
-    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_right" args="0 -.125368 0 1.570796 0 0 base_link laser_right 10" />
+    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_left" args="0 .125368 0 -1.570796 3.14159 0 base_link laser_left 10" />
+    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_middle" args=".09997 0 0 0 0 3.14159 base_link laser_middle 10" />
+    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_right" args="0 -.125368 0 1.570796 3.14159 0 base_link laser_right 10" />
+
+    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_comb" args="0 0 0 0 0 0 base_link laser_comb 10" />  
+
+    <node pkg="ieee2016_navigation" type="laser_comb.py" name="laser_comb"/>
     
-    <node pkg="ieee2016_navigation" type="laser_trimmer.py" name="laser_trimmer" args="125"/>
+    <!--node pkg="ieee2016_navigation" type="laser_trimmer.py" name="laser_trimmer" args="125"/-->
 </launch>
   

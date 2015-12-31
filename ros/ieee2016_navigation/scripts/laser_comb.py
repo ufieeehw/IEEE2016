@@ -42,7 +42,7 @@ def rosPublish(ranges,maxAngle,minAngle,increment):
     global pub
     #set up ros message
     h = std_msgs.msg.Header()
-    h.frame_id = "base_link"
+    h.frame_id = "laser_comb"
 
     l = LaserScan()
     l.angle_min = minAngle
@@ -129,10 +129,18 @@ def convertToCart(ranges,trans,scanNum):
         return
     #create a temporary array to hold transformed points
     temp = np.zeros(shape=(2,dataPoints))
+    
     #decompile trans data, only dx,dy,theta will be used
-    print trans[0]
+
+    q = tf.transformations.quaternion_from_euler(1.570796, 0, 3.14159)
+    #print trans[0],tf.transformations.euler_from_quaternion(trans[1])
+    #dx,dy,dz,theta,ry,rz = trans
     dx,dy,dz = trans[0]
-    theta,ry,rz = tf.transformations.euler_from_quaternion(trans[1])
+    # No clue why theta is given as a negative number here, but this function gives it as negative
+    rx,ry,theta = tf.transformations.euler_from_quaternion(trans[1])
+    theta = theta
+    print dx,dy,dz,rx,ry,theta
+    
     #print "Starting conversion"
     for i in range(dataPoints):
         #convert polar to angle and distance
@@ -140,9 +148,9 @@ def convertToCart(ranges,trans,scanNum):
         dist = ranges[i]*100.0 #convert to cm
         #sometimes dist values are too far and it'll return inf or nan but we don't want that
         if dist > .001 and dist != float('inf'): 
-            #add converted values to temp arrays
+            #add converted values to temp arrays and flip the y values since the LIDARS are upsidedown
             temp[0,i] = math.cos(angle)*dist
-            temp[1,i] = math.sin(angle)*dist
+            temp[1,i] = -math.sin(angle)*dist
         else:
             #so the angles stay right, fill with a big big value
             temp[0,i] = 0
@@ -173,7 +181,7 @@ def convertToCart(ranges,trans,scanNum):
         for i in range(dataPoints):
             cv2.circle(img,(int(u[i]),int(v[i])),2,(255,0,0),-1)
 
-    return cartMod[::-1]
+    return cartMod#[::-1]
 
 
 #returns indicies for a 'deg' angle centered in the data ranges
@@ -199,7 +207,7 @@ h = 450
 w = h
 
 #ros stuffs
-pub = rospy.Publisher('comb_scan', LaserScan, queue_size=3)
+pub = rospy.Publisher('scan_comb', LaserScan, queue_size=3)
 rospy.init_node('laser_comb')
 rospy.Subscriber('scan_left',LaserScan,logData,0)
 rospy.Subscriber('scan_middle',LaserScan,logData,1) 
@@ -222,8 +230,8 @@ logging = [False,False,False]
 listener = tf.TransformListener()
 #tTemp = (0 ,0, 0, -math.pi, 0, 3.141592) 
 #t0 = (0 ,-.125, 0, -1.570796, 0, 3.141592) 
-t1 = (.1, 0, 0, 0, 0, 3.141592) 
-t2 = (0, .125, 0, 1.570796, 0, 3.141592) 
+#t1 = (.1, 0, 0, 0, 0, 3.141592) 
+#t2 = (0, .125, 0, 1.570796, 0, 3.141592) 
 cv2.waitKey(2000)
 while not rospy.is_shutdown():
     startTime = time.time()
@@ -240,22 +248,32 @@ while not rospy.is_shutdown():
     print logging
     if logging[0]:
         try:
+            print "Logging 0"
             t0 = listener.lookupTransform('/base_link', '/laser_left', rospy.Time(0))
-            print t0
             temp = convertToCart(ranges[0],t0,0)
             cartComp = np.append(cartComp[0],temp[0]),np.append(cartComp[1],temp[1])
-            #print "Logging 0"
+            
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             logging[0] = False
             continue     
     if logging[1]:
-        temp = convertToCart(ranges[1],t1,1)
-        cartComp = np.append(cartComp[0],999),np.append(cartComp[1],999)#cartComp = np.append(cartComp[0],temp[0]),np.append(cartComp[1],temp[1])
-        #print "Logging 1"
+        try:
+            print "Logging 1"
+            t1 = listener.lookupTransform('/base_link', '/laser_middle', rospy.Time(0))
+            temp = convertToCart(ranges[1],t1,1)
+            cartComp = np.append(cartComp[0],999),np.append(cartComp[1],999)#cartComp = np.append(cartComp[0],temp[0]),np.append(cartComp[1],temp[1])
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            logging[1] = False
+            continue   
     if logging[2]:
-        temp = convertToCart(ranges[2],t2,2)
-        cartComp = np.append(cartComp[0],temp[0]),np.append(cartComp[1],temp[1])
-        #print "Logging 2"
+        try:
+            print "Logging 2"
+            t2 = listener.lookupTransform('/base_link', '/laser_right', rospy.Time(0))
+            temp = convertToCart(ranges[2],t2,2)
+            cartComp = np.append(cartComp[0],temp[0]),np.append(cartComp[1],temp[1])
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            logging[2] = False
+            continue   
 
     #display everything
     cv2.imshow('img',img)
