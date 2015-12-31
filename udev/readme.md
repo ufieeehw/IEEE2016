@@ -6,6 +6,7 @@ This enables the computer to recognize the Dynamixel servos (and eventually the 
 # Usage
 
 Run the following...
+
 	cd ~/catkin_ws/src/udev
 	chmod +x ./setup.sh
 	sudo ./setup.sh
