@@ -15,8 +15,8 @@ import numpy as np
 	Set r to the desired radius
 	rosrun ieee2016_simulator arm_controller_test
 '''
-def point(xcomp, ycomp, r):
-    dist1 = (r*xcomp/10, r*ycomp/10, 0.0)
+def point(xcomp, ycomp, r, z):
+    dist1 = (r*xcomp/10, r*ycomp/10, z)
     dist2 = Point(*dist1)
     dist = PointStamped()               
     dist.header.stamp = rospy.Time.now()
@@ -33,8 +33,9 @@ if __name__== "__main__":
         try:
             x=np.cos(time)
             y=np.sin(time)
-            r=3.05
-            point(x,y, r)
+            r=1.05
+            z=abs(0.5*np.cos(time))
+            point(x,y, r,z)
         except rospy.ROSInterruptException:
             pass
         rospy.sleep(0.2)
