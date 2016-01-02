@@ -96,7 +96,7 @@ class SCARA(object):
 
     def got_des_pose(self, msg):
         '''Recieved desired arm pose'''
-        self.position = (msg.point.x, msg.point.y)
+        self.position = (msg.point.x, msg.point.y, msg.point.z)
 
     def got_elbow_angle(self, msg):
         '''Recieved current elbow angle'''
@@ -144,6 +144,16 @@ class SCARA(object):
         # Update positions given current angles
         self.update()
         # Draw the links
+        pygame.draw.line(display, (255, 255, 255), (20, 0), (20,50), 3)
+        if (self.position != None):
+            pygame.draw.line(display, (0, 0, 255), (0, 50-self.position[2]*100), (40,50-self.position[2]*100), 3)
+            Text_Box.draw(display, 
+                pos=(20,60),
+                color=(250, 20, 30), 
+                text="Height(Z): {}\n".format(self.position[2]),
+            )
+        pygame.draw.line(display, (255, 0, 255), round_point(self.base), round_point(self.elbow_joint), 4)
+
         pygame.draw.line(display, (255, 0, 255), round_point(self.base), round_point(self.elbow_joint), 4)
         pygame.draw.line(display, (255, 0, 0), round_point(self.elbow_joint), round_point(self.wrist_joint), 4)
         # Draw the desired position circle
@@ -161,7 +171,7 @@ class SCARA(object):
         )
 
         if self.position is not None:
-            pygame.draw.circle(display, (250, 30, 30), round_point(self.position), 5, 1)
+            pygame.draw.circle(display, (250, 30, 30), round_point((self.position[0],self.position[1])), 5, 1)
 
         # Publish joinstates
         self.publish_joint_angles()
