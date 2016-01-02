@@ -27,7 +27,7 @@ from sim_tools import Text_Box
 
 '''
 
-SCREEN_DIM = (750, 750)
+SCREEN_DIM = (1000,1000)#(750, 750)
 ORIGIN = np.array([SCREEN_DIM[0]/2.0, SCREEN_DIM[1]/2.0])
 
 
@@ -144,11 +144,11 @@ class SCARA(object):
         # Update positions given current angles
         self.update()
         # Draw the links
-        pygame.draw.line(display, (255, 255, 255), (20, 0), (20,50), 3)
+        pygame.draw.line(display, (255, 255, 255), (20, 0), (20,250), 3)
         if (self.position != None):
-            pygame.draw.line(display, (0, 0, 255), (0, 50-self.position[2]*100), (40,50-self.position[2]*100), 3)
+            pygame.draw.line(display, (0, 0, 255), (0, (0.5-self.position[2])*500), (40,(0.5-self.position[2])*500), 3)
             Text_Box.draw(display, 
-                pos=(20,60),
+                pos=(20,260),
                 color=(250, 20, 30), 
                 text="Height(Z): {}\n".format(self.position[2]),
             )
