@@ -26,5 +26,6 @@ Currently, I have only used RVIZ to vizualize all of this data. An occupancy gri
 
 #Future
 * Everthing will be chrome.
+* The TF tree needs work in order to adhere to ROS standards.
 * Integrating more navigation sensors (IMU, encoder, VSLAM?) to create a more accurate pose estimation that can deal with flat walls. To accomlish this, we will probably use the [```robot_localization```](http://wiki.ros.org/robot_localization) ros package.
 * Fix various bugs
