@@ -88,9 +88,6 @@ class SCARA_Controller(object):
         #Constraints
         if(x==0.0 and y==0.0):return None
 
-        
-        distance = np.sqrt((x**2) + (y**2))
-
         # u-arm (Elbow-Angle wrt robot x unit vector)
         c2 = ((self.elbow_length**2 + self.shoulder_length**2) - (x**2 + y**2))/(2 * self.elbow_length * self.shoulder_length)
         s2 = np.sqrt(1 - c2**2)
@@ -98,7 +95,18 @@ class SCARA_Controller(object):
         c1 = (self.shoulder_length * x - self.elbow_length * (x * c2 + y * s2))/(self.shoulder_length**2 + ((self.elbow_length * s2)**2 + (self.elbow_length * c2)**2) - 2 * self.shoulder_length * self.elbow_length * c2)
         shoulder_angle = np.arccos(c1)
         elbow_angle = shoulder_angle + np.arccos(c2)
+        neg_shoulder_angle = np.pi*2-shoulder_angle
+        neg_elbow_angle = shoulder_angle - np.arccos(c2)
         
+        fk_x_neg = (np.cos(neg_shoulder_angle)*self.shoulder_length-np.cos(shoulder_angle -np.arccos(c2))*self.elbow_length)
+        fk_y_neg = np.sin(neg_shoulder_angle)*self.shoulder_length+np.sin(shoulder_angle -np.arccos(c2))*self.elbow_length
+        fk_x = np.cos(shoulder_angle)*self.shoulder_length+np.cos(shoulder_angle +np.arccos(c2))*self.elbow_length
+        fk_y = np.sin(shoulder_angle)*self.shoulder_length+np.sin(shoulder_angle +np.arccos(c2))*self.elbow_length
+
+        if (abs(fk_x_neg-x) < 0.001 and abs(fk_y_neg-y) < 0.001):
+            shoulder_angle = neg_shoulder_angle
+            elbow_angle = 2*np.pi-neg_elbow_angle                      
+
         return (shoulder_angle, elbow_angle)
 
 
