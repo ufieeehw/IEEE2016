@@ -15,15 +15,15 @@ def nothing(x):
 def logData(data,logID):
     global ranges,logging
     if logID == 0:
-        ranges[0] = returnRange(90,data)
+        ranges[0] = returnRange(120,data)
         logging[0] = True  
         #print "ranges0 updated"
     if logID == 1:
-        ranges[1] = returnRange(0,data)
+        ranges[1] = returnRange(60,data)
         logging[1] = True 
         #print "ranges1 updated"
     if logID == 2:
-        ranges[2] = returnRange(90,data)
+        ranges[2] = returnRange(120,data)
         logging[2] = True 
         #print "ranges2 updated"        
 
@@ -260,7 +260,7 @@ while not rospy.is_shutdown():
             print "Logging 1"
             t1 = listener.lookupTransform('/base_link', '/laser_middle', rospy.Time(0))
             temp = convertToCart(ranges[1],t1,1)
-            cartComp = np.append(cartComp[0],999),np.append(cartComp[1],999)#cartComp = np.append(cartComp[0],temp[0]),np.append(cartComp[1],temp[1])
+            cartComp =cartComp = np.append(cartComp[0],temp[0]),np.append(cartComp[1],temp[1])
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             logging[1] = False
             continue   
