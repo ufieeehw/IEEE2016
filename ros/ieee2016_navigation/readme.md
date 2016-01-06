@@ -14,10 +14,10 @@ This also runs the script responsible for fusing multiple LIDAR scans into one b
 
 Finally, you can run the SLAM launch file.
 
-    roslaunch ieee2016_navigation nav_dat_bitch.launch
+    roslaunch ieee2016_navigation navigation.launch
 
 #Viewing Data
-Currently, I have only used RVIZ to vizualize all of this data. An occupancy grid is published to the ```/map``` topic, a pose estimation to ```/slam_out_pose```, and 4 LaserScan messages to various topics (left, middle, right, and combined). Hector_mapping gives a tf link between ```map``` and ```base_link``` (in the future when more postition sensors are available I suspect that may change). Other tf links provided by these nodes are ```base_link -> laser``` (for each laser including the combined LaserScan)
+Currently, I have only used RVIZ to vizualize all of this data. An occupancy grid is published to the ```/map``` topic, a pose estimation to ```/slam_out_pose```, and 4 LaserScan messages to various topics (left, middle, right, and combined). Hector_mapping gives a tf link between ```map``` and ```base_link``` (in the future when more postition sensors are available I suspect that may change). Other tf links provided by these nodes are ```base_link -> laser``` (for each laser including the combined LaserScan).
 
 #Troubleshooting
 * For some reason you have to unplug the LIDAR usb hub and replug it in after you restart Shia. Someone should figure out why this is and fix it.
