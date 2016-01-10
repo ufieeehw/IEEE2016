@@ -1,7 +1,11 @@
-SLAM
-====
+Navigation
+=========
 
-Currently, this package handles activating LIDARS with appropriate tf frames, fusing LIDAR data into one large scan, and dealing with the [Hector Mapping](http://wiki.ros.org/hector_mapping) package.
+This package handles all of the navigation and localization nodes for Shia.
+
+#SLAM
+**With the current implementation, this package will not work for what we want it to do.** 
+This package was inteneded to handle activating LIDARS with appropriate tf frames, fusing LIDAR data into one large scan, and dealing with the [Hector Mapping](http://wiki.ros.org/hector_mapping) package.
 
 #How to Run
 First, make sure you have the hector_mapping and hokuyo_node packages installed, if you do not, run 
@@ -23,9 +27,5 @@ Currently, I have only used RVIZ to vizualize all of this data. An occupancy gri
 * For some reason you have to unplug the LIDAR usb hub and replug it in after you restart Shia. Someone should figure out why this is and fix it.
 * Also, if you're not running this on Shia, you'll want to make sure you have your udev definitions set up right. For info on how to do this refer to the [udev folder](https://github.com/ufieeehw/IEEE2016/tree/master/udev).
 * SLAM has trouble dealing with flat walls that don't change and potentionally has problems if the area changes too much (moving walls or people moving in the frame). There's not really a fix for this right now but just so you know.
+* SLAM doesn't work with black walls, this is our main problem. Free food if you want to fix the problem.
 
-#Future
-* Everthing will be chrome.
-* The TF tree needs work in order to adhere to ROS standards.
-* Integrating more navigation sensors (IMU, encoder, VSLAM?) to create a more accurate pose estimation that can deal with flat walls. To accomlish this, we will probably use the [```robot_localization```](http://wiki.ros.org/robot_localization) ros package.
-* Fix various bugs
