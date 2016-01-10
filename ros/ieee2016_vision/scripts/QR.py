@@ -6,7 +6,7 @@ import numpy as np
 import time
 
 import rospy
-from sensor_msgs.msg import Image as Image_msg
+from sensor_msgs.msg import Image as Image_msg, CameraInfo
 from cv_bridge import CvBridge, CvBridgeError
 
 class DetectQRCode(object):
@@ -24,6 +24,7 @@ class DetectQRCode(object):
         # ROS inits for image updating
         rospy.init_node('QR_caller', anonymous=True)
         self.image_sub = rospy.Subscriber(image_topic,Image_msg,self.image_recieved)
+        self.cam_info_sub = rospy.Subscriber("/cam_1/camera_info",CameraInfo,self.save_camera_info)
 
         self.qr_code_count_max = qr_code_count
         self.timeout = timeout
@@ -31,6 +32,10 @@ class DetectQRCode(object):
         self.detected_codes = []
 
         self.image = 0
+
+        self.camera_info_received = False
+        self.proj_mat = []
+        self.frame_id = []
     
     def image_recieved(self,msg):
         print "Frame updated"
@@ -38,6 +43,14 @@ class DetectQRCode(object):
             self.image = CvBridge().imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
             print e
+
+    def save_camera_info(self,msg):
+        print "msg rec"
+        self.proj_mat = msg.P
+        self.frame_id = msg.header.frame_id
+
+        self.camera_info_received = True
+        self.cam_info_sub.unregister()
 
     def begin_processing(self):
         # Process the class image (with multiple threads?) to find all qr codes. The image can be updated
@@ -69,15 +82,15 @@ class DetectQRCode(object):
             (Code modified from online resources)
             """
             if image.size > 2: image = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-            image = cv2.GaussianBlur(image,(3,3),0)
-            image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,17,5)
+            #image = cv2.GaussianBlur(image,(3,3),0)
+            image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,7,13)
 
             #Create the identity filter, but with the 1 shifted to the right!
-            kernel = np.zeros((9,9), np.float32)
+            kernel = np.zeros((7,7), np.float32)
             kernel[4,4] = 2.0   #Identity, times two! 
 
             #Create a box filter:
-            boxFilter = np.ones((9,9), np.float32) / 81.0
+            boxFilter = np.ones((7,7), np.float32) / 49.0
 
             #Subtract the two:
             kernel = kernel - boxFilter
@@ -87,7 +100,7 @@ class DetectQRCode(object):
             # very bright or very dark pixel surrounded by the opposite type.
             image = cv2.filter2D(image, -1, kernel)
 
-            kernel = np.ones((1.1,1.1),np.uint8)
+            kernel = np.ones((2,2),np.uint8)
             image = cv2.erode(image,kernel)
             
             image = image & mask
@@ -105,17 +118,22 @@ class DetectQRCode(object):
             center = ((coor[0][0] + coor[2][0])/2,
                       (coor[0][1] + coor[2][1])/2)
 
-            print self.detected_codes
+            dist = self.convert_to_3d_points(coor[0],coor[2])
 
-            self.detected_codes.append([color,center])
+            self.detected_codes.append([color,center,dist])
             qr_code_count += 1
 
             print "found",color,center
-            cv2.rectangle(mask,coor[0],coor[2],0,-1)
+
+            # Draw mask around detected QR code as to not repeat
+            cv2.circle(mask, center, 20, 0, -1)
 
         print "Time to complete:", time.time() - start_time
         
         self.image_sub.unregister()
+
+        #Send to
+
         return self.detected_codes
 
     def detect_qr(self, image):
@@ -146,3 +164,26 @@ class DetectQRCode(object):
 
         # If nothing was found, return Nones
         return None,None
+
+    def convert_to_3d_points(self, point_1, point_2):
+        if not self.camera_info_received: print "ERROR"
+        
+        # Paramters
+        QR_side_length = 3.45 #cm
+        diagonal = np.sqrt(2)*QR_side_length
+        proj_mat_pinv = np.linalg.pinv(np.array([self.proj_mat]).reshape((3,4)))
+
+        # Genereate projection rays through points 1 and 2
+        ray_1 = proj_mat_pinv.dot(np.append(point_1,1).reshape((3,1))).reshape((1,4))[0]
+        ray_2 = proj_mat_pinv.dot(np.append(point_2,1).reshape((3,1))).reshape((1,4))[0]
+
+        print ray_1,ray_2
+        print np.dot(ray_1,ray_2)
+
+        # Angle between two rays
+        mag_1, mag_2 = np.sqrt(ray_1.dot(ray_1)), np.sqrt(ray_2.dot(ray_2))
+        theta = np.arccos(np.dot(ray_1,ray_2)/(mag_1 * mag_2))    
+        print "theta",np.degrees(theta)
+        print "diagonal",diagonal   
+        dist = (diagonal / 2.0) / (np.arctan(theta / 2.0))
+        return dist
