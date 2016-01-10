@@ -58,7 +58,7 @@ class ShiaStateMachine():
         # Turn on forward LIDAR to detect wall distance
         # Orient robot to so it is parallel with wall
         # Drive to set distance 
-
+        
         print "1"
     def find_target_blocks(self):
         # Move 
