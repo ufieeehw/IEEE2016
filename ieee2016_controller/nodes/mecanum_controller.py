@@ -42,8 +42,8 @@ class Controller(object):
         self.wheel_speed_proxy = rospy.ServiceProxy('/robot/xmega_connector/set_wheel_speeds', SetWheelSpeeds)
         
         # Twist subscriber
-        self.twist_sub = rospy.Subscriber('/spacenav/twist', Twist, self.got_twist, queue_size=2)
-	#self.shutoff_buttons = rospy.Subscriber('/robot/spacenav/joy', Joy, self.got_joy, queue_size=2)
+        self.twist_sub = rospy.Subscriber('/twist', Twist, self.got_twist, queue_size=2)
+	
         rospy.loginfo("----------Attempting to find odometry service-------------")
         rospy.wait_for_service('/robot/xmega_connector/get_odometry')
         rospy.loginfo("----------Odometry service found--------------")

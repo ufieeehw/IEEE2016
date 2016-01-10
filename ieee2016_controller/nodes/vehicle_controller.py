@@ -65,12 +65,12 @@ class Controller(object):
         self.des_position = None
         self.des_yaw = None
         # Don't want to have an a-priori position
-        self.position = None
-        self.yaw = None
+        self.position = (0,0)#None
+        self.yaw = 0#None
 
         # Current pose sub
-        # self.pose_sub = rospy.Subscriber('pose', PoseStamped, self.got_pose)
-        self.odom_sub = rospy.Subscriber('odom', Odometry, self.got_odom)
+        self.pose_sub = rospy.Subscriber('pose', PoseStamped, self.got_pose)
+        #self.odom_sub = rospy.Subscriber('odom', Odometry, self.got_odom)
 
         self.desired_pose_sub = rospy.Subscriber('desired_pose', PoseStamped, self.got_desired_pose)
 
@@ -168,9 +168,11 @@ class Controller(object):
          this thread should have an independent information "watchdog" timing method
         '''
         if (self.des_position is None) or (self.des_yaw is None) or (self.on is False):
+            rospy.logwarn("des")
             return
 
         if (self.position is None) or (self.yaw is None):
+            rospy.logwarn("curr")
             return
 
         # World frame position
@@ -240,22 +242,6 @@ class Controller(object):
             y_vel = 0.0
             target_angvel = 0.0
 
-        # if (np.fabs(yaw_error) > 0.05): # Tenth-radian stop error
-        #         target_angvel = desired_angvel
-        #     else:
-        #         target_angvel = 0.0
-
-        # if (position_error_len > 0.01): # 8cm stop-error
-        #     x_vel = forward.dot(desired_vel)
-        #     # y_vel = left.dot(desired_vel)
-        #     y_vel = 0.0
-        #     target_angvel = 0.0
-        # else:
-        #     x_vel = 0.0
-        #     y_vel = 0.0
-
-            # Send the raw x, y, w desired velocity vector
-            # Alone, this line does nothing
         self.send_twist((x_vel, y_vel), target_angvel) 
 
     def got_desired_pose(self, msg):
@@ -270,5 +256,6 @@ class Controller(object):
 
 
 if __name__ == '__main__':
+    rospy.logwarn("Starting")
     controller = Controller()
     rospy.spin()
