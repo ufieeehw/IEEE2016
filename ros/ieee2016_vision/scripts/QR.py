@@ -24,7 +24,7 @@ class DetectQRCode(object):
         # ROS inits for image updating
         rospy.init_node('QR_caller', anonymous=True)
         self.image_sub = rospy.Subscriber(image_topic,Image_msg,self.image_recieved)
-        self.cam_info_sub = rospy.Subscriber("/cam_0/camera_info",CameraInfo,self.save_camera_info)
+        self.cam_info_sub = rospy.Subscriber(image_topic[:5] + "/camera_info",CameraInfo,self.save_camera_info)
 
         self.qr_code_count_max = qr_code_count
         self.timeout = timeout
