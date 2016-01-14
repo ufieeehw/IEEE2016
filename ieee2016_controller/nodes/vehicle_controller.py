@@ -31,6 +31,7 @@ def print_in(f):
     def print_on_entry(*args, **kwargs):
         print("Executing " + f.func_name)
         result = f(*args, **kwargs)
+    
         print("Returning " + str(result))
         return(result)
     return(print_on_entry)
@@ -168,11 +169,11 @@ class Controller(object):
          this thread should have an independent information "watchdog" timing method
         '''
         if (self.des_position is None) or (self.des_yaw is None) or (self.on is False):
-            rospy.logwarn("des")
+            #rospy.logwarn("des")
             return
 
         if (self.position is None) or (self.yaw is None):
-            rospy.logwarn("curr")
+            #rospy.logwarn("curr")
             return
 
         # World frame position
@@ -259,3 +260,4 @@ if __name__ == '__main__':
     rospy.logwarn("Starting")
     controller = Controller()
     rospy.spin()
+    

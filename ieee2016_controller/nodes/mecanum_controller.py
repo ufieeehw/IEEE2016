@@ -34,7 +34,7 @@ class Controller(object):
         ], dtype=np.float32) / 4.0  # All of the rows are divided by 4
 
         self.pose = np.array([0.0, 0.0, 0.0])
-        self.odom_pub = rospy.Publisher('odom', Odometry, queue_size=1)
+        self.odom_pub = rospy.Publisher('odom', Odometry, queue_size=1)     
 
         rospy.loginfo("----------Attempting to find set_wheel_speeds service-------------")
         rospy.wait_for_service('/robot/xmega_connector/set_wheel_speeds')
@@ -42,15 +42,15 @@ class Controller(object):
         self.wheel_speed_proxy = rospy.ServiceProxy('/robot/xmega_connector/set_wheel_speeds', SetWheelSpeeds)
         
         # Twist subscriber
-        self.twist_sub = rospy.Subscriber('/twist', Twist, self.got_twist, queue_size=2)
-	
+        self.twist_sub = rospy.Subscriber('spacenav/twist', Twist, self.got_twist, queue_size=2)
+    
         rospy.loginfo("----------Attempting to find odometry service-------------")
         rospy.wait_for_service('/robot/xmega_connector/get_odometry')
         rospy.loginfo("----------Odometry service found--------------")
 
         self.odometry_proxy = rospy.ServiceProxy('/robot/xmega_connector/get_odometry', GetOdometry)
         rospy.Service('mecanum/stop', StopMecanum, self.stop)
-	stop_proxy = rospy.ServiceProxy('/mecanum/stop', StopMecanum)
+        stop_proxy = rospy.ServiceProxy('/mecanum/stop', StopMecanum)
         rospy.Service('reset_odom', ResetOdom, self.reset)
 
 
@@ -67,26 +67,26 @@ class Controller(object):
         return StopMecanumResponse()
 
     def got_joy(self, joy_msg):
-	if joy_msg.buttons[0]:
-	    rospy.loginfo("STOP!")
-	    stop_proxy(True)
-	
+        if joy_msg.buttons[0]:
+            rospy.loginfo("STOP!")
+            stop_proxy(True)
+    
     def got_twist(self, twist_msg):
         if not self.on:
             return
         #twist_msg = twist_stamped_msg.twist
-	# Adding a deadzone to the spacenav controller
-	dead_zone = .1
-	if abs(twist_msg.linear.x) < dead_zone: twist_msg.linear.x = 0
-	if abs(twist_msg.linear.y) < dead_zone: twist_msg.linear.y = 0
-	if abs(twist_msg.angular.z) < dead_zone: twist_msg.angular.z = 0
+        # Adding a deadzone to the spacenav controller
+        dead_zone = .1
+        if abs(twist_msg.linear.x) < dead_zone: twist_msg.linear.x = 0
+        if abs(twist_msg.linear.y) < dead_zone: twist_msg.linear.y = 0
+        if abs(twist_msg.angular.z) < dead_zone: twist_msg.angular.z = 0
         desired_action = np.array([
-            -twist_msg.linear.x*2,
+            -twist_msg.linear.x,
             -twist_msg.linear.y,
             twist_msg.angular.z,
         ],
         dtype=np.float32)
-        rospy.loginfo(desired_action)
+        #rospy.loginfo(desired_action)
         self.send_mecanum(desired_action)
 
     def send_mecanum(self, desired_action):
@@ -150,7 +150,7 @@ class Controller(object):
             mecanum_speeds[0], 
             -mecanum_speeds[1], 
             -mecanum_speeds[2], 
-            mecanum_speeds[3]
+            mecanum_speeds[3] 
         ]
         self.wheel_speed_proxy(*wheel_speeds)
 
@@ -184,10 +184,13 @@ class Controller(object):
                 odom_srv.wheel4,
             ])
             vehicle_twist = np.dot(self.mecanum_matrix, wheel_odom).A1
-            vehicle_twist[0] *= -1
-            vehicle_twist[1] *= -1
+            # Removed from last years code to make odom data correct
+            #vehicle_twist[0] *= -1
+            #vehicle_twist[1] *= -1
             rot_mat = self.make_2D_rotation(self.pose[2])
             x, y = np.dot(rot_mat, [vehicle_twist[0], vehicle_twist[1]]).A1
+            rospy.loginfo(self.pose)
+
             self.pose += [x, y, vehicle_twist[2]]
 
             orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
@@ -195,9 +198,9 @@ class Controller(object):
             odom_msg = Odometry(
                 header=Header(
                     stamp=rospy.Time.now(),
-                    frame_id='/course',
+                    frame_id='/odom',
                 ),
-                child_frame_id='/robot',
+                child_frame_id='/base_link',
                 pose=PoseWithCovariance(
                     pose=Pose(
                         position=Point(
