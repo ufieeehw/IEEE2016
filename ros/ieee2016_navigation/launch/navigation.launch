@@ -2,23 +2,98 @@
 
 <launch>
 
-<<<<<<< HEAD
-    <group ns="robot">
-        <node name="mecanum_control" pkg="ieee2016_controller" type="mecanum_controller.py" 
-            output="screen" />
-        <node name="vehicle_control" pkg="ieee2016_controller" type="vehicle_controller.py" 
-            output="screen" />
-        <node name="robot_localization" pkg="robot_localization" type="ekf_localization_node" 
-            output="screen" />
-        <node name="xmega_connector" pkg="ieee2016_xmega_connector_ported" type="xmega_connector_publisher.py" respawn="true" output="screen" >
-            <rosparam>
-                port: /dev/xmega_tty
-            </rosparam>
-        </node>
+  <group ns="robot">
+      <node name="mecanum_control" pkg="ieee2016_controller" type="mecanum_controller.py" 
+          output="screen" />
+      <node name="vehicle_control" pkg="ieee2016_controller" type="vehicle_controller.py" 
+          output="screen" />
 
-    </group>
-=======
-  <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" args="scan:=scan_left">
+      <node name="xmega_connector" pkg="ieee2016_xmega_connector_ported" type="xmega_connector_publisher.py" respawn="true" output="screen" >
+          <rosparam>
+              port: /dev/xmega_tty
+          </rosparam>
+      </node>
+
+      <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization_local" clear_params="true">
+
+        <param name="frequency" value="100"/>
+
+        <param name="sensor_timeout" value="0.1"/>
+
+        <param name="two_d_mode" value="true"/>
+
+        <param name="map_frame" value="map"/>
+        <param name="odom_frame" value="odom"/>
+        <param name="base_link_frame" value="base_link"/>
+        <param name="world_frame" value="odom"/>
+        <param name="transform_time_offset" value="0.0"/>
+
+        <param name="imu0" value="imu"/>
+        <param name="odom0" value="/robot/odom"/>
+
+        <rosparam param="imu0_config">[false,  false, false,
+                                        false, false, false,
+                                        false, false, false,
+                                        false, false, true,
+                                        false, false, false]</rosparam>
+        <rosparam param="odom0_config">[true,  true,  true,
+                                        false, false, true,
+                                        true, true, true,
+                                        false, false, true,
+                                        false, false, false]</rosparam>
+
+        <param name="imu0_differential" value="false"/>
+        <param name="odom0_differential" value="true"/>
+
+        <param name="imu0_relative" value="true"/>
+        <param name="odom0_relative" value="false"/>
+
+        <param name="print_diagnostics" value="true"/>
+
+        <param name="imu0_queue_size" value="3"/>
+        <param name="odom0_queue_size" value="3"/>
+
+        <param name="imu0_remove_gravitational_acceleration" value="false"/>
+
+        <rosparam param="process_noise_covariance">[0.05, 0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                                    0,    0.05, 0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                                    0,    0,    0.06, 0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                                    0,    0,    0,    0.03, 0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                                    0,    0,    0,    0,    0.03, 0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                                    0,    0,    0,    0,    0,    0.06, 0,     0,     0,    0,    0,    0,    0,    0,    0,
+                                                    0,    0,    0,    0,    0,    0,    0.025, 0,     0,    0,    0,    0,    0,    0,    0,
+                                                    0,    0,    0,    0,    0,    0,    0,     0.025, 0,    0,    0,    0,    0,    0,    0,
+                                                    0,    0,    0,    0,    0,    0,    0,     0,     0.04, 0,    0,    0,    0,    0,    0,
+                                                    0,    0,    0,    0,    0,    0,    0,     0,     0,    0.01, 0,    0,    0,    0,    0,
+                                                    0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0.01, 0,    0,    0,    0,
+                                                    0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0.02, 0,    0,    0,
+                                                    0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0.01, 0,    0,
+                                                    0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0.01, 0,
+                                                    0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0.015]</rosparam>
+
+              <rosparam param="initial_estimate_covariance">[1e-9, 0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                                            0,    1e-9, 0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                                            0,    0,    1e-9, 0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                                            0,    0,    0,    1e-9, 0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                                            0,    0,    0,    0,    1e-9, 0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                                            0,    0,    0,    0,    0,    1e-9, 0,    0,    0,    0,     0,     0,     0,    0,    0,
+                                                            0,    0,    0,    0,    0,    0,    1e-9, 0,    0,    0,     0,     0,     0,    0,    0,
+                                                            0,    0,    0,    0,    0,    0,    0,    1e-9, 0,    0,     0,     0,     0,    0,    0,
+                                                            0,    0,    0,    0,    0,    0,    0,    0,    1e-9, 0,     0,     0,     0,    0,    0,
+                                                            0,    0,    0,    0,    0,    0,    0,    0,    0,    1e-9,  0,     0,     0,    0,    0,
+                                                            0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     1e-9,  0,     0,    0,    0,
+                                                            0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     1e-9,  0,    0,    0,
+                                                            0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     1e-9, 0,    0,
+                                                            0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    1e-9, 0,
+                                                            0,    0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    1e-9]</rosparam>
+
+
+ 
+      </node>
+      <node pkg="tf" type="static_transform_publisher" name="base_to_imu" args="0 0 0 0 0 0 base_link imu 10"/>
+  </group>
+  
+<!--   <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" args="scan:=scan_left">
     
     <param name="base_frame" value="$(arg base_frame)" />
     <param name="map_frame" value="map" />
@@ -28,7 +103,7 @@
     <param name="map_update_interval" value="1" />
     <param name="temporalUpdate" value="2" />
     
-  </node>
+  </node> -->
 
   <!-- <node pkg="hector_mapping_dontfind" type="hector_mapping" name="hector_mapping" output="screen"> -->
   <!--    -->
@@ -71,11 +146,5 @@
   <!--    -->
   <!--   <param name="tf_map_scanmatch_transform_frame_name" value="$(arg tf_map_scanmatch_transform_frame_name)" /> -->
   <!-- </node> -->
-    
->>>>>>> 373fe143788f5b0b9a577154479ed9b87eff0aae
+
 </launch>
-
-
-  
-  
-  
