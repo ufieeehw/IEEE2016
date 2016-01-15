@@ -101,11 +101,12 @@ class Controller(object):
 
     def send_twist(self, (xvel, yvel), angvel):
         '''Generate twist message'''
+        rospy.loginfo("Send")
         self.twist_pub.publish(
             TwistStamped(
                 header = Header(
                     stamp=rospy.Time.now(),
-                    frame_id='/robot',
+                    frame_id='base_link',
                 ),
                 twist=Twist(
                     linear=Vector3(xvel, yvel, 0),
