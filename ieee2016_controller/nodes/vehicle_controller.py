@@ -101,6 +101,7 @@ class Controller(object):
 
     def send_twist(self, (xvel, yvel), angvel):
         '''Generate twist message'''
+        rospy.loginfo("Send")
         self.twist_pub.publish(
             TwistStamped(
                 header = Header(
