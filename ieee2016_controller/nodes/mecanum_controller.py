@@ -22,7 +22,7 @@ class Controller(object):
         '''Initialize Controller Object'''
         rospy.init_node('mecanum_controller')
     
-        wheel_diameter = 104e-3 # 54 mm
+        wheel_diameter = 104e-3 # 104 mm
         self.wheel_radius = wheel_diameter / 2.0
 
         ang_scale = 5.172
@@ -42,7 +42,9 @@ class Controller(object):
         self.wheel_speed_proxy = rospy.ServiceProxy('/robot/xmega_connector/set_wheel_speeds', SetWheelSpeeds)
         
         # Twist subscriber
-        self.twist_sub = rospy.Subscriber('spacenav/twist', Twist, self.got_twist, queue_size=2)
+        self.twist_sub = rospy.Subscriber('/robot/twist', TwistStamped, self.got_twist, queue_size=2)
+        #self.twist_sub = rospy.Subscriber('/spacenav/twist', Twist, self.got_twist_spacenav, queue_size=2)
+        self.spacenav_twist = []
     
         rospy.loginfo("----------Attempting to find odometry service-------------")
         rospy.wait_for_service('/robot/xmega_connector/get_odometry')
@@ -71,10 +73,31 @@ class Controller(object):
             rospy.loginfo("STOP!")
             stop_proxy(True)
     
-    def got_twist(self, twist_msg):
+    def got_twist(self, twist_stamped_msg):
         if not self.on:
             return
-        #twist_msg = twist_stamped_msg.twist
+        twist_msg = twist_stamped_msg.twist
+        # Adding a deadzone to the spacenav controller
+        dead_zone = .1
+#        if abs(twist_msg.linear.x) < dead_zone: twist_msg.linear.x = 0
+#        if abs(twist_msg.linear.y) < dead_zone: twist_msg.linear.y = 0
+#        if abs(twist_msg.angular.z) < dead_zone: twist_msg.angular.z = 0
+        desired_action = np.array([
+            -twist_msg.linear.x,
+            -twist_msg.linear.y,
+            twist_msg.angular.z,
+        ],
+        dtype=np.float32)
+        #rospy.loginfo(desired_action)
+        self.send_mecanum(desired_action)
+        self.spacenav_twist = twist_msg
+
+    def got_twist_spacenav(self, twist_msg):
+        if not self.on:
+            return
+#        twist_msg = twist_stamped_msg.twist
+        if self.spacenav_twist == twist_msg:
+            return
         # Adding a deadzone to the spacenav controller
         dead_zone = .1
         if abs(twist_msg.linear.x) < dead_zone: twist_msg.linear.x = 0
@@ -88,6 +111,8 @@ class Controller(object):
         dtype=np.float32)
         #rospy.loginfo(desired_action)
         self.send_mecanum(desired_action)
+        self.spacenav_twist = twist_msg
+
 
     def send_mecanum(self, desired_action):
         '''Convert a desired linear and angular velocity vector into a wheel speed solution
@@ -189,7 +214,7 @@ class Controller(object):
             #vehicle_twist[1] *= -1
             rot_mat = self.make_2D_rotation(self.pose[2])
             x, y = np.dot(rot_mat, [vehicle_twist[0], vehicle_twist[1]]).A1
-            rospy.loginfo(self.pose)
+            #rospy.loginfo(self.pose)
 
             self.pose += [x, y, vehicle_twist[2]]
 
@@ -198,9 +223,9 @@ class Controller(object):
             odom_msg = Odometry(
                 header=Header(
                     stamp=rospy.Time.now(),
-                    frame_id='/odom',
+                    frame_id='odom',
                 ),
-                child_frame_id='/base_link',
+                child_frame_id='base_link',
                 pose=PoseWithCovariance(
                     pose=Pose(
                         position=Point(

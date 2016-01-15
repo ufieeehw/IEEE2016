@@ -15,7 +15,7 @@ from ieee2015_msgs.srv import StopController, StopControllerResponse
 from nav_msgs.msg import Odometry
 
 # max_linear_vel = 1 # m/s
-max_linear_vel = 0.03
+max_linear_vel = 0.09
 max_linear_acc = max_linear_vel # m/s^2
 
 # max_angular_vel = 2 # rad/s
@@ -66,14 +66,14 @@ class Controller(object):
         self.des_position = None
         self.des_yaw = None
         # Don't want to have an a-priori position
-        self.position = (0,0)#None
-        self.yaw = 0#None
+        self.position = None
+        self.yaw = None
 
         # Current pose sub
-        self.pose_sub = rospy.Subscriber('pose', PoseStamped, self.got_pose)
-        #self.odom_sub = rospy.Subscriber('odom', Odometry, self.got_odom)
+        self.pose_sub = rospy.Subscriber('/slam_out_pose', PoseStamped, self.got_pose)
+        #self.odom_sub = rospy.Subscriber('/odometry/filtered', Odometry, self.got_odom)
 
-        self.desired_pose_sub = rospy.Subscriber('desired_pose', PoseStamped, self.got_desired_pose)
+        self.desired_pose_sub = rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.got_desired_pose)
 
         self.on = True
         rospy.Service('controller/stop', StopController, self.stop)
@@ -105,7 +105,7 @@ class Controller(object):
             TwistStamped(
                 header = Header(
                     stamp=rospy.Time.now(),
-                    frame_id='/robot',
+                    frame_id='base_link',
                 ),
                 twist=Twist(
                     linear=Vector3(xvel, yvel, 0),
@@ -141,6 +141,7 @@ class Controller(object):
         else: return 0
 
     def got_odom(self, msg):
+
         pose = msg.pose.pose
         self.position = np.array([pose.position.x, pose.position.y])
         self.yaw = tf_trans.euler_from_quaternion(xyzw_array(pose.orientation))[2]
@@ -165,6 +166,9 @@ class Controller(object):
             Add speed-drop for the case where position feedback is lost
             This will probably have to be done in a separate thread
 
+        Changes from last year:
+            Enabled backwards and side to side motion.
+
         Velocity calcluation should be done in a separate thread
          this thread should have an independent information "watchdog" timing method
         '''
@@ -182,12 +186,12 @@ class Controller(object):
 
         position_error_len = np.linalg.norm(position_error)
 
-        if (position_error_len > 0.01): # 8cm stop-error
-            yaw_target = np.arctan2(position_error[0], -position_error[1]) - (np.pi /2)
-            yaw_error = self.norm_angle_diff(yaw_target, self.yaw)
+        if (position_error_len > 0.08): # 8cm stop-error
+            #yaw_target = np.arctan2(position_error[0], -position_error[1]) - (np.pi /2)
+            #yaw_error = self.norm_angle_diff(yaw_target, self.yaw)
 
-            print 'error', position_error
-            print 'yaw error', yaw_error
+            # print 'error', position_error
+            # print 'yaw error', yaw_error
             if np.fabs(yaw_error) > 0.08:
                 state = 'nav_start_rotate'
             else:
@@ -213,37 +217,38 @@ class Controller(object):
 
         # Provide direction for both linear and angular velocity
         desired_vel = linear_speed * self.unit_vec(position_error)
+        print desired_vel
         desired_angvel = angular_speed * self.sign(yaw_error)
 
         # Unit vectors that determine the right-handed coordinate system of the roobt in the world frame
-        forward = np.array([math.cos(self.yaw), math.sin(self.yaw)])
-        left = np.array([math.cos(self.yaw + np.pi/2), math.sin(self.yaw + np.pi/2)])
+        #self.yaw = math.radians(90)
+        #forward = np.array([math.cos(self.yaw), math.sin(self.yaw)])
+        #left = np.array([math.cos(self.yaw + np.pi/2), math.sin(self.yaw + np.pi/2)])
+        rot_mat = np.array([[math.cos(self.yaw), -math.sin(self.yaw)],
+                            [math.sin(self.yaw),  math.cos(self.yaw)]])
+        print rot_mat
 
         # Send twist if above error threshold
         # Point at position, go to position, achieve desired orientation
 
         print state
         if state == 'nav_drive':
-            x_vel = forward.dot(desired_vel)
-            y_vel = 0.0
+            vel = rot_mat.dot(desired_vel)
             target_angvel = desired_angvel
 
         elif state == 'nav_start_rotate':
-            x_vel = 0.0
-            y_vel = 0.0
+            vel = [0,0]
             target_angvel = desired_angvel
 
         elif state == 'stop_rotate':
-            x_vel = 0.0
-            y_vel = 0.0
+            vel = [0,0]
             target_angvel = desired_angvel
 
         elif state == 'stop':
-            x_vel = 0.0
-            y_vel = 0.0
+            vel = [0,0]
             target_angvel = 0.0
 
-        self.send_twist((x_vel, y_vel), target_angvel) 
+        self.send_twist(vel, target_angvel) 
 
     def got_desired_pose(self, msg):
         '''Recieved desired pose message

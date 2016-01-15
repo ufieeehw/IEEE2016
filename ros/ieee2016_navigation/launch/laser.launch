@@ -24,8 +24,6 @@
 
     <node pkg="ieee2016_navigation" type="laser_comb.py" name="laser_comb"/>
     
-    <!-- This is a temporary transform until imu/enocder data can pub it -->
-    <node pkg="tf" type="static_transform_publisher" name="temp_odom_to_base" args="0 0 0 0 0 0 odom base_link 10" />  
     <!--node pkg="ieee2016_navigation" type="laser_trimmer.py" name="laser_trimmer" args="125"/-->
 </launch>
   
