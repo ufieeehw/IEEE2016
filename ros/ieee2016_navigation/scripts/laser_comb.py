@@ -15,15 +15,15 @@ def nothing(x):
 def logData(data,logID):
     global ranges,logging
     if logID == 0:
-        ranges[0] = returnRange(120,data)
+        ranges[0] = returnRange(100,data)
         logging[0] = True  
         #print "ranges0 updated"
     if logID == 1:
-        ranges[1] = returnRange(60,data)
+        ranges[1] = returnRange(100,data)
         logging[1] = True 
         #print "ranges1 updated"
     if logID == 2:
-        ranges[2] = returnRange(120,data)
+        ranges[2] = returnRange(100,data)
         logging[2] = True 
         #print "ranges2 updated"        
 
@@ -81,7 +81,7 @@ def convertBackToArray(carts):
     #define max and min angles
     maxAngle = math.pi
     minAngle = -math.pi
-    increment = 0.003 #this is the target increment for the output
+    increment = 0.005 #this is the target increment for the output
 
     #create list of lists to be used as angle compartments
     #the elements of each compartment will be averaged
