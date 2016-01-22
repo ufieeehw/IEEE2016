@@ -13,86 +13,171 @@ import math
 import time
 import random
 
-PARTICLE_COUNT = 100
+PARTICLE_COUNT = 2
 
 class Map():
     def __init__(self, map_name):
         # load map from bmp file in map/ folder
         self.map = cv2.imread(os.path.join(os.path.dirname(__file__), 'map/' + map_name + '.bmp'),0).astype(np.uint8)
-        self.pub = rospy.Publisher('sim_scan', LaserScan, queue_size=10)
+        self.pub = rospy.Publisher('sim_scan1', LaserScan, queue_size=10)
+        self.pub2 = rospy.Publisher('sim_scan2', LaserScan, queue_size=10)
+        self.pub3 = rospy.Publisher('sim_scan3', LaserScan, queue_size=10)
 
         # Load some meta data about the map
         with open(os.path.join(os.path.dirname(__file__), 'map/' + map_name + '.txt')) as f:
             meta_data = f.read().splitlines()
 
         self.cell_resolution = float(meta_data[1]) #m/px
-        print self.cell_resolution
+
         self.width = int(meta_data[2])
         self.height = int(meta_data[3])
         self.origin = [self.width/2,self.height/2]
 
-
-    def simulate_scan(self, *point):
-        # Point should be in x,y,heading
+    def simulate_scan(self, point, heading, name=2):
+        # Point should be y,x,heading (m,m,rads)
         # 0,0,0 is the middle of the map pointed right
-        point += np.array([self.origin[0],self.origin[1],0])
+        # Convert m points into px
+        m_point = point,heading
+        print m_point
+
+        """
+        TODO: Figure out why point has to be given as (y,x) and why the y has to be negated. Figure out how to get rotations to work correctly (need rot mat probably)
+        """
+
+        point = np.array(point)/self.cell_resolution
+        point += np.array([self.origin[0],self.origin[1]])
 
         ret,thresh = cv2.threshold(self.map,127,255,cv2.THRESH_BINARY)
 
-        # Parameters of simulated laserscan (should come from a real lidar scan)
-        angle_increment = math.radians(180)/500.0
-        min_angle = math.radians(-90) #rads
-        max_angle = math.radians(90) #rads
-        max_range =  5 #meters
-        min_range = .02 #meters
+        # Parameters of simulated laserscan (comes from comb lidar scan)
+        angle_increment = .005 #rads/index
+        min_angle = -3.14159274101 #rads
+        max_angle = 3.14159274101
+        max_range = 5.0 #m
+        min_range = 0.00999999977648
         ranges = np.zeros(int((max_angle-min_angle)/angle_increment))
+        
+        index_count = len(ranges)
+        #print index_count
 
+        # Only ranges at these indexs will be generated
+        # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
+        forty_deg_index = int(math.radians(10)/angle_increment)
+        #print forty_deg_index
+        ranges_to_compare = np.zeros(0)
+        step = 4
+        #print np.arange(index_count/4 - forty_deg_index, index_count/4 + forty_deg_index)
+        ranges_to_compare = np.append( ranges_to_compare,            
+            np.arange(index_count/4 - forty_deg_index, index_count/4 + forty_deg_index, step=step))
+        ranges_to_compare = np.append( ranges_to_compare,            
+            np.arange(index_count/2 - forty_deg_index, index_count/2 + forty_deg_index, step=step))
+        ranges_to_compare = np.append( ranges_to_compare,            
+            np.arange(3*index_count/4 - forty_deg_index, 3*index_count/4 + forty_deg_index, step=step))
+
+        if name == 2: ranges_to_compare = np.arange(2000,step=16)
+        #print ranges_to_compare
         # Temp image to store simulated laserscan results
-        #lines = np.zeros(thresh.shape)
+        lines = np.zeros(thresh.shape)
         for i in range(int((max_angle-min_angle)/angle_increment)):
-            # Draw a test point from 'point' location out every 'angule_increment' rads from min_range to max_range
+            if i not in ranges_to_compare:
+                #print i,"Nope"
+                continue
+
+            # Draw a test point from 'point' location out every 'angle_increment' rads from min_range to max_range
             # Once this test point intersects a wall in the map, save the data and create a LaserScan message with the data
-            theta = min_angle + i*angle_increment
+            theta = min_angle + i*angle_increment + heading
 
             # Make test points along lines from origin and test if there is a wall at each point along the line
             # Only check for points between max and min range
             for r in range(int(min_range/self.cell_resolution),
                            int(max_range/self.cell_resolution)):
-                x = point[0] + int(r * np.cos(theta+point[2]))
-                y = point[1] + int(r * np.sin(theta+point[2]))
+                x = point[0] + int(r * np.cos(theta+heading))
+                y = point[1] + int(r * np.sin(theta+heading))
                 
                 # If the point is off the map, break
                 if x >= self.width or y >= self.height: break
                 if x <= 0 or y <= 0: break
-
+                
+                lines[x,y] = 255
                 # If the test point is a wall, add the dist to the list and break
-                if thresh[y,x] == 255:
+                if thresh[self.height-y,x] == 255:
                     dist = math.sqrt((abs(point[0]-x))**2 + (abs(point[1]-y))**2)*self.cell_resolution
                     ranges[i] = dist
-                    #lines[x,y] = 255
                     break
                 #cv2.imshow("lines",lines)
                 #cv2.waitKey(1)
 
             #cv2.imshow("thresh",thresh)
             #cv2.waitKey(1)
-        # If we want to publish the scan, thats an option
-        # self.pub.publish(LaserScan(    
-        #     header=Header(
-        #         stamp = rospy.Time.now(),
-        #         frame_id = "map",
-        #         ),
-        #     angle_min=min_angle,
-        #     angle_max=max_angle,
-        #     angle_increment=angle_increment,
-        #     time_increment=0,
-        #     scan_time=0,
-        #     range_min=min_range,
-        #     range_max=max_range,
-        #     ranges=ranges.tolist(),
-        #     intensities=[],
-        #     )
-        # )
+        #If we want to publish the scan, thats an option
+        br = tf.TransformBroadcaster()
+
+        if name == 0:
+            br.sendTransform((m_point[0][0], m_point[0][1], 0),
+                    tf.transformations.quaternion_from_euler(0, 0, m_point[1]),
+                    rospy.Time.now(),
+                    "p1",
+                    "odom")
+            print "p1"
+            self.pub.publish(LaserScan(    
+                header=Header(
+                    stamp = rospy.Time.now(),
+                    frame_id = "p1",
+                    ),
+                angle_min=min_angle,
+                angle_max=max_angle,
+                angle_increment=angle_increment,
+                time_increment=0,
+                scan_time=0,
+                range_min=min_range,
+                range_max=max_range,
+                ranges=ranges.tolist(),
+                intensities=[],
+                )
+            )
+        elif name==1: 
+            br.sendTransform((m_point[0][0], m_point[0][1], 0),
+                    tf.transformations.quaternion_from_euler(0, 0, m_point[1]),
+                    rospy.Time.now(),
+                    "p2",
+                    "odom")
+            print "p2"
+            self.pub2.publish(LaserScan(    
+                header=Header(
+                    stamp = rospy.Time.now(),
+                    frame_id = "p2",
+                    ),
+                angle_min=min_angle,
+                angle_max=max_angle,
+                angle_increment=angle_increment,
+                time_increment=0,
+                scan_time=0,
+                range_min=min_range,
+                range_max=max_range,
+                ranges=ranges.tolist(),
+                intensities=[],
+                )
+            )
+        elif name==2: 
+            print "m"
+            self.pub3.publish(LaserScan(    
+                header=Header(
+                    stamp = rospy.Time.now(),
+                    frame_id = "odom",
+                    ),
+                angle_min=min_angle,
+                angle_max=max_angle,
+                angle_increment=angle_increment,
+                time_increment=0,
+                scan_time=0,
+                range_min=min_range,
+                range_max=max_range,
+                ranges=ranges.tolist(),
+                intensities=[],
+                )
+            )
+
+
 '''
 middle
 header: 
@@ -126,15 +211,12 @@ range_max: 5.0
 '''
 
 class Particle():
-    def __init__(self, parent_map, x, y, heading, w = 0):
+    def __init__(self, x, y, heading, w = 0):
         # postition and rotation of particle and the weight of the particle (initally 0)
         self.x = x
         self.y = y
         self.heading = heading
         self.w = w
-
-        # The map to which the particle belongs
-        self.parent_map = parent_map
 
     def update_weight(self, est_distance):
         # Found this method of calculating error in distance
@@ -172,7 +254,6 @@ class Filter():
     def __init__(self, p_count, center, radius, heading_range):
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
         # ROS Inits
-        rospy.init_node('particle_filter', anonymous=True)
         self.test_points_pub = rospy.Publisher('test_points', PoseArray, queue_size=2)
         self.odom_sub = rospy.Subscriber('/robot/odometry/filtered', Odometry, self.got_odom)
         self.pose_est_pub = rospy.Publisher('pose_est', PoseStamped, queue_size=2)
@@ -197,7 +278,8 @@ class Filter():
             # Generate random heading
             heading = random.uniform(heading_range[0], heading_range[1])
 
-            self.particles.append(Particle(self.m,x,y,heading))
+        self.particles.append(Particle(.5,.3,1.57))
+        #self.particles.append(Particle(0,.5,0))
 
         r = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
@@ -208,15 +290,20 @@ class Filter():
         # This is where the filter does its work
 
         # Check our updated position from the last run of the filter, if it is 0 or close to it, then break and dont worry about running the filter
-        tolerance = 1e-4
-        if abs(self.pose_update[0]) < tolerance and\
-           abs(self.pose_update[1]) < tolerance and\
-           abs(self.pose_update[2]) < tolerance: return
+        # tolerance = 1e-4
+        # if abs(self.pose_update[0]) < tolerance and\
+        #    abs(self.pose_update[1]) < tolerance and\
+        #    abs(self.pose_update[2]) < tolerance: return
         
         print self.pose_update
 
-        for p in self.particles:
+
+        for i,p in enumerate(self.particles):
             p.update_pos(self.pose_update)
+            particle_scan = self.m.simulate_scan((p.x,p.y),p.heading,i)
+            self.m.simulate_scan((0,0),0,2)
+            print p.x,p.y,p.heading
+
         self.publish_particle_array()
 
         # Reset the pose update so that the next run will contain the pose update from this point
@@ -292,6 +379,7 @@ class Filter():
         )
         #print "PUBLISHED PARTICLES"
 
+rospy.init_node('particle_filter', anonymous=True)
 f = Filter(PARTICLE_COUNT, (0,0), .5, (.1,-.1))
 rospy.spin()
 
@@ -301,12 +389,11 @@ rospy.spin()
 # # Create a black image, a window
 # cv2.namedWindow('bars')
 
-
 # def nothing(x):
 #     pass
 # # create trackbars for color change
-# cv2.createTrackbar('x','bars',0,300,nothing)
-# cv2.createTrackbar('y','bars',0,300,nothing)
+# cv2.createTrackbar('x','bars',0,150,nothing)
+# cv2.createTrackbar('y','bars',0,150,nothing)
 # cv2.createTrackbar('theta','bars',0,628,nothing)
 
 # r = rospy.Rate(10)
@@ -316,25 +403,12 @@ rospy.spin()
 #     t = cv2.getTrackbarPos('theta','bars')
     
 #     image = map_image
-#     #cv2.circle(image,(x,y),2,255,-1)
+#     cv2.circle(image,(x+150,y+150),2,100,-1)
 
-#     m.simulate_scan(x,y,t/100.0)
+#     m.simulate_scan((x,y,t/100.0))
 
 #     cv2.imshow("map", map_image)
 #     cv2.waitKey(1)
 #     r.sleep()
 
 cv2.destroyAllWindows()
-
-"""
-1 1 1 1 1 1 1 1 1 1 1 1 1
-1 0 0 0 0 0 0 0 0 0 0 0 1
-1 0 0 0 0 0 0 0 0 0 0 0 1
-1 0 0 0 0 0 0 0 0 0 0 0 1
-1 0 0 0 0 0 * 0 0 0 0 0 1
-1 0 0 0 0 0 0 0 0 0 0 0 1
-1 0 0 0 0 0 0 0 0 0 0 0 1
-1 0 0 0 0 0 0 0 0 0 0 0 1
-1 1 1 1 1 1 1 1 1 1 1 1 1
-
-"""
