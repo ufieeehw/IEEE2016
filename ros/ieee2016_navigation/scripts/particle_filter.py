@@ -14,321 +14,122 @@ import time
 import random
 import matplotlib.pyplot as plt
 
-PARTICLE_COUNT = 100
+PARTICLE_COUNT = 10
 
 class ModelMap():
     def __init__(self):
+        global PARTICLE_COUNT
         self.map = np.array([
-            [ 1,  0,      0,          -1,   1e10,      0, 2.1336],
-            [ 1,  0,  .4572,          -1,   1e10,   .762,  1.143],
-            [ 1,  0,   .508,          -1,   1e10,      0,  .3048],
-            [ 1,  0,   .762,          -1,   1e10,      0,  .3048],
-            [ 1,  0, 1.8669,          -1,   1e10,  .8382, 2.1336],
-            [ 1,  0, 2.1336,          -1,   1e10,      0,  .8382],
-            [ 0,  1,      0,           0, 2.1336,     -1,   1e10],
-            [ 0,  1,  .8382,      1.8669, 2.1336,     -1,   1e10],
-            [ 0,  1,  .3048,        .508,   .762,     -1,   1e10],
-            [ 0,  1, 2.1336,           0, 1.8669,     -1,   1e10],
+            [[     0,     0],[     0,2.1336]],
+            [[ .4572,  .762],[ .4572, 1.143]],
+            [[  .508,     0],[  .508, .3048]],
+            [[  .762,     0],[  .762, .3048]],
+            [[1.8669, .8382],[1.8669,2.1336]],
+            [[2.1336,     0],[2.1336, .8382]],
+            [[     0,     0],[2.1336,    0,]],
+            [[1.8669, .8382],[2.1336, .8382]],
+            [[  .508, .3048],[  .762, .3048]],
+            [[     0,2.1336],[1.8669,2.1336]]
         ])
 
+        #Only for visulization
         self.pub_map_scan = rospy.Publisher("map_scan", LaserScan, queue_size=2)
+        self.pub_list = []
+        self.br = tf.TransformBroadcaster()
+        for i in range(PARTICLE_COUNT):
+            name = "sim_scan" + str(i)
+            self.pub_list.append(rospy.Publisher(name, LaserScan, queue_size=2))
 
-    def simulate_scan(self, *point):
         #print point
-        angle_increment = .005 #rads/index
-        min_angle = -3.14159274101 #rads
-        max_angle = 3.14159274101
-        max_range = 5.0 #m
-        min_range = 0.00999999977648
-        ranges = np.zeros(int((max_angle-min_angle)/angle_increment))
+        self.angle_increment = .005 #rads/index
+        self.min_angle = -3.14159274101 #rads
+        self.max_angle = 3.14159274101
+        self.max_range = 5.0 #m
+        self.min_range = 0.00999999977648
+        self.ranges = np.zeros(int((self.max_angle-self.min_angle)/self.angle_increment))
         
-        index_count = len(ranges)
-        #print index_count
+        index_count = len(self.ranges)
 
         # Only ranges at these indexs will be generated
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        forty_deg_index = int(math.radians(10)/angle_increment)
-        ranges_to_compare = np.zeros(0)
-        step = 8
-        ranges_to_compare = np.append( ranges_to_compare,            
+        forty_deg_index = int(math.radians(10)/self.angle_increment)
+        self.ranges_to_compare = np.zeros(0)
+        step = 4
+        self.ranges_to_compare = np.append( self.ranges_to_compare,            
             np.arange(index_count/4 - forty_deg_index, index_count/4 + forty_deg_index, step=step))
-        ranges_to_compare = np.append( ranges_to_compare,            
+        self.ranges_to_compare = np.append( self.ranges_to_compare,            
             np.arange(index_count/2 - forty_deg_index, index_count/2 + forty_deg_index, step=step))
-        ranges_to_compare = np.append( ranges_to_compare,            
+        self.ranges_to_compare = np.append( self.ranges_to_compare,            
             np.arange(3*index_count/4 - forty_deg_index, 3*index_count/4 + forty_deg_index, step=step))
 
-        ranges_to_compare = np.arange(2000,step=8)
+        #ranges_to_compare = np.arange(2000)
+    def simulate_scan(self, point, heading,name):
+        # Make sure the point is a numpy array
+        point = np.array(point)
 
-        for t in range(index_count):
-            if t not in ranges_to_compare:
-                #print i,"Nope"
-                continue
+        for t in self.ranges_to_compare:
+            theta = self.min_angle + t*self.angle_increment + heading
 
-            theta = min_angle + t*angle_increment + point[2]
-            line = self.generate_line(point[:2],theta)
-            #print theta,line
-            # Test each wall to see if we intersect it
-            hits = np.array([[0,0]])
+            ray_direction = np.array([math.cos(theta), math.sin(theta)])
+            intersections = []
             for w in self.map:
-                #Just for displaying
-                if w[0] == 0:
-                    plt.axhline(w[2],xmin=w[3]/3,xmax=w[4]/3)
-                #     #print "min",w[3],"max",w[4]
-                if w[0] == 1:
-                    plt.axvline(w[2],ymin=w[5]/3,ymax=w[6]/3)
-                #     #print "min",w[5],"max",w[6]
-                
-                #print w[:3]
-                matrix_to_solve = np.vstack((line,w[:3]))
-                #print "m",matrix_to_solve
-                coeff = matrix_to_solve[:,:2]
-                #print "c",coeff
-                dependent = matrix_to_solve[:,2]
-                #print "d",dependent
-                try:
-                    # Calculate intersections
-                    intersection = np.linalg.solve(coeff,dependent)
-                    #print "i",intersection
-                    # Remove intersections out of the domain of each line
-                    xmin,xmax,ymin,ymax = w[3:]
-                    if intersection[0] > xmax or intersection[0] < xmin or\
-                       intersection[1] > ymax or intersection[1] < ymin: 
-                        #print "line"
-                        continue
+                intersection_dist = self.find_intersection(point, ray_direction, w[0],w[1])
+                if intersection_dist is not None:
+                    intersections.append(intersection_dist)
 
-                    # Remove intersections on the wrong side of the line
-                    if (abs(theta) < 1.5708 and intersection[0] < point[0]) or\
-                       (abs(theta) > 1.5708 and intersection[0] > point[0]) or\
-                       (    theta  > 0      and intersection[1] < point[1]) or\
-                       (    theta  < 0      and intersection[1] > point[1]):
-                        continue
+            #All intersection points found, now find the closest
+            if len(intersections) > 0:
+                self.ranges[t] = min(intersections)
 
-                    hits = np.concatenate((hits, [intersection]), axis=0)
-
-                except:
-                    # This means the line was parallel, so who cares about it
-                    print "Error"
-                    continue
-
-            #All points found, now find the closest
-            if len(hits) == 1: continue
-            if len(hits) == 2: 
-                ranges[t] = math.sqrt(math.pow((abs(point[0]-hits[1][0])),2) +
-                                      math.pow((abs(point[1]-hits[1][1])),2))
-                plt.plot([hits[1][0]],[hits[1][1]],'ro')
-                continue
-
-            dists = []
-            for i in hits[1:]:
-                dists.append(math.sqrt(math.pow((abs(point[0]-i[0])),2) +
-                                       math.pow((abs(point[1]-i[1])),2)))
-            plt.plot([hits[dists.index(min(dists))+1][0]],[hits[dists.index(min(dists))+1][1]],'ro')
-            ranges[t] = min(dists)
-
-        self.pub_map_scan.publish(LaserScan(    
-                header=Header(
+        frame_name = "p"+str(name)
+        self.br.sendTransform((point[0], point[1], 0),
+                tf.transformations.quaternion_from_euler(0, 0, heading),
+                rospy.Time.now(),
+                frame_name,
+                "odom")
+        print frame_name
+        self.pub_list[name].publish(LaserScan(    
+            header=Header(
                 stamp = rospy.Time.now(),
-                frame_id = "odom",
-            ),
-            angle_min=min_angle,
-            angle_max=max_angle,
-            angle_increment=angle_increment,
+                frame_id = frame_name,
+                ),
+            angle_min=self.min_angle,
+            angle_max=self.max_angle,
+            angle_increment=self.angle_increment,
             time_increment=0,
             scan_time=0,
-            range_min=min_range,
-            range_max=max_range,
-            ranges=ranges.tolist(),
+            range_min=self.min_range,
+            range_max=self.max_range,
+            ranges=self.ranges.tolist(),
             intensities=[],
             )
         )
-        plt.plot([point[0]],[point[1]],'bo')
+        #plt.plot([point[0]],[point[1]],'bo')
         # x = np.arange(4)
         # #x y n
         # formula = "(" + str(-line[0]) + "*x +" + str(line[2]) + ")"#/" + str(line[1])
         # y = eval(formula)
         # plt.plot(x,y)
-        plt.axis([0, 3, 0, 3])
-        plt.show()
+        #plt.axis([0, 3, 0, 3])
+        #plt.show()
+    
+    def find_intersection(self, ray_origin, ray_direction, point1, point2):
+        # Ray-Line Segment Intersection Test in 2D
+        # http://bit.ly/1CoxdrG
+        v1 = ray_origin - point1
+        v2 = point2 - point1
+        v3 = np.array([-ray_direction[1], ray_direction[0]])
 
-    def generate_line(self,point,theta):
-        # Returns the matrix row of a line passing through the point with theta rotation
-        return np.array([-math.tan(theta)*point[0]/point[1], 1, point[1]-(math.tan(theta)*point[0])])
+        v2_dot_v3 = np.dot(v2, v3)
+        if v2_dot_v3 == 0:
+            return None
 
-
-
-class Map():
-    def __init__(self, map_name):
-        global PARTICLE_COUNT
-        # load map from bmp file in map/ folder
-        self.map = cv2.imread(os.path.join(os.path.dirname(__file__), 'map/' + map_name + '.bmp'),0).astype(np.uint8)
+        t1 = np.cross(v2, v1) / v2_dot_v3
+        t2 = np.dot(v1, v3) / v2_dot_v3
         
-        # Only for visulization
-        # self.pub_map_scan = rospy.Publisher("map_scan", LaserScan, queue_size=2)
-        # self.pub_list = []
-        # for i in range(PARTICLE_COUNT):
-        #     name = "sim_scan" + str(i)
-        #     self.pub_list.append(rospy.Publisher(name, LaserScan, queue_size=2))
-
-        # Load some meta data about the map
-        with open(os.path.join(os.path.dirname(__file__), 'map/' + map_name + '.txt')) as f:
-            meta_data = f.read().splitlines()
-
-        self.cell_resolution = float(meta_data[1]) #m/px
-
-        self.width = int(meta_data[2])
-        self.height = int(meta_data[3])
-        self.origin = [self.width/2,self.height/2]
-
-    def simulate_scan_iterative_line_method(self, point, heading, name="map"):
-        # Point should be y,x,heading (m,m,rads)
-        # 0,0,0 is the middle of the map pointed right
-        # Convert m points into px
-        m_point = point,heading
-        #print m_point
-
-        point = np.array(point)/self.cell_resolution
-        point += np.array([self.origin[0],self.origin[1]])
-
-        ret,thresh = cv2.threshold(self.map,127,255,cv2.THRESH_BINARY)
-
-        # Parameters of simulated laserscan (comes from comb lidar scan)
-        angle_increment = .005 #rads/index
-        min_angle = -3.14159274101 #rads
-        max_angle = 3.14159274101
-        max_range = 5.0 #m
-        min_range = 0.00999999977648
-        ranges = np.zeros(int((max_angle-min_angle)/angle_increment))
-        
-        index_count = len(ranges)
-        #print index_count
-
-        # Only ranges at these indexs will be generated
-        # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        forty_deg_index = int(math.radians(10)/angle_increment)
-        #print forty_deg_index
-        ranges_to_compare = np.zeros(0)
-        step = 8
-        #print np.arange(index_count/4 - forty_deg_index, index_count/4 + forty_deg_index)
-        ranges_to_compare = np.append( ranges_to_compare,            
-            np.arange(index_count/4 - forty_deg_index, index_count/4 + forty_deg_index, step=step))
-        ranges_to_compare = np.append( ranges_to_compare,            
-            np.arange(index_count/2 - forty_deg_index, index_count/2 + forty_deg_index, step=step))
-        ranges_to_compare = np.append( ranges_to_compare,            
-            np.arange(3*index_count/4 - forty_deg_index, 3*index_count/4 + forty_deg_index, step=step))
-
-        if name == "map": ranges_to_compare = np.arange(2000,step=8)
-        #print ranges_to_compare
-        # Temp image to store simulated laserscan results
-        #lines = np.zeros(thresh.shape)
-        for i in range(int((max_angle-min_angle)/angle_increment)):
-            if i not in ranges_to_compare:
-                #print i,"Nope"
-                continue
-
-            # Draw a test point from 'point' location out every 'angle_increment' rads from min_range to max_range
-            # Once this test point intersects a wall in the map, save the data and create a LaserScan message with the data
-            theta = min_angle + i*angle_increment + heading
-
-            # Make test points along lines from origin and test if there is a wall at each point along the line
-            # Only check for points between max and min range
-            for r in range(int(min_range/self.cell_resolution),
-                           int(max_range/self.cell_resolution)):
-                x = point[0] + int(r * np.cos(theta))
-                y = point[1] + int(r * np.sin(theta))
-                
-                # If the point is off the map, break
-                if x >= self.width or y >= self.height: break
-                if x <= 0 or y <= 0: break
-                
-                #lines[x,y] = 255
-                # If the test point is a wall, add the dist to the list and break
-                if thresh[self.height-y,x] == 255:
-                    dist = math.sqrt((abs(point[0]-x))**2 + (abs(point[1]-y))**2)*self.cell_resolution
-                    ranges[i] = dist
-                    break
-                #cv2.imshow("lines",lines)
-                #cv2.waitKey(1)
-
-            #cv2.imshow("thresh",thresh)
-            #cv2.waitKey(1)
-        #If we want to publish the scan, thats an option
-        # br = tf.TransformBroadcaster()
-        # if name=="map": 
-        #     print "m"
-        #     self.pub_map_scan.publish(LaserScan(    
-        #         header=Header(
-        #             stamp = rospy.Time.now(),
-        #             frame_id = "odom",
-        #             ),
-        #         angle_min=min_angle,
-        #         angle_max=max_angle,
-        #         angle_increment=angle_increment,
-        #         time_increment=0,
-        #         scan_time=0,
-        #         range_min=min_range,
-        #         range_max=max_range,
-        #         ranges=ranges.tolist(),
-        #         intensities=[],
-        #         )
-        #     )
-        # else:
-        #     frame_name = "p"+str(name)
-        #     br.sendTransform((m_point[0][0], m_point[0][1], 0),
-        #             tf.transformations.quaternion_from_euler(0, 0, m_point[1]),
-        #             rospy.Time.now(),
-        #             frame_name,
-        #             "odom")
-        #     print frame_name
-        #     self.pub_list[name].publish(LaserScan(    
-        #         header=Header(
-        #             stamp = rospy.Time.now(),
-        #             frame_id = frame_name,
-        #             ),
-        #         angle_min=min_angle,
-        #         angle_max=max_angle,
-        #         angle_increment=angle_increment,
-        #         time_increment=0,
-        #         scan_time=0,
-        #         range_min=min_range,
-        #         range_max=max_range,
-        #         ranges=ranges.tolist(),
-        #         intensities=[],
-        #         )
-        #     )
-
-
-
-'''
-middle
-header: 
-  seq: 677
-  stamp: 
-    secs: 1453340774
-    nsecs: 453263500
-  frame_id: laser_middle
-angle_min: -1.57079637051
-angle_max: 1.56466042995
-angle_increment: 0.00613592332229
-time_increment: 9.76562514552e-05
-scan_time: 0.10000000149
-range_min: 0.019999999553
-range_max: 5.59999990463
-
-combo
-header: 
-  seq: 80
-  stamp: 
-    secs: 1453341073
-    nsecs: 716155052
-  frame_id: laser_comb
-angle_min: -3.14159274101
-angle_max: 3.14159274101
-angle_increment: 0.00300000002608
-time_increment: 0.0
-scan_time: 0.0
-range_min: 0.00999999977648
-range_max: 5.0
-'''
+        if t1 >= 0.0 and t2 >= 0.0 and t2 <= 1.0:
+            return t1
+        return None
 
 class Particle():
     def __init__(self, x, y, heading, w = 0):
@@ -405,7 +206,7 @@ class Filter():
         r = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
             self.hz_counter = time.time()
-            self.m.simulate_scan(1.22,1.22,1.57)
+            self.run_filter()
             print 1.0/(time.time()-self.hz_counter)
             r.sleep()
         # self.hz_counter = time.time()
@@ -427,7 +228,7 @@ class Filter():
 
         for i,p in enumerate(self.particles):
             p.update_pos(self.pose_update)
-            particle_scan = self.m.simulate_scan(p.x,p.y,p.heading)
+            particle_scan = self.m.simulate_scan((p.x,p.y),p.heading,i)
             #self.m.simulate_scan((0,0),0,"map")
 
         self.publish_particle_array()
@@ -506,36 +307,7 @@ class Filter():
         #print "PUBLISHED PARTICLES"
 
 rospy.init_node('particle_filter', anonymous=True)
-f = Filter(PARTICLE_COUNT, (0,0), .5, (.1,-.1))
-#rospy.spin()
-
-# m = Map("ieee_small")
-# map_image = m.map
-
-# # Create a black image, a window
-# cv2.namedWindow('bars')
-
-# def nothing(x):
-#     pass
-# # create trackbars for color change
-# cv2.createTrackbar('x','bars',0,150,nothing)
-# cv2.createTrackbar('y','bars',0,150,nothing)
-# cv2.createTrackbar('theta','bars',0,628,nothing)
-
-# r = rospy.Rate(10)
-# while not rospy.is_shutdown():
-#     x = cv2.getTrackbarPos('x','bars')
-#     y = cv2.getTrackbarPos('y','bars')
-#     t = cv2.getTrackbarPos('theta','bars')
-    
-#     image = map_image
-#     cv2.circle(image,(x+150,y+150),2,100,-1)
-
-#     m.simulate_scan((x,y,t/100.0))
-
-#     cv2.imshow("map", map_image)
-#     cv2.waitKey(1)
-#     r.sleep()
+f = Filter(PARTICLE_COUNT, (.2,.2), .15, (1.54,1.61))
 
 cv2.destroyAllWindows()
 
