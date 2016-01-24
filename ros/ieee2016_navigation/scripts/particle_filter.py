@@ -2,17 +2,16 @@
 import rospy
 from std_msgs.msg import Header
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
-from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped
+from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3
 from sensor_msgs.msg import LaserScan
 import tf
 
-import cv2
-import os
 import numpy as np
 import math
 import time
 import random
 import matplotlib.pyplot as plt
+from threading import Thread
 
 PARTICLE_COUNT = 10
 
@@ -31,14 +30,14 @@ class ModelMap():
             [[  .508, .3048],[  .762, .3048]],
             [[     0,2.1336],[1.8669,2.1336]]
         ])
-
+        
         #Only for visulization
-        self.pub_map_scan = rospy.Publisher("map_scan", LaserScan, queue_size=2)
         self.pub_list = []
         self.br = tf.TransformBroadcaster()
         for i in range(PARTICLE_COUNT):
             name = "sim_scan" + str(i)
             self.pub_list.append(rospy.Publisher(name, LaserScan, queue_size=2))
+        self.pub_list.append(rospy.Publisher("sim_scan10", LaserScan, queue_size=2))
 
         #print point
         self.angle_increment = .005 #rads/index
@@ -52,20 +51,24 @@ class ModelMap():
 
         # Only ranges at these indexs will be generated
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        forty_deg_index = int(math.radians(10)/self.angle_increment)
+        deg_index = int(math.radians(40)/self.angle_increment)
         self.ranges_to_compare = np.zeros(0)
-        step = 4
+        step = 16
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
-            np.arange(index_count/4 - forty_deg_index, index_count/4 + forty_deg_index, step=step))
+            np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
-            np.arange(index_count/2 - forty_deg_index, index_count/2 + forty_deg_index, step=step))
+            np.arange(index_count/2 - deg_index, index_count/2 + deg_index, step=step))
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
-            np.arange(3*index_count/4 - forty_deg_index, 3*index_count/4 + forty_deg_index, step=step))
+            np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
+
+        self.real_ranges = np.arange(index_count/2 - int(math.radians(150)/self.angle_increment), index_count/2 + int(math.radians(150)/self.angle_increment))
 
         #ranges_to_compare = np.arange(2000)
-    def simulate_scan(self, point, heading,name):
+    def simulate_scan(self, point, heading, name):
         # Make sure the point is a numpy array
         point = np.array(point)
+
+        if name == "real": self.ranges_to_compare = self.real_ranges 
 
         for t in self.ranges_to_compare:
             theta = self.min_angle + t*self.angle_increment + heading
@@ -75,11 +78,19 @@ class ModelMap():
             for w in self.map:
                 intersection_dist = self.find_intersection(point, ray_direction, w[0],w[1])
                 if intersection_dist is not None:
+                    # If the intersection distance is not in range don't worry about it
+                    if intersection_dist > self.max_range or intersection_dist < self.min_range: continue
+
                     intersections.append(intersection_dist)
 
             #All intersection points found, now find the closest
             if len(intersections) > 0:
                 self.ranges[t] = min(intersections)
+
+        # Just for displaying
+        if name == "real": 
+            self.ranges[self.real_ranges] = self.add_noise(self.ranges[self.real_ranges])
+            name = 10
 
         frame_name = "p"+str(name)
         self.br.sendTransform((point[0], point[1], 0),
@@ -87,7 +98,7 @@ class ModelMap():
                 rospy.Time.now(),
                 frame_name,
                 "odom")
-        print frame_name
+        #print frame_name
         self.pub_list[name].publish(LaserScan(    
             header=Header(
                 stamp = rospy.Time.now(),
@@ -131,6 +142,11 @@ class ModelMap():
             return t1
         return None
 
+    def add_noise(self,ranges):
+        # Adds noise to scan to simulate real scan
+        noise_size = .03 #m
+        return ranges + np.random.uniform(0,noise_size,ranges.size)
+
 class Particle():
     def __init__(self, x, y, heading, w = 0):
         # postition and rotation of particle and the weight of the particle (initally 0)
@@ -171,20 +187,21 @@ class Particle():
         )
         return p
 
-class Filter():
+class Filter(Thread):
     def __init__(self, p_count, center, radius, heading_range):
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
         # ROS Inits
-        self.test_points_pub = rospy.Publisher('test_points', PoseArray, queue_size=2)
+        self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
         self.odom_sub = rospy.Subscriber('/robot/odometry/filtered', Odometry, self.got_odom)
+        self.twist_sub = rospy.Subscriber('/test/test_twist', TwistStamped, self.got_twist)
+        self.laser_scan_sub = rospy.Subscriber('/sim_scan10', LaserScan, self.got_laserscan)
         self.pose_est_pub = rospy.Publisher('pose_est', PoseStamped, queue_size=2)
 
-        #self.m = Map("ieee_small")
         self.m = ModelMap()
-        #self.m.simulate_scan_gradient_vector_method((0,0),0,0)
+
         # We start at arbitrary point 0,0,0
-        self.pose = np.array([0,0,0], np.float64)
-        self.pose_update = np.array([0,0,0], np.float64)
+        self.pose = np.array([.2,.2,1.57], np.float64)
+        self.pose_update = np.array([0,0,0], np.float64) 
 
         # Generate random point in circle and add to list
         self.particles = [] 
@@ -201,6 +218,11 @@ class Filter():
             heading = random.uniform(heading_range[0], heading_range[1])
 
             self.particles.append(Particle(x,y,heading))
+
+        self.laser_scan = np.array([])
+
+        # For keeping track of time
+        self.prev_time = time.time()
 
         self.hz_counter = 0
         r = rospy.Rate(10) # 10hz
@@ -219,30 +241,28 @@ class Filter():
         # This is where the filter does its work
 
         # Check our updated position from the last run of the filter, if it is 0 or close to it, then break and dont worry about running the filter
-        # tolerance = 1e-4
-        # if abs(self.pose_update[0]) < tolerance and\
-        #    abs(self.pose_update[1]) < tolerance and\
-        #    abs(self.pose_update[2]) < tolerance: return
+        tolerance = 1e-4
+        if abs(self.pose_update[0]) < tolerance and\
+           abs(self.pose_update[1]) < tolerance and\
+           abs(self.pose_update[2]) < tolerance: return
         
-        #print self.pose_update
-
-        for i,p in enumerate(self.particles):
-            p.update_pos(self.pose_update)
-            particle_scan = self.m.simulate_scan((p.x,p.y),p.heading,i)
-            #self.m.simulate_scan((0,0),0,"map")
-
-        self.publish_particle_array()
-
+        update = np.copy(self.pose_update)
         # Reset the pose update so that the next run will contain the pose update from this point
         self.pose_update = np.array([0,0,0], np.float64)
 
+        for i,p in enumerate(self.particles):
+            p.update_pos(update)
+            particle_scan = self.m.simulate_scan((p.x,p.y),p.heading,i)
 
-    def got_odom(self,msg):
-        # Update current pose based on odom data, note that this is only an estimation of Shia's position
-        # The twist is a measure of velocity from the previous state
+        self.publish_particle_array()
 
-        vehicle_twist = msg.twist.twist
-        incoming_msg_freq = 100.0 #hz
+    def got_twist(self,msg):
+        # Just a temp method to test the filter
+        vehicle_twist = msg.twist
+        
+        time_since_last_msg = self.prev_time - time.time() #seconds
+        self.prev_time = time.time()
+        incoming_msg_freq = 1.0#/time_since_last_msg
 
         # This accounts for Shia's rotation - if he is pointed at a 45 degree angle and moves straight forward (which is what the twist message will say),
         # he is not moving directly along the x axis, he is moving at an offset angle.
@@ -288,8 +308,61 @@ class Filter():
 
         )
 
+    def got_odom(self,msg):
+        # Update current pose based on odom data, note that this is only an estimation of Shia's position
+        # The twist is a measure of velocity from the previous state
+
+        vehicle_twist = msg.twist.twist
+        incoming_msg_freq = 100 #hz
+
+        # This accounts for Shia's rotation - if he is pointed at a 45 degree angle and moves straight forward (which is what the twist message will say),
+        # he is not moving directly along the x axis, he is moving at an offset angle.
+        c, s = np.cos(self.pose[2]), np.sin(self.pose[2])
+        rot_mat = np.matrix([
+            [c,     -s],
+            [s,      c],
+        ], dtype=np.float32)
+        # Then we add the x or y translation that we move, rounding down if it's super small
+        x, y = np.dot(rot_mat, [vehicle_twist.linear.x/incoming_msg_freq, vehicle_twist.linear.y/incoming_msg_freq]).A1
+        tolerance = 1e-7
+        if abs(x) < tolerance: x = 0
+        if abs(y) < tolerance: y = 0
+        if abs(vehicle_twist.angular.z) < tolerance: vehicle_twist.angular.z = 0
+        
+        # By summing these components, we get an integral - converting velocity to position
+        self.pose_update += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
+        self.pose += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
+
+        #print "POSE UPDATED"
+
+        q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
+        self.pose_est_pub.publish(
+            PoseStamped(
+                header=Header(
+                    stamp=rospy.Time.now(),
+                    frame_id="odom"
+                ),
+                pose=Pose(
+                    position=Point(
+                        x=self.pose[0],
+                        y=self.pose[1],
+                        z=0
+                    ),
+                    orientation=Quaternion(
+                        x=q[0],
+                        y=q[1],
+                        z=q[2],
+                        w=q[3],
+                    )
+                )
+            )
+
+        )
+
+    
+
     def got_laserscan(self,msg):
-        pass
+        self.laser_scan = np.array(msg.ranges)
 
     def publish_particle_array(self):
         pose_arr = []
@@ -306,10 +379,95 @@ class Filter():
         )
         #print "PUBLISHED PARTICLES"
 
-rospy.init_node('particle_filter', anonymous=True)
-f = Filter(PARTICLE_COUNT, (.2,.2), .15, (1.54,1.61))
+class Test(Thread):
+    def __init__(self):
+        super(Test, self).__init__()
+        self.odom_sub = rospy.Subscriber('/spacenav/twist', Twist, self.got_twist)
+        self.est_pose_pub = rospy.Publisher('/test/est_pose', PoseStamped, queue_size=2)
+        self.twist_pub = rospy.Publisher('/test/test_twist', TwistStamped, queue_size=2)
+        self.real_scan_pub = rospy.Subscriber('/scan_comb', LaserScan, queue_size=2)
+        
+        self.m = ModelMap()
 
-cv2.destroyAllWindows()
+        self.pose = np.array([.2,.2,1.57])
+
+        self.speed_multiplier = .01
+
+        l = Thread(target=self.pub_laserscan)
+        l.start()
+
+    def got_twist(self,msg):
+        c, s = np.cos(self.pose[2]), np.sin(self.pose[2])
+        rot_mat = np.matrix([
+            [c,     -s],
+            [s,      c],
+        ], dtype=np.float32)
+        x, y = np.dot(rot_mat, [msg.linear.x, msg.linear.y]).A1
+        
+        self.pose += np.array([x,y,msg.angular.z])*self.speed_multiplier
+
+        self.publish_pose(msg)
+
+    def pub_laserscan(self):
+        r = rospy.Rate(10) # 10hz
+        while not rospy.is_shutdown():
+            #print "laser"
+            self.m.simulate_scan((self.pose[0],self.pose[1]), self.pose[2], "real")
+            r.sleep()
+
+    def publish_pose(self,twist):
+        #print "Publishing Pose",self.pose
+
+        q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
+        p = PoseStamped(
+            header=Header(
+                stamp=rospy.Time.now(),
+                frame_id="odom"
+                ),
+            pose=Pose(
+                position=Point(
+                    x=self.pose[0],
+                    y=self.pose[1],
+                    z=0
+                ),
+                orientation=Quaternion(
+                        x=q[0],
+                        y=q[1],
+                        z=q[2],
+                        w=q[3],
+                    )
+            )
+        )
+        self.est_pose_pub.publish(p)
+        t = TwistStamped(
+            header=Header(
+                stamp=rospy.Time.now(),
+                frame_id="odom"
+            ),
+            twist=Twist(
+                linear=Vector3(
+                    x=twist.linear.x*self.speed_multiplier,
+                    y=twist.linear.y*self.speed_multiplier,
+                    z=0.0
+                ),
+                angular=Vector3(
+                    x=0.0,
+                    y=0.0,
+                    z=twist.angular.z*self.speed_multiplier
+                )
+            )
+        )
+        self.twist_pub.publish(t)
+
+
+
+rospy.init_node('particle_filter', anonymous=True)
+t = Test()
+f = Filter(PARTICLE_COUNT, (.2,.2), .15, (.57,2.57))
+t.start()
+f.start()
+
+rospy.spin()
 
 
 
