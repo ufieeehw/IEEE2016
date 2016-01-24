@@ -13,7 +13,7 @@ import random
 import matplotlib.pyplot as plt
 from threading import Thread
 
-PARTICLE_COUNT = 10
+PARTICLE_COUNT = 25
 
 class ModelMap():
     def __init__(self):
@@ -30,14 +30,14 @@ class ModelMap():
             [[  .508, .3048],[  .762, .3048]],
             [[     0,2.1336],[1.8669,2.1336]]
         ])
-        
+
         #Only for visulization
         self.pub_list = []
         self.br = tf.TransformBroadcaster()
         for i in range(PARTICLE_COUNT):
             name = "sim_scan" + str(i)
             self.pub_list.append(rospy.Publisher(name, LaserScan, queue_size=2))
-        self.pub_list.append(rospy.Publisher("sim_scan10", LaserScan, queue_size=2))
+        self.pub_list.append(rospy.Publisher("sim_scan25", LaserScan, queue_size=2))
 
         #print point
         self.angle_increment = .005 #rads/index
@@ -52,7 +52,7 @@ class ModelMap():
         # Only ranges at these indexs will be generated
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
         deg_index = int(math.radians(40)/self.angle_increment)
-        self.ranges_to_compare = np.zeros(0)
+        self.ranges_to_compare = np.array([], np.int32)
         step = 16
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
             np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
@@ -61,14 +61,21 @@ class ModelMap():
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
             np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
 
-        self.real_ranges = np.arange(index_count/2 - int(math.radians(150)/self.angle_increment), index_count/2 + int(math.radians(150)/self.angle_increment))
+        self.real_ranges = np.array([], np.int32)
+        self.real_ranges = np.append( self.real_ranges,            
+            np.arange(index_count/4 - deg_index, index_count/4 + deg_index))
+        self.real_ranges = np.append( self.real_ranges,            
+            np.arange(index_count/2 - deg_index, index_count/2 + deg_index))
+        self.real_ranges = np.append( self.real_ranges,            
+            np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index))
 
+        #print self.real_ranges
         #ranges_to_compare = np.arange(2000)
     def simulate_scan(self, point, heading, name):
         # Make sure the point is a numpy array
         point = np.array(point)
 
-        if name == "real": self.ranges_to_compare = self.real_ranges 
+        if name == "real": self.ranges_to_compare = self.real_ranges
 
         for t in self.ranges_to_compare:
             theta = self.min_angle + t*self.angle_increment + heading
@@ -90,7 +97,7 @@ class ModelMap():
         # Just for displaying
         if name == "real": 
             self.ranges[self.real_ranges] = self.add_noise(self.ranges[self.real_ranges])
-            name = 10
+            name = 25
 
         frame_name = "p"+str(name)
         self.br.sendTransform((point[0], point[1], 0),
@@ -115,14 +122,8 @@ class ModelMap():
             intensities=[],
             )
         )
-        #plt.plot([point[0]],[point[1]],'bo')
-        # x = np.arange(4)
-        # #x y n
-        # formula = "(" + str(-line[0]) + "*x +" + str(line[2]) + ")"#/" + str(line[1])
-        # y = eval(formula)
-        # plt.plot(x,y)
-        #plt.axis([0, 3, 0, 3])
-        #plt.show()
+
+        return self.ranges[self.ranges_to_compare]
     
     def find_intersection(self, ray_origin, ray_direction, point1, point2):
         # Ray-Line Segment Intersection Test in 2D
@@ -188,7 +189,7 @@ class Particle():
         return p
 
 class Filter(Thread):
-    def __init__(self, p_count, center, radius, heading_range):
+    def __init__(self, p_count, center, radius, heading_range, m):
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
         # ROS Inits
         self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
@@ -197,7 +198,7 @@ class Filter(Thread):
         self.laser_scan_sub = rospy.Subscriber('/sim_scan10', LaserScan, self.got_laserscan)
         self.pose_est_pub = rospy.Publisher('pose_est', PoseStamped, queue_size=2)
 
-        self.m = ModelMap()
+        self.m = m
 
         # We start at arbitrary point 0,0,0
         self.pose = np.array([.2,.2,1.57], np.float64)
@@ -227,10 +228,10 @@ class Filter(Thread):
         self.hz_counter = 0
         r = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
+            r.sleep()
             self.hz_counter = time.time()
             self.run_filter()
             print 1.0/(time.time()-self.hz_counter)
-            r.sleep()
         # self.hz_counter = time.time()
         # #for i in range(p_count):
         # self.m.simulate_scan(1.22,1.22,0)
@@ -241,20 +242,32 @@ class Filter(Thread):
         # This is where the filter does its work
 
         # Check our updated position from the last run of the filter, if it is 0 or close to it, then break and dont worry about running the filter
-        tolerance = 1e-4
-        if abs(self.pose_update[0]) < tolerance and\
-           abs(self.pose_update[1]) < tolerance and\
-           abs(self.pose_update[2]) < tolerance: return
-        
+        # tolerance = 1e-4
+        # if abs(self.pose_update[0]) < tolerance and\
+        #    abs(self.pose_update[1]) < tolerance and\
+        #    abs(self.pose_update[2]) < tolerance: return
+        while len(self.laser_scan) == 0:
+            print "No scan"
         update = np.copy(self.pose_update)
+        laser_scan = np.copy(self.laser_scan)[self.m.ranges_to_compare]
         # Reset the pose update so that the next run will contain the pose update from this point
         self.pose_update = np.array([0,0,0], np.float64)
 
         for i,p in enumerate(self.particles):
             p.update_pos(update)
             particle_scan = self.m.simulate_scan((p.x,p.y),p.heading,i)
-
+            p.w = self.compare_with_scan(particle_scan,laser_scan)
+            if p.w > .9: print i,
         self.publish_particle_array()
+    
+    def compare_with_scan(self,measured_scan,sim_scan):
+        # Found this method online
+        # More accurate values => 1, less accurate => 0
+        sigma2 = .3 ** 2
+        error = measured_scan - sim_scan
+        g = np.mean(math.e ** -(error ** 2 / (2 * sigma2)))
+
+        return g
 
     def got_twist(self,msg):
         # Just a temp method to test the filter
@@ -333,8 +346,6 @@ class Filter(Thread):
         self.pose_update += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
         self.pose += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
 
-        #print "POSE UPDATED"
-
         q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
         self.pose_est_pub.publish(
             PoseStamped(
@@ -359,8 +370,6 @@ class Filter(Thread):
 
         )
 
-    
-
     def got_laserscan(self,msg):
         self.laser_scan = np.array(msg.ranges)
 
@@ -380,21 +389,22 @@ class Filter(Thread):
         #print "PUBLISHED PARTICLES"
 
 class Test(Thread):
-    def __init__(self):
+    def __init__(self,m):
         super(Test, self).__init__()
         self.odom_sub = rospy.Subscriber('/spacenav/twist', Twist, self.got_twist)
-        self.est_pose_pub = rospy.Publisher('/test/est_pose', PoseStamped, queue_size=2)
+        self.est_pose_pub = rospy.Publisher('/test/pose', PoseStamped, queue_size=2)
         self.twist_pub = rospy.Publisher('/test/test_twist', TwistStamped, queue_size=2)
         self.real_scan_pub = rospy.Subscriber('/scan_comb', LaserScan, queue_size=2)
-        
-        self.m = ModelMap()
 
         self.pose = np.array([.2,.2,1.57])
+
+        self.m = m
 
         self.speed_multiplier = .01
 
         l = Thread(target=self.pub_laserscan)
         l.start()
+
 
     def got_twist(self,msg):
         c, s = np.cos(self.pose[2]), np.sin(self.pose[2])
@@ -411,12 +421,12 @@ class Test(Thread):
     def pub_laserscan(self):
         r = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
-            #print "laser"
+            print "laser"
             self.m.simulate_scan((self.pose[0],self.pose[1]), self.pose[2], "real")
             r.sleep()
 
     def publish_pose(self,twist):
-        #print "Publishing Pose",self.pose
+        print "Publishing Pose",self.pose
 
         q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
         p = PoseStamped(
@@ -439,6 +449,7 @@ class Test(Thread):
             )
         )
         self.est_pose_pub.publish(p)
+
         t = TwistStamped(
             header=Header(
                 stamp=rospy.Time.now(),
@@ -462,8 +473,9 @@ class Test(Thread):
 
 
 rospy.init_node('particle_filter', anonymous=True)
-t = Test()
-f = Filter(PARTICLE_COUNT, (.2,.2), .15, (.57,2.57))
+m = ModelMap()
+t = Test(m)
+f = Filter(PARTICLE_COUNT, (.21,.23), .15, (1.3,1.8), m)
 t.start()
 f.start()
 
