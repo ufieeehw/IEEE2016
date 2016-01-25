@@ -1,4 +1,4 @@
-import sys, getopt, rospy
+import sys, getopt, rospy, tf
 from nav_msgs.msg import Odometry
 
 def save_waypoint(name, x, y, theta):
@@ -35,7 +35,7 @@ def save_waypoint(name, x, y, theta):
 
 				#If a duplicate is found, deletes the oldest coordinate with the matching name and rewrites the file
 				if name == names[y]:
-					print "FOUND DUPE"
+					#print "FOUND DUPE"
 					dupe = names.index(name)
 					#print dupe
 					del update_lines[dupe]
@@ -62,16 +62,23 @@ def load_waypoints():
 		print load_dict	
 
 def callback(data):
-	rospy.loginfo(rospy.get_caller_id() + "I heard %s", data.data)
+	#print data.pose.pose.position.x
+	quaternion = (data.pose.pose.orientation.x, data.pose.pose.orientation.y, data.pose.pose.orientation.z, data.pose.pose.orientation.w)
+	euler = tf.transformations.euler_from_quaternion(quaternion)
+	roll = euler[0]
+	pitch = euler[1]
+	yaw = euler[2]
+	print str(roll) + " " + str(pitch) + " " + str(yaw)
+
+	save_waypoint(sys.argv[1], roll, pitch, yaw)
+	sub.unregister()
+	rospy.signal_shutdown("Message saved")
 
 def listener():
 	rospy.init_node('listener', anonymous=True)
-	rospy.Subscriber("robot_odom_filter", String, callback)
+	global sub
+	sub = rospy.Subscriber("robot_odom_filter", Odometry, callback)
 	rospy.spin()
 
-def main(argv):
-   	save_waypoint(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
-
 if __name__ == "__main__":
-   main(sys.argv[1:])
-   listener()
+	listener()
