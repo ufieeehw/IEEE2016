@@ -17,7 +17,7 @@ import os
 import pyopencl as cl
 
 
-PARTICLE_COUNT = 50
+PARTICLE_COUNT = 1000
 
 class GPUAccMap():
     def __init__(self):
@@ -61,9 +61,9 @@ class GPUAccMap():
 
         # Only ranges at these indicies will be checked
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        deg_index = int(math.radians(20)/self.angle_increment)
+        deg_index = int(math.radians(30)/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
-        step = 2
+        step = 4
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
@@ -181,9 +181,9 @@ class ModelMap():
 
         # Only ranges at these indexs will be generated
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        deg_index = int(math.radians(40)/self.angle_increment)
+        deg_index = int(math.radians(30)/self.angle_increment)
         self.ranges_to_compare = np.array([], np.int32)
-        step = 2
+        step = 4
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
             np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
@@ -224,7 +224,7 @@ class ModelMap():
             if len(intersections) > 0:
                 self.ranges[t] = min(intersections)
 
-        #self.ranges[self.real_ranges] = self.add_noise(self.ranges[self.real_ranges])
+        self.ranges[self.real_ranges] = add_noise(self.ranges[self.real_ranges],.1)
 
         #frame_name = "p"+str(name)
         self.br.sendTransform((point[0], point[1], 0),
@@ -270,50 +270,6 @@ class ModelMap():
             return t1
         return None
 
-    def add_noise(self,ranges):
-        # Adds noise to scan to simulate real scan
-        noise_size = .03 #m
-        return ranges + np.random.uniform(0,noise_size,ranges.size)
-
-class Particle():
-    # DEPRECIATED
-    def __init__(self, x, y, heading, w = 0):
-        # postition and rotation of particle and the weight of the particle (initally 0)
-        self.x = x
-        self.y = y
-        self.heading = heading
-        self.w = w
-
-    def update_weight(self, est_distance):
-        # Found this method of calculating error in distance
-        # Values close to 1 are closer more accurate
-        sigma2 = 0.9 ** 2
-        error = est_distance - measured_distance
-        self.w = math.e ** -(error ** 2 / (2 * sigma2))
-
-    def update_pos(self,(dx,dy,dhead), w = 0):
-        self.x += dx
-        self.y += dy
-        self.heading += dhead
-        self.w = w
-        #print "updated"
-
-    def return_pose(self):
-        q = tf.transformations.quaternion_from_euler(0, 0, self.heading)
-        p = Pose(
-            position=Point(
-                    x=self.x,
-                    y=self.y,
-                    z=0
-                ),
-            orientation=Quaternion(
-                    x=q[0],
-                    y=q[1],
-                    z=q[2],
-                    w=q[3],
-                )
-        )
-        return p
 
 class GPUAccFilter(Thread):
     def __init__(self, p_count, center, radius, heading_range, m):
@@ -329,7 +285,7 @@ class GPUAccFilter(Thread):
         self.p_count = p_count
 
         # We start at arbitrary point 0,0,0
-        self.pose = np.array([.2,.2,1.57], np.float64)
+        self.pose = np.array([0,0,1.57], np.float64)
         self.pose_update = np.array([0,0,0], np.float64) 
 
         # Generate random point in circle and add to array of point coordinates
@@ -346,7 +302,7 @@ class GPUAccFilter(Thread):
         self.prev_time = time.time()
 
         self.hz_counter = 0
-        r = rospy.Rate(1) # 10hz
+        r = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
             r.sleep()
             self.hz_counter = time.time()
@@ -395,17 +351,50 @@ class GPUAccFilter(Thread):
         
         # Do magic and calculate the new particles
         if len(self.particles) == 0: return
+
         new_x = np.mean(self.particles.T[0])
         new_y = np.mean(self.particles.T[1])
         new_head = np.mean(self.particles.T[2])
-        std = np.std(self.particles)
-        print new_x,new_y,new_head, std
-        heading_variance = .2
-        self.gen_particles(self.p_count - len(self.particles), (new_x, new_y), .1, (new_head-heading_variance,new_head+heading_variance))
+        std = np.std(self.particles.T[0]),np.std(self.particles.T[1])
 
-        print "POSE ERROR:" np.array([new_x,new_y,new_head]) - pose_actual
+        #print "STD:",std
+        heading_variance = .1
+        generation_radius = .1
+        self.update_pose((new_x,new_y,new_head))
+
+        self.gen_particles(self.p_count - len(self.particles), (new_x, new_y), generation_radius, (new_head-heading_variance,new_head+heading_variance))
+
+        print "POSE ERROR:", np.array([new_x,new_y,new_head]) - pose_actual
 
         self.publish_particle_array()
+    
+    def update_pose(self,particle_avg):
+        self.pose = np.array(particle_avg)
+
+        print self.pose
+        q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
+        self.pose_est_pub.publish(
+            PoseStamped(
+                header=Header(
+                    stamp=rospy.Time.now(),
+                    frame_id="odom"
+                ),
+                pose=Pose(
+                    position=Point(
+                        x=self.pose[0],
+                        y=self.pose[1],
+                        z=0
+                    ),
+                    orientation=Quaternion(
+                        x=q[0],
+                        y=q[1],
+                        z=q[2],
+                        w=q[3],
+                    )
+                )
+            )
+
+        )
 
     def got_twist(self,msg):
         # Just a temp method to test the filter
@@ -431,7 +420,7 @@ class GPUAccFilter(Thread):
         
         # By summing these components, we get an integral - converting velocity to position
         self.pose_update += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
-        self.pose += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
+        #self.pose += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
 
         #print "POSE UPDATED"
 
@@ -749,7 +738,7 @@ class Test(Thread):
         self.est_pose_pub = rospy.Publisher('/test/pose', PoseStamped, queue_size=2)
         self.twist_pub = rospy.Publisher('/test/test_twist', TwistStamped, queue_size=2)
 
-        self.pose = np.array([1,1,1.5705])
+        self.pose = np.array([.2,.2,1.5705])
 
         self.m = m
         self.m2 = m2
@@ -776,7 +765,7 @@ class Test(Thread):
 
     def pub_laserscan(self):
         global pose_actual
-        r = rospy.Rate(100) # 10hz
+        r = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
             self.br.sendTransform((self.pose[0], self.pose[1], 0),
                 tf.transformations.quaternion_from_euler(0, 0, self.pose[2]),
@@ -834,13 +823,16 @@ class Test(Thread):
         )
         self.twist_pub.publish(t)
 
+def add_noise(values,noise_size):
+    # Adds noise to scan to some data
+    return values + np.random.uniform(0,noise_size-noise_size/2.0,values.size)
 
 
 rospy.init_node('particle_filter', anonymous=True)
 m = GPUAccMap()
 m2 = ModelMap()
 t = Test(m,m2)
-f = GPUAccFilter(PARTICLE_COUNT, (1.2,1.2), .5, (1.3,1.8), m)
+f = GPUAccFilter(PARTICLE_COUNT, (.2,.2), .5, (1.3,1.8), m)
 
 
 #f = Filter(PARTICLE_COUNT, (.21,.23), .15, (1.3,1.8), m,m2)
