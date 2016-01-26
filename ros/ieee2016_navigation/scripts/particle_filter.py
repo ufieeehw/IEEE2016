@@ -17,10 +17,11 @@ import os
 import pyopencl as cl
 
 
-PARTICLE_COUNT = 25
+PARTICLE_COUNT = 100
 
 class GPUAccMap():
     def __init__(self):
+        # Each line segment in the form: ax1, ay1, ax2, ay2, bx1, by1, bx2, by2, ...
         self.map = np.array([      0,     0,     0,2.1336,
                                .4572,  .762, .4572, 1.143,
                                 .508,     0,  .508, .3048,
@@ -31,17 +32,111 @@ class GPUAccMap():
                               1.8669, .8382,2.1336, .8382,
                                 .508, .3048,  .762, .3048,
                                    0,2.1336,1.8669,2.1336]).astype(np.float32)
+    
+        # self.map = np.array([
+        #         2,2,0,2,
+        #         0,0,2,0,
+        #         0,0,0,2,
+        #         2,0,2,2
+        #     ]).astype(np.float32)
+        self.map_pub = rospy.Publisher("/test/map_scan", LaserScan, queue_size=1)
+
+        # LaserScan parameters
+        self.angle_increment = .005 #rads/index
+        self.min_angle = -3.14159274101 #rads
+        self.max_angle = 3.14159274101
+        self.max_range = 5.0 #m
+        self.min_range = 0.00999999977648
+
+        index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
 
         # Set up pyopencl
         self.ctx = cl.create_some_context()
         self.queue = cl.CommandQueue(self.ctx)
         self.mf = cl.mem_flags
         # Load .cl program
-        filename = os.path.join(os.path.dirname(__file__), 'particle_filter.cl')
-        f = open(filename, 'r')
+        f = open(os.path.join(os.path.dirname(__file__), 'particle_filter.cl'), 'r')
         fstr = "".join(f.readlines())
-        cl.Program(self.ctx, fstr).build()
+        self.prg = cl.Program(self.ctx, fstr).build()
 
+        # Only ranges at these indicies will be checked
+        # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
+        deg_index = int(math.radians(20)/self.angle_increment)
+        self.indicies_to_compare = np.array([], np.int32)
+        step = 1
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(index_count/2 - deg_index, index_count/2 + deg_index, step=step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
+        
+        #self.indicies_to_compare = np.array([0,314,628,1255])
+
+        # To generate weights, we need those indices to be pre-converted to radian angle measures 
+        self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
+
+        self.angles_to_compare_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.angles_to_compare)
+        self.map_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.map)
+
+    def generate_weights(self, particles, laser_scan):
+        weights = np.zeros(self.indicies_to_compare.size).astype(np.float32)
+        laser_scan_compare = laser_scan[self.indicies_to_compare]
+        particles_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=particles)
+        laserscan_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=laser_scan_compare)
+        
+        # Actually send to graphics processor
+        self.prg.trace(self.queue, point.size/3, None, particles_cl, 
+                                                        self.map_cl, 
+                                         np.uint32(self.map.size/4), 
+                                          self.angles_to_compare_cl, 
+                             np.uint32(self.angles_to_compare.size),
+                                                       laserscan_cl, 
+                                                    self.weights_cl)
+
+
+    def simulate_scan(self, point):
+        # Not really weights, just a holder for the ranges
+        weights = np.zeros(self.indicies_to_compare.size).astype(np.float32)
+        self.weights_cl = cl.Buffer(self.ctx, self.mf.WRITE_ONLY, weights.nbytes)
+
+        point_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=point)
+        temp = np.zeros(self.indicies_to_compare.size).astype(np.float32)
+        temp_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=temp)
+
+        self.prg.trace(self.queue, (1,), None, point_cl, 
+                                            self.map_cl, 
+                             np.uint32(self.map.size/4), 
+                              self.angles_to_compare_cl, 
+                 np.uint32(self.angles_to_compare.size),
+                                                temp_cl, 
+                                        self.weights_cl)
+
+        #self.weights_t = np.empty_like(self.weights)
+        cl.enqueue_copy(self.queue, weights, self.weights_cl)
+        #print self.angles_to_compare
+        #print self.weights
+
+        # Just for publishing laserscans
+        self.ranges = np.zeros(index_count)
+        ranges[self.indicies_to_compare] = weights
+
+        self.map_pub.publish(LaserScan(    
+            header=Header(
+                stamp = rospy.Time.now(),
+                frame_id = "base_link",
+                ),
+            angle_min=self.min_angle,
+            angle_max=self.max_angle,
+            angle_increment=self.angle_increment,
+            time_increment=0,
+            scan_time=0,
+            range_min=self.min_range,
+            range_max=self.max_range,
+            ranges=self.ranges.tolist(),
+            intensities=[],
+            )
+        )
 
 class ModelMap():
     def __init__(self):
@@ -62,10 +157,10 @@ class ModelMap():
         #Only for visulization
         self.pub_list = []
         self.br = tf.TransformBroadcaster()
-        for i in range(PARTICLE_COUNT):
-            name = "sim_scan" + str(i)
-            self.pub_list.append(rospy.Publisher(name, LaserScan, queue_size=2))
-        self.pub_list.append(rospy.Publisher("sim_scan25", LaserScan, queue_size=2))
+        # for i in range(PARTICLE_COUNT):
+        #     name = "sim_scan" + str(i)
+        #     self.pub_list.append(rospy.Publisher(name, LaserScan, queue_size=2))
+        self.map_pub = rospy.Publisher("/test/map_scan", LaserScan, queue_size=2)
 
         #print point
         self.angle_increment = .005 #rads/index
@@ -79,9 +174,9 @@ class ModelMap():
 
         # Only ranges at these indexs will be generated
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        deg_index = int(math.radians(40)/self.angle_increment)
+        deg_index = int(math.radians(20)/self.angle_increment)
         self.ranges_to_compare = np.array([], np.int32)
-        step = 16
+        step = 2
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
             np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
         self.ranges_to_compare = np.append( self.ranges_to_compare,            
@@ -122,22 +217,19 @@ class ModelMap():
             if len(intersections) > 0:
                 self.ranges[t] = min(intersections)
 
-        # Just for displaying
-        if name == "real": 
-            self.ranges[self.real_ranges] = self.add_noise(self.ranges[self.real_ranges])
-            name = 25
+        #self.ranges[self.real_ranges] = self.add_noise(self.ranges[self.real_ranges])
 
-        frame_name = "p"+str(name)
+        #frame_name = "p"+str(name)
         self.br.sendTransform((point[0], point[1], 0),
                 tf.transformations.quaternion_from_euler(0, 0, heading),
                 rospy.Time.now(),
-                frame_name,
+                "base_link",
                 "odom")
         #print frame_name
-        self.pub_list[name].publish(LaserScan(    
+        self.map_pub.publish(LaserScan(    
             header=Header(
                 stamp = rospy.Time.now(),
-                frame_id = frame_name,
+                frame_id = "base_link",
                 ),
             angle_min=self.min_angle,
             angle_max=self.max_angle,
@@ -187,7 +279,6 @@ class Particle():
     def update_weight(self, est_distance):
         # Found this method of calculating error in distance
         # Values close to 1 are closer more accurate
-
         sigma2 = 0.9 ** 2
         error = est_distance - measured_distance
         self.w = math.e ** -(error ** 2 / (2 * sigma2))
@@ -217,23 +308,23 @@ class Particle():
         return p
 
 class GPUAccFilter(Thread):
-    def __init__(self, p_count, center, radius, heading_range, mW):
+    def __init__(self, p_count, center, radius, heading_range, m):
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
         # ROS Inits
-        self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
-        self.odom_sub = rospy.Subscriber('/robot/odometry/filtered', Odometry, self.got_odom)
+        self.test_points_pub = rospy.Publisher('/test/test_points', PoseArray, queue_size=2)
+        #self.odom_sub = rospy.Subscriber('/robot/odometry/filtered', Odometry, self.got_odom)
         self.twist_sub = rospy.Subscriber('/test/test_twist', TwistStamped, self.got_twist)
-        self.laser_scan_sub = rospy.Subscriber('/sim_scan10', LaserScan, self.got_laserscan)
-        self.pose_est_pub = rospy.Publisher('pose_est', PoseStamped, queue_size=2)
+        self.laser_scan_sub = rospy.Subscriber('/test/map_scan', LaserScan, self.got_laserscan)
+        self.pose_est_pub = rospy.Publisher('/test/pose_est', PoseStamped, queue_size=2)
 
-        self.m = 
+        self.m = m
 
         # We start at arbitrary point 0,0,0
         self.pose = np.array([.2,.2,1.57], np.float64)
         self.pose_update = np.array([0,0,0], np.float64) 
 
-        # Generate random point in circle and add to list
-        self.particles = [] 
+        # Generate random point in circle and add to array of point coordinates
+        self.particles = np.empty([1,3])
         for p in range(p_count):
             # random angle
             alpha = 2 * math.pi * random.random()
@@ -246,9 +337,13 @@ class GPUAccFilter(Thread):
             # Generate random heading
             heading = random.uniform(heading_range[0], heading_range[1])
 
-            self.particles.append(Particle(x,y,heading))
+            self.particles = np.vstack((self.particles,[x,y,heading]))
 
+        # Remove the first index since its not actually a particle
+        self.particles = self.particles[1:]
+        #print self.particles
         self.laser_scan = np.array([])
+
 
         # For keeping track of time
         self.prev_time = time.time()
@@ -275,26 +370,16 @@ class GPUAccFilter(Thread):
         #    abs(self.pose_update[2]) < tolerance: return
         while len(self.laser_scan) == 0:
             print "No scan"
-        update = np.copy(self.pose_update)
-        laser_scan = np.copy(self.laser_scan)[self.m.ranges_to_compare]
+
+        #laser_scan = np.copy(self.laser_scan)[self.m.ranges_to_compare]
+        
+        self.particles += self.pose_update
+        self.m.generate_weights(self.particles,self.laser_scan)
+
         # Reset the pose update so that the next run will contain the pose update from this point
         self.pose_update = np.array([0,0,0], np.float64)
 
-        for i,p in enumerate(self.particles):
-            p.update_pos(update)
-            particle_scan = self.m.simulate_scan((p.x,p.y),p.heading,i)
-            p.w = self.compare_with_scan(particle_scan,laser_scan)
-            if p.w > .9: print i,
         self.publish_particle_array()
-    
-    def compare_with_scan(self,measured_scan,sim_scan):
-        # Found this method online
-        # More accurate values => 1, less accurate => 0
-        sigma2 = .3 ** 2
-        error = measured_scan - sim_scan
-        g = np.mean(math.e ** -(error ** 2 / (2 * sigma2)))
-
-        return g
 
     def got_twist(self,msg):
         # Just a temp method to test the filter
@@ -403,8 +488,22 @@ class GPUAccFilter(Thread):
     def publish_particle_array(self):
         pose_arr = []
         for p in self.particles:
-            pose_arr.append(p.return_pose())
-            
+            q = tf.transformations.quaternion_from_euler(0, 0, p[2])
+            pose = Pose(
+                position=Point(
+                        x=p[0],
+                        y=p[1],
+                        z=0
+                    ),
+                orientation=Quaternion(
+                        x=q[0],
+                        y=q[1],
+                        z=q[2],
+                        w=q[3],
+                    )
+            )
+            pose_arr.append(pose)
+
         self.test_points_pub.publish(PoseArray(
             header=Header(
                     stamp=rospy.Time.now(),
@@ -422,7 +521,6 @@ class Filter(Thread):
         self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
         self.odom_sub = rospy.Subscriber('/robot/odometry/filtered', Odometry, self.got_odom)
         self.twist_sub = rospy.Subscriber('/test/test_twist', TwistStamped, self.got_twist)
-        self.laser_scan_sub = rospy.Subscriber('/sim_scan10', LaserScan, self.got_laserscan)
         self.pose_est_pub = rospy.Publisher('pose_est', PoseStamped, queue_size=2)
 
         self.m = m
@@ -615,18 +713,19 @@ class Filter(Thread):
         #print "PUBLISHED PARTICLES"
 
 class Test(Thread):
-    def __init__(self,m):
-        super(Test, self).__init__()
+    def __init__(self,m,m2):
         self.odom_sub = rospy.Subscriber('/spacenav/twist', Twist, self.got_twist)
         self.est_pose_pub = rospy.Publisher('/test/pose', PoseStamped, queue_size=2)
         self.twist_pub = rospy.Publisher('/test/test_twist', TwistStamped, queue_size=2)
-        self.real_scan_pub = rospy.Subscriber('/scan_comb', LaserScan, queue_size=2)
 
-        self.pose = np.array([.2,.2,1.57])
+        self.pose = np.array([1,1,1.57])
 
         self.m = m
+        self.m2 = m2
 
         self.speed_multiplier = .01
+
+        self.br = tf.TransformBroadcaster()
 
         l = Thread(target=self.pub_laserscan)
         l.start()
@@ -647,12 +746,20 @@ class Test(Thread):
     def pub_laserscan(self):
         r = rospy.Rate(10) # 10hz
         while not rospy.is_shutdown():
-            print "laser"
-            self.m.simulate_scan((self.pose[0],self.pose[1]), self.pose[2], "real")
+            print "Pose",self.pose
+            self.br.sendTransform((self.pose[0], self.pose[1], 0),
+                tf.transformations.quaternion_from_euler(0, 0, self.pose[2]),
+                rospy.Time.now(),
+                "base_link",
+                "odom")
+
+            #self.m.simulate_scan(np.array([self.pose[0],self.pose[1],self.pose[2]]).astype(np.float32))
+            #self.m.simulate_scan(np.array([self.pose[0],self.pose[1],self.pose[2]]).astype(np.float32))
+            self.m2.simulate_scan((self.pose[0],self.pose[1]), self.pose[2], "real")
             r.sleep()
 
     def publish_pose(self,twist):
-        print "Publishing Pose",self.pose
+        #print "Publishing Pose",self.pose
 
         q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
         p = PoseStamped(
@@ -699,11 +806,15 @@ class Test(Thread):
 
 
 rospy.init_node('particle_filter', anonymous=True)
-# m = ModelMap()
-# t = Test(m)
-# f = Filter(PARTICLE_COUNT, (.21,.23), .15, (1.3,1.8), m,m2)
-# t.start()
-# f.start()
+m = GPUAccMap()
+m2 = ModelMap()
+t = Test(m,m2)
+f = GPUAccFilter(PARTICLE_COUNT, (1,1), .15, (1.3,1.8), m)
+
+
+#f = Filter(PARTICLE_COUNT, (.21,.23), .15, (1.3,1.8), m,m2)
+
+t.start()
 
 rospy.spin()
 
