@@ -3,29 +3,14 @@ Navigation
 
 This package handles all of the navigation and localization nodes for Shia.
 
-#SLAM
-**With the current implementation, this package will not work for what we want it to do.** 
-This package was inteneded to handle activating LIDARS with appropriate tf frames, fusing LIDAR data into one large scan, and dealing with the [Hector Mapping](http://wiki.ros.org/hector_mapping) package.
+#Particle Filter
+A [particle filter](https://en.wikipedia.org/wiki/Particle_filter) is a way of estimating our current location using sensor data. The reason we are going to use a particle filter rather then SLAM is because the LIDAR data is not accurate due to the dark walls of the field. The particle filter will account for this by estimating the *best* position (not nessicarily the 100% correct position). Currently, the particle filter only publishes an esitmated pose, but this should be changed to a `map -> odom` transform.
 
-#How to Run
-First, make sure you have the hector_mapping and hokuyo_node packages installed, if you do not, run 
+###LIDAR
+The particle filter relies on LIDAR data in order to localize. To activate the LIDAR, run ```roslaunch ieee2016_navigation laser.launch```. This will also launch the laser combiner script. This script takes the data from the three seperate LIDARs and combines it into one large scan. This combined scan is then passed to the particle filter for processing on. Running this scripts assumes the LIDAR udev rules are set up (see the [udev folder](https://github.com/ufieeehw/IEEE2016/tree/master/udev)). Sometimes the LIDARs wont start, so you'll need to unplug and plug them in (someone should figure out why this is).
 
-    sudo apt-get install ros-jade-hector-mapping ros-jade-hokuyo-node
-Next you can start the LIDAR modules and begin publishing each modules' tf frame.
+###GPGPU
+This implementation of the particle fiter uses pyopencl for [General Purpose computing on Graphics Processing Units ](https://en.wikipedia.org/wiki/General-purpose_computing_on_graphics_processing_units), in other words the filter does most of its processing on the graphics processor rather then on the CPU. This allows for much more effiencent execution of the particle filter. For more information on how this works or how to get it installed, see Matthew Langford.
 
-    roslaunch ieee2016_navigation laser.launch
-This also runs the script responsible for fusing multiple LIDAR scans into one big scan: ```laser_comb.py```.
-
-Finally, you can run the SLAM launch file.
-
-    roslaunch ieee2016_navigation navigation.launch
-
-#Viewing Data
-Currently, I have only used RVIZ to vizualize all of this data. An occupancy grid is published to the ```/map``` topic, a pose estimation to ```/slam_out_pose```, and 4 LaserScan messages to various topics (left, middle, right, and combined). Hector_mapping gives a tf link between ```map``` and ```base_link``` (in the future when more postition sensors are available I suspect that may change). Other tf links provided by these nodes are ```base_link -> laser``` (for each laser including the combined LaserScan).
-
-#Troubleshooting
-* For some reason you have to unplug the LIDAR usb hub and replug it in after you restart Shia. Someone should figure out why this is and fix it.
-* Also, if you're not running this on Shia, you'll want to make sure you have your udev definitions set up right. For info on how to do this refer to the [udev folder](https://github.com/ufieeehw/IEEE2016/tree/master/udev).
-* SLAM has trouble dealing with flat walls that don't change and potentionally has problems if the area changes too much (moving walls or people moving in the frame). There's not really a fix for this right now but just so you know.
-* SLAM doesn't work with black walls, this is our main problem. Free food if you want to fix the problem.
-
+#EKF
+We use an [Extended Kalman Filter](https://en.wikipedia.org/wiki/Extended_Kalman_filter) to integrate odometry data from the wheel encoders and IMU data (currently only rotational data since the linear calibration was returning weird results) to generate a `odom -> base_link` transform. We are using the EKF provided in the [robot_localization](http://wiki.ros.org/robot_localization) ros package.
