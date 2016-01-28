@@ -25,7 +25,7 @@ __kernel void trace( __global const float *p,
     errors_measured = 0;
 
     // Change tolerance here
-    sigma2 = pow(.3,2);
+    sigma2 = pow(.1,2);
     for(int a = 0; a < angle_cnt; a++){
         min = 1000;
         theta = p[i*3+2] + angles_to_check[a];
