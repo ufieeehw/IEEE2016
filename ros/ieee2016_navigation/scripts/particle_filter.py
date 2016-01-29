@@ -10,7 +10,6 @@ import numpy as np
 import math
 import time
 import random
-import matplotlib.pyplot as plt
 from threading import Thread
 import os
 import sys
@@ -68,8 +67,6 @@ class GPUAccMap():
             np.arange(index_count/2 - deg_index, index_count/2 + deg_index, step=step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
-        
-        #self.indicies_to_compare = np.array([328,330])
 
         # To generate weights, we need those indices to be pre-converted to radian angle measures 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
@@ -156,8 +153,8 @@ class GPUAccFilter():
         self.pose_est_pub = rospy.Publisher('/pose_est', PoseStamped, queue_size=2)
 
         self.m = m
-        self.INIT_PARTICLES = 500
-        self.MAX_PARTICLES = 2000
+        self.INIT_PARTICLES = 700
+        self.MAX_PARTICLES = 2500
 
         # We start at arbitrary point 0,0,0
         self.pose_actual = np.array([0,0,1.57], np.float64)
@@ -167,10 +164,10 @@ class GPUAccFilter():
 
         # Generate random point in circle and add to array of point coordinates
         self.particles = np.empty([1,3])
-        #self.gen_particles(self.INIT_PARTICLES, center, radius, heading_range)
+        self.gen_particles(self.INIT_PARTICLES, center, radius, heading_range)
 
         # Remove the first index since its not actually a particle
-        #self.particles = self.particles[1:]
+        self.particles = self.particles[1:]
         self.publish_particle_array()
         #print self.particles
         self.laser_scan = np.array([])
@@ -184,7 +181,7 @@ class GPUAccFilter():
             r.sleep()
             self.hz_counter = time.time()
             self.run_filter()
-            #print 1.0/(time.time()-self.hz_counter)
+            print "HZ:", 1.0/(time.time()-self.hz_counter)
 
     def gen_particles(self, number, center, radius, heading_range):
         print "GENERATING PARTICLES:", number
@@ -200,7 +197,11 @@ class GPUAccFilter():
             # Generate random heading
             heading = random.uniform(heading_range[0], heading_range[1])
 
-            self.particles = np.vstack((self.particles,[x,y,heading]))
+            # Make sure the generated point isn't outside the map
+            if not(x < 0 or y < 0 or x > 2.1336 or y > 2.1336):
+                self.particles = np.vstack((self.particles,[x,y,heading]))
+
+        self.publish_particle_array()
 
     def run_filter(self):
         # This is where the filter does its work
@@ -222,7 +223,7 @@ class GPUAccFilter():
         new_gen_radius = 1
         if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
 
-        # Remove particles outside of map (temp)
+        
         temp_particles = np.array([0,0,0])
         for p in self.particles:
             if not(p[0] < 0 or p[1] < 0 or p[0] > 2.1336 or p[1] > 2.1336):
@@ -235,15 +236,15 @@ class GPUAccFilter():
         weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
         # Remove low weights from particle and weights list
-        weight_percentile = 95 #percent
+        weight_percentile = 98 #percent
         weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
         weights = weights_raw[weights_indicies_to_keep]
         self.particles = self.particles[weights_indicies_to_keep]
-        
+
         if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
 
 
-        print # Just for debugging ==================================
+        # Just for debugging ==================================
         print "WEIGHT PERCENTILE:", weight_percentile
         print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
         print "PARTICLES REMOVED:", len(weights_raw)-len(weights) 
@@ -255,39 +256,30 @@ class GPUAccFilter():
         new_y = np.mean(self.particles.T[1])
         new_head = np.mean(self.particles.T[2])
 
-        # Check if the est pose is outside the field, if so, resample particles
-        if new_x > 2.2 or new_x < 0 or new_y > 2.2 or new_y < 0:
-            self.particles = np.array([0,0,0])
-            self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(-3.14,3.14))
-            self.particles = self.particles[1:]
-        else:
-            self.update_pose((new_x,new_y,new_head))
-            print "POSE VARIANCE:", self.pose_actual - self.pose_est
+        # Update Pose
+        self.update_pose((new_x,new_y,new_head))
+        print "POSE VARIANCE:", self.pose_actual - self.pose_est
 
-        # Generate new particles based on weights of particles
-        # Normalize the weights so that their sum = 1
-        weights_norm = weights/np.sum(weights)
-        # Find the cumulative sum of that
-        cumsum_weights_norm = np.cumsum(weights_norm)
-        # Add arbitrary number of particles (this should be changed in the future)
-        new_particles = np.random.random(self.MAX_PARTICLES - len(self.particles))
-        # Find out where each new particle should go and add it to the list.
-        translation_vairance = .1  #m
-        rotational_vairance = .5 #rads
-        new_particles_postitions = np.searchsorted(cumsum_weights_norm,new_particles)
+        # # Generate new particles based on weights of particles
+        # # Normalize the weights so that their sum = 1
+        # weights_norm = weights/np.sum(weights)
+        # # Find the cumulative sum of that
+        # cumsum_weights_norm = np.cumsum(weights_norm)
+        # # Add arbitrary number of particles (this should be changed in the future)
+        # new_particles = np.random.random(self.MAX_PARTICLES - len(self.particles))
+        # # Find out where each new particle should go and add it to the list.
+        translation_vairance = 1  #m  #.1
+        rotational_vairance = 1 #rads #.5
+        # new_particles_postitions = np.searchsorted(cumsum_weights_norm,new_particles)
 
-        for p in new_particles_postitions:
-            self.particles = np.vstack((self.particles,[self.particles[p][0] + random.uniform(-translation_vairance, translation_vairance),
-                                                        self.particles[p][1] + random.uniform(-translation_vairance, translation_vairance),
-                                                        self.particles[p][2] + random.uniform(-rotational_vairance, rotational_vairance)]))
-        # Remove particles outside of map (temp)
-        temp_particles = np.array([0,0,0])
-        for p in self.particles:
-            if not(p[0] < 0 or p[1] < 0 or p[0] > 2.1336 or p[1] > 2.1336):
-                temp_particles = np.vstack((temp_particles,p))
-        self.particles = temp_particles[1:]
-
-        self.publish_particle_array()
+        # for p in new_particles_postitions:
+        #     self.particles = np.vstack((self.particles,[self.particles[p][0] + random.uniform(-translation_vairance, translation_vairance),
+        #                                                 self.particles[p][1] + random.uniform(-translation_vairance, translation_vairance),
+        #                                                 self.particles[p][2] + random.uniform(-rotational_vairance, rotational_vairance)]))
+        
+        self.gen_particles(self.MAX_PARTICLES - len(self.particles), self.pose_est[:2],translation_vairance,(self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance))
+        
+        print 
     
     def update_real_pose(self,msg):
         roll,pitch,yaw = tf.transformations.euler_from_quaternion((msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z,msg.pose.orientation.w))
