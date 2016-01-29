@@ -97,50 +97,6 @@ class GPUAccMap():
         cl.enqueue_copy(self.queue, weights, weights_cl).wait()
         return weights
 
-    def simulate_scan(self, point):
-        # Not really weights, just a holder for the ranges
-        weights = np.zeros(self.indicies_to_compare.size).astype(np.float32)
-        weights_cl = cl.Buffer(self.ctx, self.mf.WRITE_ONLY, weights.nbytes)
-
-        point_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=point)
-        temp = np.zeros(self.indicies_to_compare.size).astype(np.float32)
-        temp_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=temp)
-
-        self.prg.trace(self.queue, (1,), None, point_cl, 
-                                            self.map_cl, 
-                             np.uint32(self.map.size/4), 
-                              self.angles_to_compare_cl, 
-                 np.uint32(self.angles_to_compare.size),
-                                                temp_cl, 
-                                             weights_cl)
-
-        #self.weights_t = np.empty_like(self.weights)
-        cl.enqueue_copy(self.queue, weights, weights_cl)
-        #print self.angles_to_compare
-        #print self.weights
-
-        # Just for publishing laserscans
-        self.ranges = np.zeros(index_count)
-        ranges[self.indicies_to_compare] = weights
-
-        self.map_pub.publish(LaserScan(    
-            header=Header(
-                stamp = rospy.Time.now(),
-                frame_id = "base_link",
-                ),
-            angle_min=self.min_angle,
-            angle_max=self.max_angle,
-            angle_increment=self.angle_increment,
-            time_increment=0,
-            scan_time=0,
-            range_min=self.min_range,
-            range_max=self.max_range,
-            ranges=self.ranges.tolist(),
-            intensities=[],
-            )
-        )
-
-
 class GPUAccFilter():
     def __init__(self, center, radius, heading_range, m):
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
