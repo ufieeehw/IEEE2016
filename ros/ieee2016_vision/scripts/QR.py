@@ -64,11 +64,13 @@ class DetectQRCode(object):
                 return 0
         qr_code_count = 0
 
-        # The mask acts to remove already detected QR codes so they arent repeated
+        # The mask acts to remove already detected QR codes so they arent repeateitly detected
         mask = np.zeros(self.image.shape[:2], dtype=np.uint8)+255
+        cv2.rectangle(mask,(0,0),(1920,540),0,-1)
+
 
         start_time = time.time()
-        while qr_code_count < self.qr_code_count_max:
+        while qr_code_count < self.qr_code_count_max and not rospy.is_shutdown():
             print time.time() - start_time
             if time.time() - start_time > self.timeout:
                 print "Timeout."
@@ -83,7 +85,7 @@ class DetectQRCode(object):
             """
             if image.size > 2: image = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
             #image = cv2.GaussianBlur(image,(3,3),0)
-            #image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,15,7)
+            image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,11,3)
 
             #Create the identity filter, but with the 1 shifted to the right!
             kernel = np.zeros((5,5), np.float32)
@@ -98,16 +100,15 @@ class DetectQRCode(object):
             #Note that we are subject to overflow and underflow here...but I believe that
             # filter2D clips top and bottom ranges on the output, plus you'd need a
             # very bright or very dark pixel surrounded by the opposite type.
-            #image = cv2.filter2D(image, -1, kernel)
+            image = cv2.filter2D(image, -1, kernel)
 
             kernel = np.ones((3,3),np.uint8)
             #image = cv2.erode(image,kernel)
             #image = cv2.dilate(image,kernel)
-            
+            #print image
             image = image & mask
 
-            #cv2.imshow("img", image)
-            #cv2.waitKey(1)
+            cv2.imshow("img", cv2.resize(image, (0,0), fx=0.5, fy=0.5) ); cv2.waitKey(1)
 
 
             color,coor = self.detect_qr(image)
@@ -123,18 +124,15 @@ class DetectQRCode(object):
 
             self.detected_codes.append([color,point])
             qr_code_count += 1
-            print "CODES FOUND:",qr_code_count
+            print "CODES FOUND:",qr_code_count, color
             #print "found",color,center
 
             # Draw mask around detected QR code as to not repeat
-            cv2.circle(mask, center, 40, 0, -1)
+            cv2.circle(mask, center, 20, 0, -1)
 
         print "Time to complete:", time.time() - start_time
         
         self.image_sub.unregister()
-
-        #Send to
-
         return self.detected_codes
 
     def detect_qr(self, image):

@@ -15,7 +15,7 @@ rospy.init_node('temp')
 point_pub = rospy.Publisher("/arm/waypoints", PointCloud, queue_size=1)
 
 # Make detector object. 8 is the number of QR codes to look for, 15 is the timeout in seconds
-detector = QR.DetectQRCode(22,30, "cam_0")
+detector = QR.DetectQRCode(2,10, "cam_0")
 
 #Start processing. The ros node will update the images it searchs for
 detected_points = detector.begin_processing()
