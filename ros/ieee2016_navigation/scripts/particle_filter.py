@@ -10,32 +10,61 @@ import numpy as np
 import math
 import time
 import random
-from threading import Thread
 import os
-import sys
 
 import pyopencl as cl
 
 class GPUAccMap():
     def __init__(self):
         # Each line segment in the form: ax1, ay1, ax2, ay2, bx1, by1, bx2, by2, ...
-        self.map = np.array([      0,     0,     0,2.1336,
-                               .4572,  .762, .4572, 1.143,
-                                .508,     0,  .508, .3048,
-                                .762,     0,  .762, .3048,
-                              1.8669, .8382,1.8669,2.1336,
-                              2.1336,     0,2.1336, .8382,
-                                   0,     0,2.1336,     0,
-                              1.8669, .8382,2.1336, .8382,
-                                .508, .3048,  .762, .3048,
-                                   0,2.1336,1.8669,2.1336]).astype(np.float32)
-    
-        # self.map = np.array([
-        #         2,2,0,2,
-        #         0,0,2,0,
-        #         0,0,0,2,
-        #         2,0,2,2
-        #     ]).astype(np.float32)
+        # self.map = np.array([      0,     0,     0,2.1336,
+        #                        .4572,  .762, .4572, 1.143,
+        #                         .508,     0,  .508, .3048,
+        #                         .762,     0,  .762, .3048,
+        #                       1.8669, .8382,1.8669,2.1336,
+        #                       2.1336,     0,2.1336, .8382,
+        #                            0,     0,2.1336,     0,
+        #                       1.8669, .8382,2.1336, .8382,
+        #                         .508, .3048,  .762, .3048,
+        #                            0,2.1336,1.8669,2.1336]).astype(np.float32)
+        self.map = np.array([   0,     0,  .784,     0,
+                             .784,     0,  .784,  .015,
+                             .784,  .015, 1.158,  .015,
+                            1.158,     0, 1.158,  .015,
+                            1.158,     0, 2.153,     0,
+                             .784,  .464,  .784,  .479,
+                             .784,  .479, 1.158,  .479,
+                             .784,  .464, 1.158,  .464,
+                            1.158,  .464, 1.158,  .479,
+                                0,     0,     0,  .549,
+                                0,  .549,  .317,  .549,
+                             .317,  .549,  .317,  .569,
+                                0,  .569,  .317,  .569,
+                                0,  .569,     0,  .809,
+                                0,  .809,  .317,  .809,
+                             .317,  .809,  .317,  .829,
+                                0,  .829,  .317,  .829,
+                                0,  .829,     0, 2.458,
+                            2.153,     0, 2.153, 2.458,
+                                0, 2.458,  .907, 2.458,
+                             .907, 2.161,  .907, 2.458,
+                             .907, 2.161, 1.178, 2.161,
+                            1.178, 2.161, 1.178, 2.458,
+                            1.178, 2.458, 1.181, 2.458,
+                            1.181, 2.161, 1.181, 2.458,
+                            1.181, 2.161, 1.452, 2.161,
+                            1.452, 2.161, 1.452, 2.458,
+                            1.452, 2.458, 1.482, 2.458,
+                            1.482, 2.161, 1.482, 2.458,
+                            1.482, 2.161, 1.753, 2.161,
+                            1.753, 2.161, 1.753, 2.458,
+                            1.753, 2.458, 1.783, 2.458,
+                            1.783, 2.161, 1.783, 2.458,
+                            1.783, 2.161, 2.054, 2.161,
+                            2.054, 2.161, 2.054, 2.458,
+                            2.054, 2.458, 2.153, 2.458,]).astype(np.float32)
+
+
         self.map_pub = rospy.Publisher("/test/map_scan", LaserScan, queue_size=1)
 
         # LaserScan parameters
@@ -60,13 +89,13 @@ class GPUAccMap():
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
         deg_index = int(math.radians(30)/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
-        step = 2
-        self.indicies_to_compare = np.append( self.indicies_to_compare,            
-            np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
+        step = 1
+        # self.indicies_to_compare = np.append( self.indicies_to_compare,            
+        #     np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(index_count/2 - deg_index, index_count/2 + deg_index, step=step))
-        self.indicies_to_compare = np.append( self.indicies_to_compare,            
-            np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
+        # self.indicies_to_compare = np.append( self.indicies_to_compare,            
+        #     np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
 
         # To generate weights, we need those indices to be pre-converted to radian angle measures 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
@@ -105,8 +134,9 @@ class GPUAccFilter():
         #self.odom_sub = rospy.Subscriber('/robot/odometry/filtered', Odometry, self.got_odom)
         #self.twist_sub = rospy.Subscriber('/test/twist', TwistStamped, self.got_twist)
         self.twist_sub = rospy.Subscriber('/test/pose', PoseStamped, self.update_real_pose)
-        self.laser_scan_sub = rospy.Subscriber('/test/map_scan', LaserScan, self.got_laserscan)
+        self.laser_scan_sub = rospy.Subscriber('/scan_comb', LaserScan, self.got_laserscan)
         self.pose_est_pub = rospy.Publisher('/pose_est', PoseStamped, queue_size=2)
+        self.br = tf.TransformBroadcaster()
 
         self.m = m
         self.INIT_PARTICLES = 700
@@ -116,7 +146,7 @@ class GPUAccFilter():
         self.pose_actual = np.array([0,0,1.57], np.float64)
         self.pose_update = np.array([0,0,0], np.float64) 
 
-        self.pose_est = np.array([.2,.2,1.57], np.float64)
+        self.pose_est = np.array([.1,.3,1.57], np.float64)
 
         # Generate random point in circle and add to array of point coordinates
         self.particles = np.empty([1,3])
@@ -132,12 +162,12 @@ class GPUAccFilter():
         self.prev_time = time.time()
 
         self.hz_counter = 0
-        r = rospy.Rate(50) # 10hz
+        r = rospy.Rate(10) #hz
         while not rospy.is_shutdown():
             r.sleep()
-            self.hz_counter = time.time()
+            
             self.run_filter()
-            print "HZ:", 1.0/(time.time()-self.hz_counter)
+            
 
     def gen_particles(self, number, center, radius, heading_range):
         print "GENERATING PARTICLES:", number
@@ -154,7 +184,7 @@ class GPUAccFilter():
             heading = random.uniform(heading_range[0], heading_range[1])
 
             # Make sure the generated point isn't outside the map
-            if not(x < 0 or y < 0 or x > 2.1336 or y > 2.1336):
+            if not(x < 0 or y < 0 or x > 2.2 or y > 2.2):
                 self.particles = np.vstack((self.particles,[x,y,heading]))
 
         self.publish_particle_array()
@@ -178,21 +208,18 @@ class GPUAccFilter():
         # If new particles need to be generated, do so with this radius from the last estimated position
         new_gen_radius = 1
         if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
-
-        
+          
         temp_particles = np.array([0,0,0])
         for p in self.particles:
             if not(p[0] < 0 or p[1] < 0 or p[0] > 2.1336 or p[1] > 2.1336):
                 temp_particles = np.vstack((temp_particles,p))
         self.particles = temp_particles[1:]
 
-        #self.particles = self.particles[self.particles[0] > 0]
-
         # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
         weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
         # Remove low weights from particle and weights list
-        weight_percentile = 98 #percent
+        weight_percentile = 99.9 #percent
         weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
         weights = weights_raw[weights_indicies_to_keep]
         self.particles = self.particles[weights_indicies_to_keep]
@@ -214,7 +241,8 @@ class GPUAccFilter():
 
         # Update Pose
         self.update_pose((new_x,new_y,new_head))
-        print "POSE VARIANCE:", self.pose_actual - self.pose_est
+
+        #print "POSE VARIANCE:", self.pose_actual - self.pose_est
 
         # # Generate new particles based on weights of particles
         # # Normalize the weights so that their sum = 1
@@ -224,7 +252,7 @@ class GPUAccFilter():
         # # Add arbitrary number of particles (this should be changed in the future)
         # new_particles = np.random.random(self.MAX_PARTICLES - len(self.particles))
         # # Find out where each new particle should go and add it to the list.
-        translation_vairance = 1  #m  #.1
+        translation_vairance = .2  #m  #.1
         rotational_vairance = 1 #rads #.5
         # new_particles_postitions = np.searchsorted(cumsum_weights_norm,new_particles)
 
@@ -233,7 +261,10 @@ class GPUAccFilter():
         #                                                 self.particles[p][1] + random.uniform(-translation_vairance, translation_vairance),
         #                                                 self.particles[p][2] + random.uniform(-rotational_vairance, rotational_vairance)]))
         
-        self.gen_particles(self.MAX_PARTICLES - len(self.particles), self.pose_est[:2],translation_vairance,(self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance))
+        self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
+                            self.pose_est[:2],
+                            translation_vairance,
+                            (self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance) )
         
         print 
     
@@ -242,6 +273,7 @@ class GPUAccFilter():
         self.pose_actual = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
 
     def update_pose(self,particle_avg):
+        # Update pose and TF
         self.pose_est = np.array(particle_avg)
 
         #print self.pose
@@ -266,8 +298,13 @@ class GPUAccFilter():
                     )
                 )
             )
-
         )
+
+        self.br.sendTransform((self.pose_est[0], self.pose_est[1], 0),
+                 q,
+                 rospy.Time.now(),
+                 "base_link",
+                 "map")
 
     def got_twist(self,msg):
         # Just a temp method to test the filter

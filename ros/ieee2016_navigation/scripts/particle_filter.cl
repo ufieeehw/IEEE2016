@@ -19,13 +19,13 @@ __kernel void trace( __global const float *p,
     float3 t1,v1,v2;
     float v2_dot_v3;
     float t2,d,theta;
-    float temp;
-    temp = p[0];
+    //float temp;
+    //temp = p[0];
     error = 0;
     errors_measured = 0;
 
     // Change tolerance here
-    sigma2 = pow(.1,2);
+    sigma2 = pow(.5,2);
     for(int a = 0; a < angle_cnt; a++){
         min = 1000;
         theta = p[i*3+2] + angles_to_check[a];
