@@ -9,7 +9,7 @@ import random
 colors = ["blue","blue","blue","blue","red","red","red","red","yellow","yellow","yellow","yellow","green","green","green","green"]
 coordinates = [(0,127,0),(0,127,3.81),(6.35,127,0),(6.35,127,3.81),(6.35*2,127,0),(6.35*2,127,3.81),(6.35*3,127,0),(6.35*3,127,3.81),(6.35*4,127,0),(6.35*4,127,3.81),(6.35*5,127,0),(6.35*5,127,3.81),(6.35*6,127,0),(6.35*6,127,3.81),(6.35*7,127,0),(6.35*7,127,3.81)]
 found_points = []
-for p in range(15):
+for p in range(12):
     color = random.randint(0,len(colors)-1)
     coor = random.randint(0,len(coordinates)-1)
     found_points.append([colors[color],coordinates[coor]])

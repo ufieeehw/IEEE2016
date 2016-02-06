@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 import rospy
 from std_msgs.msg import Bool, Int8, Header
-from geometry_msgs.msg import Pose, Point32, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3
+from geometry_msgs.msg import Pose, Point32, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, PointStamped
 from sensor_msgs.msg import PointCloud,ChannelFloat32
 import tf
 
 import numpy as np
 
 class Block():
-    def __init__(self, color, coordinate):
+    def __init__(self, color, coordinate = 'na'):
         self.color = color
         # This will allow the user to input a point message from ros or a list from python
         try:
@@ -16,17 +16,47 @@ class Block():
         except:
             self.coordinate = coordinate
 
-    def print_block(self):
-        print "Color:",self.color
-        print "x:",self.coordinate[0],"y:",self.coordinate[1],"z:",self.coordinate[2]
-        print 
+    def __repr__(self):
+        # How the object prints
+        return "%06s" % self.color
+
+class EndEffector():
+    def __init__(self, gripper_count):
+        self.gripper_count = gripper_count
+        
+        # Array of the blocks in the gripper - 0 is the left most gripper
+        self.block_positions = []
+        self.holding = 0
+        for i in range(gripper_count):
+            b = Block("none")
+            self.block_positions.append(b)
+    
+    def pickup(self, block, gripper_number):
+        # Adds the block to gripper specified
+        if self.block_positions[gripper_number] == "none":
+            self.block_positions[gripper_number] = block
+            self.holding += 1
+            return True
+        else:
+            return False
+
+    def which_gripper(self,color):
+        # Returns the gripper numbers of the grippers containing the blocks with specified color
+        gripper_numbers = []
+        for i,b in enumerate(self.block_positions):
+            if b.color == color: gripper_numbers.append(i)
+
+        return gripper_numbers
 
 class ProcessBlocks():
-    def __init__(self):
+    def __init__(self, *end_effectors):
         self.point_sub = rospy.Subscriber("/blocks", PointCloud, self.got_points, queue_size=1)
+        self.ee_point_pub = rospy.Publisher("/ee_move", PointStamped, queue_size=1)
 
-        self.points = np.array([])
-        self.expected_blocks = 18
+        self.blocks = np.array([])
+        self.expected_blocks = 16
+        
+        self.end_effectors = end_effectors
 
         print "Waiting for message..."
 
@@ -51,7 +81,7 @@ class ProcessBlocks():
                 color = "none"
 
             b = Block(color,p)
-            self.points = np.append(self.points,b)
+            self.blocks = np.append(self.blocks,b)
 
         print "Blocks found."
         # Unsubscribe from the point cloud subscriber and start analysis of points
@@ -60,7 +90,7 @@ class ProcessBlocks():
 
     def find_missing_blocks(self):
         # Find out how many missing blocks there are and identify where they should be
-        missing = self.expected_blocks-len(self.points)
+        missing = self.expected_blocks-len(self.blocks)
         print "Detected",missing,"blocks missing."
         
         # If too many are missing, just redo the intial search
@@ -68,76 +98,194 @@ class ProcessBlocks():
             print "There are too many missing blocks!"
             #self.redetect_blocks()
 
-        if missing == 0:
-            # If we found all the codes we wanted, great! Move on to generating an order for the arm
-            self.generate_order()
-        else:
-            # Try to find out which are missing (move this to the gpu later)
-            """
-            This whole thing is kind of sketchy so beware....
-            Start with finding the left most block and check for another block in that column. If there is one, delete them both from the list
-            and find the left most block again. As you do this, populate an ordered array of each block in each position (starting from the top left).
-            At the end, you'll know which ones are missing and can deal with that.
-            """
+        # Try to find out which are missing (move this to the gpu later)
+        """
+        This whole thing is kind of sketchy so beware....
+        Sort blocks in order of x position. Then go through and detect if each pair of detected points are in the same x column.
+        Then find which of the two is on top and which is on bottom. Add blocks to the sorted list appropriately.
 
-            # Where to hold the final output
-            self.blocks = [[],
-                           []]
+        There are a lot of functions to catch extranious cases, and it should be tested with as many cases as possible.
+        """
 
-            # Preset paramters
-            variance = .01 #m
-            max_expected_dx = .07 #m, used to detect missing cols
-            max_expected_dy = .04 #m, used to detect missing row elements
+        # Where to hold the final output
+        blocks_sorted = [[[],[],[],[],[],[],[],[]],
+                         [[],[],[],[],[],[],[],[]]]
 
-            # These will be set during the loop
-            top_row_y = 0 #m
-            bottom_row_y = 0 #m
-            threshold_y = 0 #m
-            last_smallest_x = 0 #m
+        # Preset paramters
+        variance = .05 #m
+        max_expected_dx = .075 #m, used to detect missing columns
+        normal_dx = .0635 #m, used to fill in missing columns
+        normal_dz = .0381 #m, used to fill in missing row elements
+        
+        # Calculate the threshold for a top block or a bottom block, will be used for columns with missing elements
+        threshold_z = (max(self.blocks, key=lambda b: b.coordinate[2]).coordinate[2] + 
+                       min(self.blocks, key=lambda b: b.coordinate[2]).coordinate[2])/2.0
 
-            # Used for saving output array
-            current_col = 0
+        # This assumes the first blocks are both there, fix it so that doesnt have to be an assumption
+        # It'll be alittle faster to use a local copy of the array
+        blocks = sorted(self.blocks,key=lambda b: b.coordinate[0])
+        for i in range(self.expected_blocks/2):
+            # Check if we are at the end of the block list
+            if i*2 >= len(blocks): 
+                print "Error, first or last columns missing."
+                break
 
-            while len(self.points) > 0:
-                smallest_x_point = Block("none",[1e99,1e99,1e99]) #big number
-                for b in self.points:
-                    if b.coordinate[0] < smallest_x_point.coordinate[0]: 
-                        # Find the left most detected block
-                        smallest_x_point = b
+            if i*2 == len(blocks)-1: 
+                if blocks[i*2].coordinate[2] > threshold_z:
+                    # missing block is a bottom block
+                    block = Block("none",[blocks[i*2-1].coordinate[0]+normal_dx,
+                                          blocks[i*2-1].coordinate[1],
+                                          blocks_sorted[1][i-1].coordinate[2]])
+                    blocks.insert(2*i+1, block)
+                else:
+                    # missing block is a top block
+                    block = Block("none",[blocks[i*2-1].coordinate[0]+normal_dx,
+                                          blocks[i*2-1].coordinate[1],
+                                          blocks_sorted[0][i-1].coordinate[2]])
+                    blocks.insert(2*i+1, block)
+            
+            # Check to see if a whole column is missing
+            if abs(blocks[2*i].coordinate[0] - blocks[2*i-1].coordinate[0]) > max_expected_dx and i is not 0:
+                top_block = Block("none",[blocks[i*2-1].coordinate[0]+normal_dx,
+                                          blocks[i*2-1].coordinate[1],
+                                          blocks_sorted[0][i-1].coordinate[2]])
+                bot_block = Block("none",[blocks[i*2-1].coordinate[0]+normal_dx,
+                                          blocks[i*2-1].coordinate[1],
+                                          blocks_sorted[1][i-1].coordinate[2]])
+                blocks.insert(2*i, top_block)
+                blocks.insert(2*i+1, bot_block)
 
-                        # If this is the first column then dont do the rest of this block
-                        if current_col == 0:
-                            break
-
-                        if abs(b.coordinate[0] - last_smallest_x) > max_expected_dx:
-                            print "Missing Col"
-                            current_col += 1
-                        if b.coordinate[1] 
-
-                        
-
+            # Make sure the two blocks are in the same column
+            if abs(blocks[i*2].coordinate[0] - blocks[i*2+1].coordinate[0]) < variance:                
+                if blocks[i*2].coordinate[2] > blocks[i*2+1].coordinate[2]:
+                    blocks_sorted[0][i] = blocks[i*2]
+                    blocks_sorted[1][i] = blocks[i*2+1]
+                else:
+                    blocks_sorted[0][i] = blocks[i*2+1]
+                    blocks_sorted[1][i] = blocks[i*2]
+            else:
+                # Handles if any arbitrary element is missing
+                if blocks[i*2].coordinate[2] > threshold_z:
+                    # the missing block is a bottom block
+                    blocks_sorted[0][i] = blocks[2*i]
+                    blank = Block("none", [blocks[i*2].coordinate[0],
+                                           blocks[i*2].coordinate[1],
+                                           blocks[i*2].coordinate[2]-normal_dz])
+                    blocks.insert(2*i+1, blank)
+                    blocks_sorted[1][i] = blocks[2*i+1]
+                else:
+                    # the missing block is a top block
+                    blocks_sorted[1][i] = blocks[2*i]
+                    blank = Block("none", [blocks[i*2].coordinate[0],
+                                           blocks[i*2].coordinate[1],
+                                           blocks[i*2].coordinate[2]+normal_dz])
+                    blocks.insert(2*i+1, blank)
+                    blocks_sorted[0][i] = blocks[2*i+1]
                 
-                self.points = self.points[self.points != smallest_x_point]#np.delete(self.points, np.where(self.points==smallest_x_point))
+        # Just for debugging
+        print "Detected Blocks:"
+        for b in blocks_sorted:
+            print b
+        print
+        # Make class wide copy of the sorted blocks (pickup_blocks should be called from the main program)
+        self.blocks_sorted = blocks_sorted
+        self.pickup_blocks()
 
-                print smallest_x_point.coordinate
-                print "========================="
-                found_row = False
-                for b in self.points:
-                    if abs(smallest_x_point.coordinate[0] - b.coordinate[0]) <= max_expected_dy:
-                        found_row = True
-                        last_smallest_x = b.coordinate[0]
-                        self.points = self.points[self.points != b]
+    def pickup_blocks(self):
+        # Pick up blocks and keep track of the order they are in
+        # # Temp sorted blocks modifier
 
-                if not found_row:
-                    print "Missing Element"
+        # self.blocks_sorted[0][0].color = "none"
+        # self.blocks_sorted[0][1].color = "none"
+        # self.blocks_sorted[0][2].color = "none"
+        # self.blocks_sorted[0][3].color = "none"
+        # self.blocks_sorted[0][4].color = "none"
+        # self.blocks_sorted[0][5].color = "none"
+        # self.blocks_sorted[0][6].color = "none"
+        # self.blocks_sorted[0][7].color = "none"
 
+        # One-by-one, move each end effector in position to pick up certain sets of blocks, then pick up blocks and register the locations.
+        temp_planner_blocks = self.blocks_sorted
+        for e in self.end_effectors:
+            # Find the group of blocks to pick up. We're looking for the largest group of topmost blocks
+            valid_counter_top = 0
+            valid_counter_bottom = 0
+            # Holds block groupings for top and bottom as [ending_index,length]
+            groups = [[],[]]
+            index = 0
+            for upper_b,lower_b in zip(self.blocks_sorted[0],self.blocks_sorted[1]):
+                if upper_b.color != "none":
+                    valid_counter_top += 1 
 
+                    # If there is a block on top, that means that there isnt one on the bottom 
+                    groups[1].append([index-valid_counter_bottom,valid_counter_bottom])
+                    valid_counter_bottom = 0
+                else:
+                    # Check for bottom row blocks same way as top
+                    if lower_b.color != "none": 
+                        valid_counter_bottom += 1
+                    else:
+                        groups[1].append([index-valid_counter_bottom,valid_counter_bottom])
+                        valid_counter_bottom = 0
 
-    def generate_order(self):
-        # Figure out the best order to go about picking up blocks and where to put them on Shia
+                    groups[0].append([index - valid_counter_top, valid_counter_top])
+                    valid_counter_top = 0
+                
+                # Save max sized groupings
+                if valid_counter_top == e.gripper_count:
+                    groups[0].append([index - valid_counter_top + 1, valid_counter_top])
+                    valid_counter_top = 0
+                if valid_counter_bottom == e.gripper_count:
+                    groups[1].append([index-valid_counter_bottom + 1,valid_counter_bottom])
+                    valid_counter_bottom = 0
+                
+                index += 1
+            groups[0].append([8 - valid_counter_top, valid_counter_top])
+            groups[1].append([8 - valid_counter_bottom,valid_counter_bottom])
+
+            # Pick best grouping for end effector
+            largest_group = max(groups[0], key=lambda g:g[1])
+            waypoint = np.array([0,0,0]).astype(np.float64)
+
+            # Determine the best location to move the end effector
+            row = 0
+            if largest_group[1] == 0: 
+                largest_group = max(groups[1], key=lambda g:g[1])
+                row = 1
+                if largest_group[1] == 0: print "Nothing left"
+            
+            
+            for b in self.blocks_sorted[row][largest_group[0]:largest_group[0]+largest_group[1]]: 
+                waypoint += np.array(b.coordinate)
+                
+            waypoint /= largest_group[1]
+            self.pub_ee_point(waypoint)
+            #print waypoint
+
+    def drop_color(self, en):
         pass
+
+
+    def pub_ee_point(self,point):
+        self.ee_point_pub.publish(PointStamped(
+                header=Header(
+                    stamp=rospy.Time.now(),
+                    frame_id="base_link"
+                ),
+                point=Point32(
+                    x=point[0],
+                    y=point[1],
+                    z=point[2],
+                )
+            )
+        )
+        print point
 
 if __name__ == "__main__":
     rospy.init_node('str_command')
-    ProcessBlocks()
+    e1 = EndEffector(4)
+    e2 = EndEffector(4)
+    
+    ProcessBlocks(e1,e2)
+
     rospy.spin()
