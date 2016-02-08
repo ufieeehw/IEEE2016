@@ -61,7 +61,7 @@ class TFPublisher():
 
         # base_link -> main camera
         self.tf_broad.sendTransform((.1524,0,.1524), 
-                        tf.transformations.quaternion_from_euler(1.57,0,1.57),
+                        tf.transformations.quaternion_from_euler(1.57,3.1415,1.57),
                         rospy.Time.now(), "cam_0", "base_link")
 
         # base_link -> imu
@@ -70,15 +70,18 @@ class TFPublisher():
                         rospy.Time.now(), "imu", "base_link")
 
         # TEMP
-        self.tf_broad.sendTransform((0,.15,.15), 
-                        tf.transformations.quaternion_from_euler(0,0,1.57),
+        self.tf_broad.sendTransform((.15,.15,.15), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
                         rospy.Time.now(), "EE1", "base_link")
         self.tf_broad.sendTransform((0,-.15,.15), 
                         tf.transformations.quaternion_from_euler(0,0,-1.57),
                         rospy.Time.now(), "EE2", "base_link")        
-        self.tf_broad.sendTransform((1.2,1,0), 
-                        tf.transformations.quaternion_from_euler(0,0,-1.4),
-                        rospy.Time.now(), "base_link", "map")    
+        # self.tf_broad.sendTransform((1.2,1,0), 
+        #                 tf.transformations.quaternion_from_euler(0,0,1.57),
+        #                 rospy.Time.now(), "base_link", "map") 
+        self.tf_broad.sendTransform((0,0,0), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
+                        rospy.Time.now(), "odom", "base_link")   
 
 if __name__ == "__main__":
     rospy.init_node('tf_broadcaster')
