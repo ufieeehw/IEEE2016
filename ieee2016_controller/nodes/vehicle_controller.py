@@ -71,7 +71,7 @@ class Controller(object):
 
         # Current pose sub
         #self.pose_sub = rospy.Subscriber('/slam_out_pose', PoseStamped, self.got_pose)
-        self.odom_sub = rospy.Subscriber('/robot/odometry/filtered', Odometry, self.got_odom)
+        self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
 
         self.desired_pose_sub = rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.got_desired_pose)
 

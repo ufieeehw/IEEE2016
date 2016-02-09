@@ -79,9 +79,6 @@ class TFPublisher():
         # self.tf_broad.sendTransform((1.2,1,0), 
         #                 tf.transformations.quaternion_from_euler(0,0,1.57),
         #                 rospy.Time.now(), "base_link", "map") 
-        self.tf_broad.sendTransform((0,0,0), 
-                        tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "odom", "base_link")   
 
 if __name__ == "__main__":
     rospy.init_node('tf_broadcaster')

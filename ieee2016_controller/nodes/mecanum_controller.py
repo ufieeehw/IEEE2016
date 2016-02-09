@@ -90,7 +90,7 @@ class Controller(object):
         dtype=np.float32)
         #rospy.loginfo(desired_action)
         self.send_mecanum(desired_action)
-        self.spacenav_twist = twist_msg
+        #self.spacenav_twist = twist_msg
 
     def got_twist_spacenav(self, twist_msg):
         if not self.on:
@@ -104,8 +104,8 @@ class Controller(object):
         if abs(twist_msg.linear.y) < dead_zone: twist_msg.linear.y = 0
         if abs(twist_msg.angular.z) < dead_zone: twist_msg.angular.z = 0
         desired_action = np.array([
-            -twist_msg.linear.x,
-            -twist_msg.linear.y,
+            twist_msg.linear.x,
+            twist_msg.linear.y,
             twist_msg.angular.z,
         ],
         dtype=np.float32)

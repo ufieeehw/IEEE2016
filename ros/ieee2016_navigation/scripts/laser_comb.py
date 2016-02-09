@@ -104,7 +104,6 @@ def convertBackToArray(carts):
         #cv2.imshow('img',img)
         #cv2.waitKey(1)
 
-
     #average distances in each compartment
     for i,c in enumerate(compRanges):
         arrSum = 0
@@ -149,7 +148,7 @@ def convertToCart(ranges,trans,scanNum):
         if dist > .001 and dist != float('inf'): 
             #add converted values to temp arrays and flip the y values since the LIDARS are upsidedown
             temp[0,i] = math.cos(angle)*dist
-            temp[1,i] = -math.sin(angle)*dist
+            temp[1,i] = math.sin(angle)*dist
         else:
             #so the angles stay right, fill with a big big value
             temp[0,i] = 0
@@ -218,29 +217,15 @@ angle_min = -1.57079637051
 angle_max = 1.56466042995
 angle_increment = (angle_max-angle_min)/512
 print angle_increment
-#make white background
-img = np.zeros((h,w,3), np.uint8)+255
 
 #blank lists to hold data from ros topics
 ranges = [False,False,False]
 logging = [False,False,False]
 
-#will be replaced with tf data
 listener = tf.TransformListener()
-#tTemp = (0 ,0, 0, -math.pi, 0, 3.141592) 
-#t0 = (0 ,-.125, 0, -1.570796, 0, 3.141592) 
-#t1 = (.1, 0, 0, 0, 0, 3.141592) 
-#t2 = (0, .125, 0, 1.570796, 0, 3.141592) 
-#cv2.waitKey(2000)
+
 while not rospy.is_shutdown():
     startTime = time.time()
-
-    #clear display
-    img = np.zeros((h,w,3), np.uint8)+255
-
-    #draw axis
-    #cv2.line(img,(0,h/2),(w,h/2),(0,0,0),2)
-    #cv2.line(img,(w/2,0),(w/2,h),(0,0,0),2)
 
     #create a blank array to hold the composed cartesian coordinates
     cartComp = np.array([np.empty(0),np.empty(0)])
@@ -274,16 +259,6 @@ while not rospy.is_shutdown():
             logging[2] = False
             continue   
 
-    #display everything
-    #cv2.imshow('img',img)
-
-
-    #print cartComp[0]
-    if logging[0] or logging[1] or logging[2]:
-        #print "Converting"
-        #s.unregister()
-        convertBackToArray(cartComp)    
+    if logging[0] or logging[1] or logging[2]: convertBackToArray(cartComp)    
 
     print "Hz:",1.0/(time.time()-startTime)
-
-#cv2.destroyAllWindows()

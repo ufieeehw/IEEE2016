@@ -17,7 +17,7 @@
     </node>  
 
     <node pkg="ieee2016_navigation" type="laser_comb.py" name="laser_comb"/>
-    <node pkg="tf" type="static_transform_publisher" name="temp_odom_to_laser_comb" args="0 0 0 0 0 0 odom laser_comb 10"/>
+    <!--node pkg="tf" type="static_transform_publisher" name="temp_odom_to_laser_comb" args="0 0 0 0 0 0 odom laser_comb 10"/-->
     <!--node pkg="ieee2016_navigation" type="laser_trimmer.py" name="laser_trimmer" args="125"/-->
 </launch>
   
