@@ -142,7 +142,7 @@ class GPUAccFilter():
 
         self.m = m
         self.INIT_PARTICLES = 700
-        self.MAX_PARTICLES = 2500
+        self.MAX_PARTICLES = 3000
 
         # We start at arbitrary point 0,0,0
         self.pose = np.array([.2,.2,1.57], np.float64)
@@ -164,12 +164,14 @@ class GPUAccFilter():
         self.prev_time = time.time()
 
         self.hz_counter = 0
-        r = rospy.Rate(5) #hz
+        r = rospy.Rate(10) #hz
+        start_time = time.time()
         while not rospy.is_shutdown():
             r.sleep()
             
             self.run_filter()
-            
+            print "HZ:",1.0/(time.time()-start_time)
+            start_time = time.time()
 
     def gen_particles(self, number, center, radius, heading_range):
         print "GENERATING PARTICLES:", number
@@ -189,7 +191,7 @@ class GPUAccFilter():
             if not(x < 0 or y < 0 or x > 2.2 or y > 2.2):
                 self.particles = np.vstack((self.particles,[x,y,heading]))
 
-        self.publish_particle_array()
+        #self.publish_particle_array()
 
     def run_filter(self):
         # This is where the filter does its work
@@ -202,7 +204,7 @@ class GPUAccFilter():
         while len(self.laser_scan) == 0:
             print "Waiting for scan."
 
-        #self.particles += self.pose_update
+        self.particles += self.pose_update
         
         # Reset the pose update so that the next run will contain the pose update from this point
         self.pose_update = np.array([0,0,0], np.float64)
@@ -221,7 +223,7 @@ class GPUAccFilter():
         weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
         # Remove low weights from particle and weights list
-        weight_percentile = 99.5 #percent
+        weight_percentile = 95 #percent
         weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
         weights = weights_raw[weights_indicies_to_keep]
         self.particles = self.particles[weights_indicies_to_keep]
@@ -254,8 +256,8 @@ class GPUAccFilter():
         # # Add arbitrary number of particles (this should be changed in the future)
         # new_particles = np.random.random(self.MAX_PARTICLES - len(self.particles))
         # # Find out where each new particle should go and add it to the list.
-        translation_vairance = .2  #m  #.1
-        rotational_vairance = 1 #rads #.5
+        translation_vairance = .5  #m  #.1
+        rotational_vairance = .6 #rads #.5
         # new_particles_postitions = np.searchsorted(cumsum_weights_norm,new_particles)
 
         # for p in new_particles_postitions:
