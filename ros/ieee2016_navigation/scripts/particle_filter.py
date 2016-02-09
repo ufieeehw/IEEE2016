@@ -27,43 +27,45 @@ class GPUAccMap():
         #                       1.8669, .8382,2.1336, .8382,
         #                         .508, .3048,  .762, .3048,
         #                            0,2.1336,1.8669,2.1336]).astype(np.float32)
-        self.map = np.array([   0,     0,  .784,     0,
-                             .784,     0,  .784,  .015,
-                             .784,  .015, 1.158,  .015,
-                            1.158,     0, 1.158,  .015,
-                            1.158,     0, 2.153,     0,
-                             .784,  .464,  .784,  .479,
-                             .784,  .479, 1.158,  .479,
-                             .784,  .464, 1.158,  .464,
-                            1.158,  .464, 1.158,  .479,
-                                0,     0,     0,  .549,
-                                0,  .549,  .317,  .549,
-                             .317,  .549,  .317,  .569,
-                                0,  .569,  .317,  .569,
-                                0,  .569,     0,  .809,
-                                0,  .809,  .317,  .809,
-                             .317,  .809,  .317,  .829,
-                                0,  .829,  .317,  .829,
-                                0,  .829,     0, 2.458,
-                            2.153,     0, 2.153, 2.458,
-                                0, 2.458,  .907, 2.458,
-                             .907, 2.161,  .907, 2.458,
-                             .907, 2.161, 1.178, 2.161,
-                            1.178, 2.161, 1.178, 2.458,
-                            1.178, 2.458, 1.181, 2.458,
-                            1.181, 2.161, 1.181, 2.458,
-                            1.181, 2.161, 1.452, 2.161,
-                            1.452, 2.161, 1.452, 2.458,
-                            1.452, 2.458, 1.482, 2.458,
-                            1.482, 2.161, 1.482, 2.458,
-                            1.482, 2.161, 1.753, 2.161,
-                            1.753, 2.161, 1.753, 2.458,
-                            1.753, 2.458, 1.783, 2.458,
-                            1.783, 2.161, 1.783, 2.458,
-                            1.783, 2.161, 2.054, 2.161,
-                            2.054, 2.161, 2.054, 2.458,
-                            2.054, 2.458, 2.153, 2.458,]).astype(np.float32)
+        # self.map = np.array([   0,     0,  .784,     0,
+        #                      .784,     0,  .784,  .015,
+        #                      .784,  .015, 1.158,  .015,
+        #                     1.158,     0, 1.158,  .015,
+        #                     1.158,     0, 2.153,     0,
+        #                      .784,  .464,  .784,  .479,
+        #                      .784,  .479, 1.158,  .479,
+        #                      .784,  .464, 1.158,  .464,
+        #                     1.158,  .464, 1.158,  .479,
+        #                         0,     0,     0,  .549,
+        #                         0,  .549,  .317,  .549,
+        #                      .317,  .549,  .317,  .569,
+        #                         0,  .569,  .317,  .569,
+        #                         0,  .569,     0,  .809,
+        #                         0,  .809,  .317,  .809,
+        #                      .317,  .809,  .317,  .829,
+        #                         0,  .829,  .317,  .829,
+        #                         0,  .829,     0, 2.458,
+        #                     2.153,     0, 2.153, 2.458,
+        #                         0, 2.458,  .907, 2.458,
+        #                      .907, 2.161,  .907, 2.458,
+        #                      .907, 2.161, 1.178, 2.161,
+        #                     1.178, 2.161, 1.178, 2.458,
+        #                     1.178, 2.458, 1.181, 2.458,
+        #                     1.181, 2.161, 1.181, 2.458,
+        #                     1.181, 2.161, 1.452, 2.161,
+        #                     1.452, 2.161, 1.452, 2.458,
+        #                     1.452, 2.458, 1.482, 2.458,
+        #                     1.482, 2.161, 1.482, 2.458,
+        #                     1.482, 2.161, 1.753, 2.161,
+        #                     1.753, 2.161, 1.753, 2.458,
+        #                     1.753, 2.458, 1.783, 2.458,
+        #                     1.783, 2.161, 1.783, 2.458,
+        #                     1.783, 2.161, 2.054, 2.161,
+        #                     2.054, 2.161, 2.054, 2.458,
+        #                     2.054, 2.458, 2.153, 2.458,]).astype(np.float32)
+        # self.map = np.fliplr(self.map.reshape(72,2)).reshape(144,)
 
+        self.map = np.array([0, 0, 0, .784, 0, .784, .015, .784, .015, .784, .015, 1.158, 0, 1.158, .015, 1.158, 0, 1.158, 0, 2.153, .464, .784, .479, .784, .479, .784, .479, 1.158, .464, .784, .464, 1.158, .464, 1.158, .479, 1.158, 0, 0, .549, 0, .549, 0, .549, .317, .549, .317, .569, .317, .569, 0, .569, .317, .569, 0, .809, 0, .809, 0, .809, .317, .809, .317, .829, .317, .829, 0, .829, .317, .829, 0, 2.458, 0, 0, 2.153, 2.458, 2.153, 2.458, 0, 2.458, .907, 2.161, .907, 2.458, .907, 2.161, .907, 2.161, 1.178, 2.161, 1.178, 2.458, 1.178, 2.458, 1.178, 2.458, 1.181, 2.161, 1.181, 2.458, 1.181, 2.161, 1.181, 2.161, 1.452, 2.161, 1.452, 2.458, 1.452, 2.458, 1.452, 2.458, 1.482, 2.161, 1.482, 2.458, 1.482, 2.161, 1.482, 2.161, 1.753, 2.161, 1.753, 2.458, 1.753, 2.458, 1.753, 2.458, 1.783, 2.161, 1.783, 2.458, 1.783, 2.161, 1.783, 2.161, 2.054, 2.161, 2.054, 2.458, 2.054, 2.458, 2.054, 2.458, 2.153]).astype(np.float32)
 
         self.map_pub = rospy.Publisher("/test/map_scan", LaserScan, queue_size=1)
 
@@ -90,12 +92,12 @@ class GPUAccMap():
         deg_index = int(math.radians(30)/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
         step = 1
-        # self.indicies_to_compare = np.append( self.indicies_to_compare,            
-        #     np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(index_count/2 - deg_index, index_count/2 + deg_index, step=step))
-        # self.indicies_to_compare = np.append( self.indicies_to_compare,            
-        #     np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
 
         # To generate weights, we need those indices to be pre-converted to radian angle measures 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
@@ -131,9 +133,9 @@ class GPUAccFilter():
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
         # ROS Inits
         self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
-        #self.odom_sub = rospy.Subscriber('/robot/odometry/filtered', Odometry, self.got_odom)
+        self.laser_scan_vis = rospy.Publisher('/test_points', PoseArray, queue_size=2)
+        self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
         #self.twist_sub = rospy.Subscriber('/test/twist', TwistStamped, self.got_twist)
-        self.twist_sub = rospy.Subscriber('/test/pose', PoseStamped, self.update_real_pose)
         self.laser_scan_sub = rospy.Subscriber('/scan_comb', LaserScan, self.got_laserscan)
         self.pose_est_pub = rospy.Publisher('/pose_est', PoseStamped, queue_size=2)
         self.br = tf.TransformBroadcaster()
@@ -143,10 +145,10 @@ class GPUAccFilter():
         self.MAX_PARTICLES = 2500
 
         # We start at arbitrary point 0,0,0
-        self.pose_actual = np.array([0,0,1.57], np.float64)
+        self.pose = np.array([.2,.2,1.57], np.float64)
         self.pose_update = np.array([0,0,0], np.float64) 
 
-        self.pose_est = np.array([.1,.3,1.57], np.float64)
+        self.pose_est = np.array([.2,.2,1.57], np.float64)
 
         # Generate random point in circle and add to array of point coordinates
         self.particles = np.empty([1,3])
@@ -162,7 +164,7 @@ class GPUAccFilter():
         self.prev_time = time.time()
 
         self.hz_counter = 0
-        r = rospy.Rate(10) #hz
+        r = rospy.Rate(5) #hz
         while not rospy.is_shutdown():
             r.sleep()
             
@@ -219,7 +221,7 @@ class GPUAccFilter():
         weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
         # Remove low weights from particle and weights list
-        weight_percentile = 99.9 #percent
+        weight_percentile = 99.5 #percent
         weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
         weights = weights_raw[weights_indicies_to_keep]
         self.particles = self.particles[weights_indicies_to_keep]
@@ -270,7 +272,7 @@ class GPUAccFilter():
     
     def update_real_pose(self,msg):
         roll,pitch,yaw = tf.transformations.euler_from_quaternion((msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z,msg.pose.orientation.w))
-        self.pose_actual = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
+        self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
 
     def update_pose(self,particle_avg):
         # Update pose and TF
@@ -282,7 +284,7 @@ class GPUAccFilter():
             PoseStamped(
                 header=Header(
                     stamp=rospy.Time.now(),
-                    frame_id="odom"
+                    frame_id="map"
                 ),
                 pose=Pose(
                     position=Point(
@@ -300,8 +302,7 @@ class GPUAccFilter():
             )
         )
 
-        self.br.sendTransform((self.pose_est[0], self.pose_est[1], 0),
-                 q,
+        self.br.sendTransform((self.pose_est[0], self.pose_est[1], 0), q,
                  rospy.Time.now(),
                  "base_link",
                  "map")
@@ -330,7 +331,7 @@ class GPUAccFilter():
         
         # By summing these components, we get an integral - converting velocity to position
         self.pose_update += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
-        self.pose_actual += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
+        self.pose += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
 
     def got_odom(self,msg):
         # Update current pose based on odom data, note that this is only an estimation of Shia's position
@@ -358,28 +359,28 @@ class GPUAccFilter():
         self.pose += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
 
         q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
-        self.pose_est_pub.publish(
-            PoseStamped(
-                header=Header(
-                    stamp=rospy.Time.now(),
-                    frame_id="odom"
-                ),
-                pose=Pose(
-                    position=Point(
-                        x=self.pose[0],
-                        y=self.pose[1],
-                        z=0
-                    ),
-                    orientation=Quaternion(
-                        x=q[0],
-                        y=q[1],
-                        z=q[2],
-                        w=q[3],
-                    )
-                )
-            )
+        # self.pose_est_pub.publish(
+        #     PoseStamped(
+        #         header=Header(
+        #             stamp=rospy.Time.now(),
+        #             frame_id="map"
+        #         ),
+        #         pose=Pose(
+        #             position=Point(
+        #                 x=self.pose[0],
+        #                 y=self.pose[1],
+        #                 z=0
+        #             ),
+        #             orientation=Quaternion(
+        #                 x=q[0],
+        #                 y=q[1],
+        #                 z=q[2],
+        #                 w=q[3],
+        #             )
+        #         )
+        #     )
 
-        )
+        # )
 
     def got_laserscan(self,msg):
         self.laser_scan = np.array(msg.ranges)
@@ -411,7 +412,7 @@ class GPUAccFilter():
         self.test_points_pub.publish(PoseArray(
             header=Header(
                     stamp=rospy.Time.now(),
-                    frame_id="odom",
+                    frame_id="map",
                 ),
             poses=pose_arr,
             )
