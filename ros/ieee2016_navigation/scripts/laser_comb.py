@@ -38,7 +38,7 @@ def convertxypoint(x,y):
     return u,v
 
 def rosPublish(ranges,maxAngle,minAngle,increment):
-    global pub
+    global pub,pub_temp
     #set up ros message
     h = std_msgs.msg.Header()
     h.frame_id = "laser_comb"
@@ -55,11 +55,13 @@ def rosPublish(ranges,maxAngle,minAngle,increment):
     l.intensities = []
 
     #update time info to keep transforms right
-    h.stamp = rospy.Time.now()
+    h.stamp = rospy.Time(0)
     l.header = h
 
     #print "Publishing..."
     pub.publish(l)
+    l.header.frame_id = "odom_scan"
+    pub_temp.publish(l)
 
 def returnAngle(x,y):
     theta = math.atan(y/x)
@@ -148,7 +150,7 @@ def convertToCart(ranges,trans,scanNum):
         if dist > .001 and dist != float('inf'): 
             #add converted values to temp arrays and flip the y values since the LIDARS are upsidedown
             temp[0,i] = math.cos(angle)*dist
-            temp[1,i] = math.sin(angle)*dist
+            temp[1,i] = -math.sin(angle)*dist
         else:
             #so the angles stay right, fill with a big big value
             temp[0,i] = 0
@@ -206,6 +208,8 @@ w = h
 
 #ros stuffs
 pub = rospy.Publisher('scan_comb', LaserScan, queue_size=3)
+pub_temp = rospy.Publisher('scan_comb_temp', LaserScan, queue_size=3)
+
 rospy.init_node('laser_comb')
 rospy.Subscriber('scan_left',LaserScan,logData,0)
 rospy.Subscriber('scan_middle',LaserScan,logData,1) 

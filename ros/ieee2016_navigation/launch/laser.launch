@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <launch>
     <node name="hokuyo_left" pkg="hokuyo_node" type="hokuyo_node">
-        <param name="port" type="string" value="/dev/sensors/hokuyo_H1009061" />
+        <param name="port" type="string" value="/dev/sensors/hokuyo_H1008999" />
         <remap from="scan" to="scan_left" />
 	<param name="frame_id" type="string" value="laser_left" />
     </node>
@@ -11,7 +11,7 @@
 	<param name="frame_id" type="string" value="laser_middle" />
     </node>
     <node name="hokuyo_right" pkg="hokuyo_node" type="hokuyo_node">
-        <param name="port" type="string" value="/dev/sensors/hokuyo_H1008999" />
+        <param name="port" type="string" value="/dev/sensors/hokuyo_H1009061" />
         <remap from="scan" to="scan_right" />
 	<param name="frame_id" type="string" value="laser_right" />
     </node>  

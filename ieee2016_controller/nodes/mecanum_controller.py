@@ -33,7 +33,7 @@ class Controller(object):
             [ang_scale * +1, ang_scale * +1, ang_scale * -1, ang_scale * -1],  # Unitless! Shooting for rad/s
         ], dtype=np.float32) / 4.0  # All of the rows are divided by 4
 
-        self.pose = np.array([0.0, 0.0, 0.0])
+        self.pose = np.array([0.2, 0.2, 1.57])
         self.odom_pub = rospy.Publisher('/robot/odom', Odometry, queue_size=1)     
 
         rospy.loginfo("----------Attempting to find set_wheel_speeds service-------------")
