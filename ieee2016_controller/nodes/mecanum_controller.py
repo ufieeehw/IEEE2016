@@ -34,7 +34,7 @@ class Controller(object):
         ], dtype=np.float32) / 4.0  # All of the rows are divided by 4
 
         self.pose = np.array([0.0, 0.0, 0.0])
-        self.odom_pub = rospy.Publisher('odom', Odometry, queue_size=1)     
+        self.odom_pub = rospy.Publisher('/robot/odom', Odometry, queue_size=1)     
 
         rospy.loginfo("----------Attempting to find set_wheel_speeds service-------------")
         rospy.wait_for_service('/robot/xmega_connector/set_wheel_speeds')
@@ -77,14 +77,10 @@ class Controller(object):
         if not self.on:
             return
         twist_msg = twist_stamped_msg.twist
-        # Adding a deadzone to the spacenav controller
-        dead_zone = .1
-#        if abs(twist_msg.linear.x) < dead_zone: twist_msg.linear.x = 0
-#        if abs(twist_msg.linear.y) < dead_zone: twist_msg.linear.y = 0
-#        if abs(twist_msg.angular.z) < dead_zone: twist_msg.angular.z = 0
+
         desired_action = np.array([
-            -twist_msg.linear.x,
-            -twist_msg.linear.y,
+            twist_msg.linear.x,
+            twist_msg.linear.y,
             twist_msg.angular.z,
         ],
         dtype=np.float32)
@@ -95,7 +91,7 @@ class Controller(object):
     def got_twist_spacenav(self, twist_msg):
         if not self.on:
             return
-#        twist_msg = twist_stamped_msg.twist
+
         if self.spacenav_twist == twist_msg:
             return
         # Adding a deadzone to the spacenav controller
@@ -209,21 +205,20 @@ class Controller(object):
                 odom_srv.wheel4,
             ])
             vehicle_twist = np.dot(self.mecanum_matrix, wheel_odom).A1
-            # Removed from last years code to make odom data correct
-            #vehicle_twist[0] *= -1
-            #vehicle_twist[1] *= -1
+            
             rot_mat = self.make_2D_rotation(self.pose[2])
             x, y = np.dot(rot_mat, [vehicle_twist[0], vehicle_twist[1]]).A1
             #rospy.loginfo(self.pose)
 
-            self.pose += [x, y, vehicle_twist[2]]
+	    # By observation, odom data is backwards so subtract it instead of add it
+            self.pose -= [x, y, vehicle_twist[2]]
 
             orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
 
             odom_msg = Odometry(
                 header=Header(
                     stamp=rospy.Time.now(),
-                    frame_id='odom',
+                    frame_id='map',
                 ),
                 child_frame_id='base_link',
                 pose=PoseWithCovariance(
