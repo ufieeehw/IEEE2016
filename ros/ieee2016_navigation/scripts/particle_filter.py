@@ -13,6 +13,7 @@ import random
 import os
 
 import pyopencl as cl
+os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
 class GPUAccMap():
     def __init__(self):
@@ -125,7 +126,7 @@ class GPUAccMap():
                                                                laserscan_cl, 
                                                                  weights_cl)
             
-        cl.enqueue_copy(self.queue, weights, weights_cl).wait()
+        cl.enqueue_copy(self.queue, weights, weights_cl)
         return weights
 
 class GPUAccFilter():
@@ -137,12 +138,12 @@ class GPUAccFilter():
         self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
         #self.twist_sub = rospy.Subscriber('/test/twist', TwistStamped, self.got_twist)
         self.laser_scan_sub = rospy.Subscriber('/scan_comb', LaserScan, self.got_laserscan)
-        self.pose_est_pub = rospy.Publisher('/pose_est', PoseStamped, queue_size=2)
+        self.pose_est_pub = rospy.Publisher('/pf_pose_est', PoseStamped, queue_size=2)
         self.br = tf.TransformBroadcaster()
 
         self.m = m
         self.INIT_PARTICLES = 700
-        self.MAX_PARTICLES = 3000
+        self.MAX_PARTICLES = 1000
 
         # We start at arbitrary point 0,0,0
         self.pose = np.array([.2,.2,1.57], np.float64)

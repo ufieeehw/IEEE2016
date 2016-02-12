@@ -211,7 +211,7 @@ class Controller(object):
             #rospy.loginfo(self.pose)
 
 	    # By observation, odom data is backwards so subtract it instead of add it
-            self.pose -= [x, y, vehicle_twist[2]]
+            self.pose += [x, y, vehicle_twist[2]]
 
             orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
 

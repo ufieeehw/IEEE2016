@@ -60,7 +60,7 @@ class Controller(object):
         rospy.init_node('vehicle_controller')
 
         # Twist pub
-        self.twist_pub = rospy.Publisher('twist', TwistStamped, queue_size=1) 
+        self.twist_pub = rospy.Publisher('/robot/twist', TwistStamped, queue_size=1) 
         
         # Initializations to avoid weird desynchronizations
         self.des_position = None
@@ -70,8 +70,8 @@ class Controller(object):
         self.yaw = None
 
         # Current pose sub
-        #self.pose_sub = rospy.Subscriber('/slam_out_pose', PoseStamped, self.got_pose)
-        self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
+        self.pose_sub = rospy.Subscriber('/pf_pose_est', PoseStamped, self.got_pose)
+        #self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
 
         self.desired_pose_sub = rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.got_desired_pose)
 
@@ -84,7 +84,6 @@ class Controller(object):
             rospy.sleep(rospy.Duration(0.1))
             self.control()
             r.sleep()
-
 
     def stop(self, req):
         self.on = not req.stop
@@ -109,8 +108,8 @@ class Controller(object):
                     frame_id='base_link',
                 ),
                 twist=Twist(
-                    linear=Vector3(xvel, yvel, 0),
-                    angular=Vector3(0, 0, angvel),  # Radians
+                    linear=Vector3(-xvel, -yvel, 0),
+                    angular=Vector3(0, 0, -angvel),  # Radians
                 )
             )
         )
@@ -146,7 +145,6 @@ class Controller(object):
         pose = msg.pose.pose
         self.position = np.array([pose.position.x, pose.position.y])
         self.yaw = tf_trans.euler_from_quaternion(xyzw_array(pose.orientation))[2]
-
 
     def got_pose(self, msg):
         self.position = np.array([msg.pose.position.x, msg.pose.position.y])
@@ -184,7 +182,7 @@ class Controller(object):
         # World frame position
         position_error = self.des_position - self.position
         yaw_error = self.norm_angle_diff(self.des_yaw, self.yaw)
-
+        print position_error,yaw_error
         position_error_len = np.linalg.norm(position_error)
 
         if (position_error_len > 0.08): # 8cm stop-error
@@ -221,7 +219,7 @@ class Controller(object):
         print desired_vel
         desired_angvel = angular_speed * self.sign(yaw_error)
 
-        # Unit vectors that determine the right-handed coordinate system of the roobt in the world frame
+        # Unit vectors that determine the right-handed coordinate system of the robot in the world frame
         #self.yaw = math.radians(90)
         #forward = np.array([math.cos(self.yaw), math.sin(self.yaw)])
         #left = np.array([math.cos(self.yaw + np.pi/2), math.sin(self.yaw + np.pi/2)])
