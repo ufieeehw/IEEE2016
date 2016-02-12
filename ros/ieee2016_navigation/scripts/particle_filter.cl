@@ -9,25 +9,19 @@ __kernel void trace( __global const float *p,
 
     int i = get_global_id(0);
 
-    __local float error;
-    __local float min;
-    __local float sigma2;
-    __local float errors_measured;
-
     float3 ray_origin = (float3)(p[i*3], p[i*3+1],0);
 
     float3 t1,v1,v2;
     float v2_dot_v3;
     float t2,d,theta;
-    //float temp;
-    //temp = p[0];
-    error = 0;
-    errors_measured = 0;
+    float error = 0;
+    float errors_measured = 0;
 
     // Change tolerance here, less is more strict
-    sigma2 = pow(.3,2);
+    float sigma2 = pow(.3,2);
     for(int a = 0; a < angle_cnt; a++){
-        min = 1000;
+
+        float min_dist = 1000;
         theta = p[i*3+2] + angles_to_check[a];
         float3 ray_direction = (float3)(cos(theta), sin(theta),0);
 
@@ -40,19 +34,20 @@ __kernel void trace( __global const float *p,
             float3 v3 = (float3)(-ray_direction.s1, ray_direction.s0, 0);
 
             v2_dot_v3 = dot(v2,v3);
+            
             if(v2_dot_v3 != 0){
-                t1 = cross(v2, v1) / v2_dot_v3;
+                t1 = (float3)cross(v2, v1) / v2_dot_v3;
                 t2 = dot(v1, v3) / v2_dot_v3;
                 d = t1.s2;
-                if(d >= 0.0 && t2 >= 0.0 && t2 <= 1.0){
-                    if(d < min){
-                        min = d;
+                if(d >= 0 && t2 >= 0 && t2 <= 1){
+                    if(d < min_dist){
+                        min_dist = d;
                     }
                 }
             }
         }
-        if(min != 1000){
-            error += exp(-pow(misfit_actual[a]-min,2)/(2*sigma2));
+       if(min_dist != 1000){
+            error += exp(-pow(misfit_actual[a]-min_dist,2)/(2*sigma2));
             errors_measured++;
         }
     }
@@ -61,5 +56,6 @@ __kernel void trace( __global const float *p,
     }else{
         weights[i] = error/errors_measured;    
     }
-    
+
+
 }

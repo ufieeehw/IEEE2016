@@ -18,57 +18,7 @@ os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 class GPUAccMap():
     def __init__(self):
         # Each line segment in the form: ax1, ay1, ax2, ay2, bx1, by1, bx2, by2, ...
-        # self.map = np.array([      0,     0,     0,2.1336,
-        #                        .4572,  .762, .4572, 1.143,
-        #                         .508,     0,  .508, .3048,
-        #                         .762,     0,  .762, .3048,
-        #                       1.8669, .8382,1.8669,2.1336,
-        #                       2.1336,     0,2.1336, .8382,
-        #                            0,     0,2.1336,     0,
-        #                       1.8669, .8382,2.1336, .8382,
-        #                         .508, .3048,  .762, .3048,
-        #                            0,2.1336,1.8669,2.1336]).astype(np.float32)
-        # self.map = np.array([   0,     0,  .784,     0,
-        #                      .784,     0,  .784,  .015,
-        #                      .784,  .015, 1.158,  .015,
-        #                     1.158,     0, 1.158,  .015,
-        #                     1.158,     0, 2.153,     0,
-        #                      .784,  .464,  .784,  .479,
-        #                      .784,  .479, 1.158,  .479,
-        #                      .784,  .464, 1.158,  .464,
-        #                     1.158,  .464, 1.158,  .479,
-        #                         0,     0,     0,  .549,
-        #                         0,  .549,  .317,  .549,
-        #                      .317,  .549,  .317,  .569,
-        #                         0,  .569,  .317,  .569,
-        #                         0,  .569,     0,  .809,
-        #                         0,  .809,  .317,  .809,
-        #                      .317,  .809,  .317,  .829,
-        #                         0,  .829,  .317,  .829,
-        #                         0,  .829,     0, 2.458,
-        #                     2.153,     0, 2.153, 2.458,
-        #                         0, 2.458,  .907, 2.458,
-        #                      .907, 2.161,  .907, 2.458,
-        #                      .907, 2.161, 1.178, 2.161,
-        #                     1.178, 2.161, 1.178, 2.458,
-        #                     1.178, 2.458, 1.181, 2.458,
-        #                     1.181, 2.161, 1.181, 2.458,
-        #                     1.181, 2.161, 1.452, 2.161,
-        #                     1.452, 2.161, 1.452, 2.458,
-        #                     1.452, 2.458, 1.482, 2.458,
-        #                     1.482, 2.161, 1.482, 2.458,
-        #                     1.482, 2.161, 1.753, 2.161,
-        #                     1.753, 2.161, 1.753, 2.458,
-        #                     1.753, 2.458, 1.783, 2.458,
-        #                     1.783, 2.161, 1.783, 2.458,
-        #                     1.783, 2.161, 2.054, 2.161,
-        #                     2.054, 2.161, 2.054, 2.458,
-        #                     2.054, 2.458, 2.153, 2.458,]).astype(np.float32)
-        # self.map = np.fliplr(self.map.reshape(72,2)).reshape(144,)
-
         self.map = np.array([0, 0, 0, .784, 0, .784, .015, .784, .015, .784, .015, 1.158, 0, 1.158, .015, 1.158, 0, 1.158, 0, 2.153, .464, .784, .479, .784, .479, .784, .479, 1.158, .464, .784, .464, 1.158, .464, 1.158, .479, 1.158, 0, 0, .549, 0, .549, 0, .549, .317, .549, .317, .569, .317, .569, 0, .569, .317, .569, 0, .809, 0, .809, 0, .809, .317, .809, .317, .829, .317, .829, 0, .829, .317, .829, 0, 2.458, 0, 0, 2.153, 2.458, 2.153, 2.458, 0, 2.458, .907, 2.161, .907, 2.458, .907, 2.161, .907, 2.161, 1.178, 2.161, 1.178, 2.458, 1.178, 2.458, 1.178, 2.458, 1.181, 2.161, 1.181, 2.458, 1.181, 2.161, 1.181, 2.161, 1.452, 2.161, 1.452, 2.458, 1.452, 2.458, 1.452, 2.458, 1.482, 2.161, 1.482, 2.458, 1.482, 2.161, 1.482, 2.161, 1.753, 2.161, 1.753, 2.458, 1.753, 2.458, 1.753, 2.458, 1.783, 2.161, 1.783, 2.458, 1.783, 2.161, 1.783, 2.161, 2.054, 2.161, 2.054, 2.458, 2.054, 2.458, 2.054, 2.458, 2.153]).astype(np.float32)
-
-        self.map_pub = rospy.Publisher("/test/map_scan", LaserScan, queue_size=1)
 
         # LaserScan parameters
         self.angle_increment = .005 #rads/index
@@ -80,9 +30,10 @@ class GPUAccMap():
         index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
 
         # Set up pyopencl
-        self.ctx = cl.create_some_context()
+        self.ctx = cl.Context([cl.get_platforms()[1].get_devices()[0]])
         self.queue = cl.CommandQueue(self.ctx)
         self.mf = cl.mem_flags
+
         # Load .cl program
         f = open(os.path.join(os.path.dirname(__file__), 'particle_filter.cl'), 'r')
         fstr = "".join(f.readlines())
@@ -116,7 +67,6 @@ class GPUAccMap():
         particles_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=particles.astype(np.float32))
         laserscan_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=laser_scan_compare)
         
-
         # Actually send to graphics processor
         self.prg.trace(self.queue, (particles.size/3,), None,  particles_cl, 
                                                                 self.map_cl, 
@@ -124,9 +74,9 @@ class GPUAccMap():
                                                   self.angles_to_compare_cl, 
                                      np.uint32(self.angles_to_compare.size),
                                                                laserscan_cl, 
-                                                                 weights_cl)
+                                                                 weights_cl).wait()
             
-        cl.enqueue_copy(self.queue, weights, weights_cl)
+        cl.enqueue_copy(self.queue, weights, weights_cl).wait()
         return weights
 
 class GPUAccFilter():
@@ -142,16 +92,16 @@ class GPUAccFilter():
         self.br = tf.TransformBroadcaster()
 
         self.m = m
-        self.INIT_PARTICLES = 700
-        self.MAX_PARTICLES = 1000
+        self.INIT_PARTICLES = 512
+        self.MAX_PARTICLES = 2048
 
-        # We start at arbitrary point 0,0,0
-        self.pose = np.array([.2,.2,1.57], np.float64)
-        self.pose_update = np.array([0,0,0], np.float64) 
+        # We start at our esitmated starting position
+        self.pose = np.array([.2,.2,1.57], np.float32)
+        self.pose_update = np.array([0,0,0], np.float32) 
 
-        self.pose_est = np.array([.2,.2,1.57], np.float64)
+        self.pose_est = np.array([.2,.2,1.57], np.float32)
 
-        # Generate random point in circle and add to array of point coordinates
+        # Generate random point in circle and add to array of particle coordinates
         self.particles = np.empty([1,3])
         self.gen_particles(self.INIT_PARTICLES, center, radius, heading_range)
 
@@ -165,7 +115,7 @@ class GPUAccFilter():
         self.prev_time = time.time()
 
         self.hz_counter = 0
-        r = rospy.Rate(10) #hz
+        r = rospy.Rate(20) #hz
         start_time = time.time()
         while not rospy.is_shutdown():
             r.sleep()
@@ -174,25 +124,20 @@ class GPUAccFilter():
             print "HZ:",1.0/(time.time()-start_time)
             start_time = time.time()
 
-    def gen_particles(self, number, center, radius, heading_range):
-        print "GENERATING PARTICLES:", number
-        for p in range(number):
-            # random angle
-            alpha = 2 * math.pi * random.random()
-            # random radius
-            r = radius * random.random()
-            # calculating coordinates
-            x = r * math.cos(alpha) + center[0]
-            y = r * math.sin(alpha) + center[1]
+    def gen_particles(self, number_of_particles, center, radius, heading_range):
+        print "GENERATING PARTICLES:", number_of_particles
 
-            # Generate random heading
-            heading = random.uniform(heading_range[0], heading_range[1])
+        # Generate random particles in a circue with 'center' and 'radius'
+        # heading_range gives a variance to the theta of each particle
+        theta = np.random.rand((number_of_particles)) * (2 * np.pi)
+        r = np.random.rand((number_of_particles))*radius
+        # Clip ranges values that are generated that are off the map
+        x = np.clip(r * np.cos(theta) + center[0],0,2.2)
+        y = np.clip(r * np.sin(theta) + center[1],0,2.2)
+        heading = np.random.uniform(heading_range[0], heading_range[1],(number_of_particles))
 
-            # Make sure the generated point isn't outside the map
-            if not(x < 0 or y < 0 or x > 2.2 or y > 2.2):
-                self.particles = np.vstack((self.particles,[x,y,heading]))
-
-        #self.publish_particle_array()
+        # Save new particles in the proper format
+        self.particles = np.vstack((self.particles,np.vstack((x,y,heading)).T))
 
     def run_filter(self):
         # This is where the filter does its work
@@ -208,31 +153,27 @@ class GPUAccFilter():
         self.particles += self.pose_update
         
         # Reset the pose update so that the next run will contain the pose update from this point
-        self.pose_update = np.array([0,0,0], np.float64)
+        self.pose_update = np.array([0,0,0], np.float32)
 
         # If new particles need to be generated, do so with this radius from the last estimated position
         new_gen_radius = 1
-        if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
-          
-        temp_particles = np.array([0,0,0])
-        for p in self.particles:
-            if not(p[0] < 0 or p[1] < 0 or p[0] > 2.1336 or p[1] > 2.1336):
-                temp_particles = np.vstack((temp_particles,p))
-        self.particles = temp_particles[1:]
+        #if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
+
+        #self.particles = temp_particles[1:]
 
         # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
         weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
-        # Remove low weights from particle and weights list
-        weight_percentile = 95 #percent
+        # # Remove low weights from particle and weights list
+        weight_percentile = 90 #percent
         weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
         weights = weights_raw[weights_indicies_to_keep]
         self.particles = self.particles[weights_indicies_to_keep]
 
-        if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
+        # if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
 
 
-        # Just for debugging ==================================
+        # #Just for debugging ==================================
         print "WEIGHT PERCENTILE:", weight_percentile
         print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
         print "PARTICLES REMOVED:", len(weights_raw)-len(weights) 
@@ -247,25 +188,9 @@ class GPUAccFilter():
         # Update Pose
         self.update_pose((new_x,new_y,new_head))
 
-        #print "POSE VARIANCE:", self.pose_actual - self.pose_est
-
-        # # Generate new particles based on weights of particles
-        # # Normalize the weights so that their sum = 1
-        # weights_norm = weights/np.sum(weights)
-        # # Find the cumulative sum of that
-        # cumsum_weights_norm = np.cumsum(weights_norm)
-        # # Add arbitrary number of particles (this should be changed in the future)
-        # new_particles = np.random.random(self.MAX_PARTICLES - len(self.particles))
-        # # Find out where each new particle should go and add it to the list.
         translation_vairance = .5  #m  #.1
         rotational_vairance = .6 #rads #.5
-        # new_particles_postitions = np.searchsorted(cumsum_weights_norm,new_particles)
 
-        # for p in new_particles_postitions:
-        #     self.particles = np.vstack((self.particles,[self.particles[p][0] + random.uniform(-translation_vairance, translation_vairance),
-        #                                                 self.particles[p][1] + random.uniform(-translation_vairance, translation_vairance),
-        #                                                 self.particles[p][2] + random.uniform(-rotational_vairance, rotational_vairance)]))
-        
         self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
                             self.pose_est[:2],
                             translation_vairance,
