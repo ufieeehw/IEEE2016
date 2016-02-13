@@ -9,7 +9,7 @@ import time
 import os
 
 """
-For map version one
+For map version one WIP
 
 1. move to waypoint through_the_tunnel
 2. move to waypoint analyze_train_blocks, save locations of each qr code

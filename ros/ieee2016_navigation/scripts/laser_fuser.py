@@ -9,7 +9,7 @@ from geometry_msgs.msg import Point32
 from sensor_msgs.msg import LaserScan, PointCloud
 import message_filters
 
-class LaserFuse():
+class LaserFuser():
     def __init__(self):
         self.scan_pub = rospy.Publisher('scan_fused', LaserScan, queue_size=3)
         self.scan_pc_pub = rospy.Publisher('scan_fused_pc', PointCloud, queue_size=3)
@@ -36,7 +36,7 @@ class LaserFuse():
         # Define new laserscan
         self.fused_scan = LaserScan()
         self.fused_scan.header.frame_id = "laser_fused"
-        self.fused_scan.angle_increment = .005 #rads/index
+        self.fused_scan.angle_increment = .007 #rads/index
         self.fused_scan.angle_min = -3.14159274101 #rads
         self.fused_scan.angle_max = 3.14159274101 #rads
         self.fused_scan.range_max = 5.0 #m
@@ -91,8 +91,9 @@ class LaserFuse():
             x = (r_theta[0] * np.cos(r_theta[1]) + translation[0])
             y = -(r_theta[0] * np.sin(r_theta[1]) + translation[1])
         else:
-            x = r_theta[0] * np.cos(r_theta[1]) + translation[0]
+            x = -r_theta[0] * np.cos(r_theta[1]) + translation[0]
             y = r_theta[0] * np.sin(r_theta[1]) + translation[1]
+
         return x,y
 
 
@@ -128,4 +129,4 @@ class LaserFuse():
             )
         )
 
-l = LaserFuse()
+l = LaserFuser()

@@ -21,11 +21,11 @@ class GPUAccMap():
         self.map = np.array([0, 0, 0, .784, 0, .784, .015, .784, .015, .784, .015, 1.158, 0, 1.158, .015, 1.158, 0, 1.158, 0, 2.153, .464, .784, .479, .784, .479, .784, .479, 1.158, .464, .784, .464, 1.158, .464, 1.158, .479, 1.158, 0, 0, .549, 0, .549, 0, .549, .317, .549, .317, .569, .317, .569, 0, .569, .317, .569, 0, .809, 0, .809, 0, .809, .317, .809, .317, .829, .317, .829, 0, .829, .317, .829, 0, 2.458, 0, 0, 2.153, 2.458, 2.153, 2.458, 0, 2.458, .907, 2.161, .907, 2.458, .907, 2.161, .907, 2.161, 1.178, 2.161, 1.178, 2.458, 1.178, 2.458, 1.178, 2.458, 1.181, 2.161, 1.181, 2.458, 1.181, 2.161, 1.181, 2.161, 1.452, 2.161, 1.452, 2.458, 1.452, 2.458, 1.452, 2.458, 1.482, 2.161, 1.482, 2.458, 1.482, 2.161, 1.482, 2.161, 1.753, 2.161, 1.753, 2.458, 1.753, 2.458, 1.753, 2.458, 1.783, 2.161, 1.783, 2.458, 1.783, 2.161, 1.783, 2.161, 2.054, 2.161, 2.054, 2.458, 2.054, 2.458, 2.054, 2.458, 2.153]).astype(np.float32)
 
         # LaserScan parameters
-        self.angle_increment = .005 #rads/index
+        self.angle_increment = .007 #rads/index
         self.min_angle = -3.14159274101 #rads
         self.max_angle = 3.14159274101
         self.max_range = 5.0 #m
-        self.min_range = 0.00999999977648
+        self.min_range = 0.0002
 
         index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
 
@@ -41,7 +41,7 @@ class GPUAccMap():
 
         # Only ranges at these indicies will be checked
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        deg_index = int(math.radians(30)/self.angle_increment)
+        deg_index = int(math.radians(45)/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
         step = 1
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
@@ -85,10 +85,10 @@ class GPUAccFilter():
         # ROS Inits
         self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
         self.laser_scan_vis = rospy.Publisher('/test_points', PoseArray, queue_size=2)
+        self.pose_est_pub = rospy.Publisher('/robot/pf_pose_est', PoseStamped, queue_size=2)
         self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
         #self.twist_sub = rospy.Subscriber('/test/twist', TwistStamped, self.got_twist)
-        self.laser_scan_sub = rospy.Subscriber('/scan_comb', LaserScan, self.got_laserscan)
-        self.pose_est_pub = rospy.Publisher('/pf_pose_est', PoseStamped, queue_size=2)
+        self.laser_scan_sub = rospy.Subscriber('/lidar/scan_fused', LaserScan, self.got_laserscan)
         self.br = tf.TransformBroadcaster()
 
         self.m = m
@@ -121,11 +121,11 @@ class GPUAccFilter():
             r.sleep()
             
             self.run_filter()
-            print "HZ:",1.0/(time.time()-start_time)
+            #print "HZ:",1.0/(time.time()-start_time)
             start_time = time.time()
 
     def gen_particles(self, number_of_particles, center, radius, heading_range):
-        print "GENERATING PARTICLES:", number_of_particles
+        #print "GENERATING PARTICLES:", number_of_particles
 
         # Generate random particles in a circue with 'center' and 'radius'
         # heading_range gives a variance to the theta of each particle
@@ -138,6 +138,7 @@ class GPUAccFilter():
 
         # Save new particles in the proper format
         self.particles = np.vstack((self.particles,np.vstack((x,y,heading)).T))
+        self.publish_particle_array()
 
     def run_filter(self):
         # This is where the filter does its work
@@ -155,54 +156,39 @@ class GPUAccFilter():
         # Reset the pose update so that the next run will contain the pose update from this point
         self.pose_update = np.array([0,0,0], np.float32)
 
-        # If new particles need to be generated, do so with this radius from the last estimated position
-        new_gen_radius = 1
-        #if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
-
-        #self.particles = temp_particles[1:]
-
         # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
         weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
         # # Remove low weights from particle and weights list
-        weight_percentile = 90 #percent
+        weight_percentile = 95 #percent
         weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
         weights = weights_raw[weights_indicies_to_keep]
         self.particles = self.particles[weights_indicies_to_keep]
 
-        # if len(self.particles) == 0: self.gen_particles(self.INIT_PARTICLES, self.pose_est[:2],new_gen_radius,(self.pose_est[2]-1,self.pose_est[2]+1))
-
-
-        # #Just for debugging ==================================
+        #Just for debugging ==================================
         print "WEIGHT PERCENTILE:", weight_percentile
         print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
         print "PARTICLES REMOVED:", len(weights_raw)-len(weights) 
         print "PARTICLE COUNT:", len(self.particles)
 
-    
         # Calculate pose esitmation before generating new particles
         new_x = np.mean(self.particles.T[0])
         new_y = np.mean(self.particles.T[1])
         new_head = np.mean(self.particles.T[2])
 
         # Update Pose
-        self.update_pose((new_x,new_y,new_head))
+        self.publish_pose([new_x,new_y,new_head])
 
-        translation_vairance = .5  #m  #.1
+        translation_vairance = .3  #m  #.1
         rotational_vairance = .6 #rads #.5
 
         self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
                             self.pose_est[:2],
                             translation_vairance,
                             (self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance) )
-        
         print 
-    
-    def update_real_pose(self,msg):
-        roll,pitch,yaw = tf.transformations.euler_from_quaternion((msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z,msg.pose.orientation.w))
-        self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
 
-    def update_pose(self,particle_avg):
+    def publish_pose(self,particle_avg):
         # Update pose and TF
         self.pose_est = np.array(particle_avg)
 
@@ -241,7 +227,7 @@ class GPUAccFilter():
         
         time_since_last_msg = self.prev_time - time.time() #seconds
         self.prev_time = time.time()
-        incoming_msg_freq = 1.0#/time_since_last_msg
+        incoming_msg_freq = 1.0/time_since_last_msg
 
         # This accounts for Shia's rotation - if he is pointed at a 45 degree angle and moves straight forward (which is what the twist message will say),
         # he is not moving directly along the x axis, he is moving at an offset angle.
@@ -266,7 +252,6 @@ class GPUAccFilter():
         # The twist is a measure of velocity from the previous state
 
         vehicle_twist = msg.twist.twist
-        incoming_msg_freq = 100 #hz
 
         # This accounts for Shia's rotation - if he is pointed at a 45 degree angle and moves straight forward (which is what the twist message will say),
         # he is not moving directly along the x axis, he is moving at an offset angle.
@@ -275,40 +260,18 @@ class GPUAccFilter():
             [c,     -s],
             [s,      c],
         ], dtype=np.float32)
+
         # Then we add the x or y translation that we move, rounding down if it's super small
-        x, y = np.dot(rot_mat, [vehicle_twist.linear.x/incoming_msg_freq, vehicle_twist.linear.y/incoming_msg_freq]).A1
+        x, y = np.dot(rot_mat, [vehicle_twist.linear.x, vehicle_twist.linear.y]).A1
+
         tolerance = 1e-7
         if abs(x) < tolerance: x = 0
         if abs(y) < tolerance: y = 0
         if abs(vehicle_twist.angular.z) < tolerance: vehicle_twist.angular.z = 0
         
         # By summing these components, we get an integral - converting velocity to position
-        self.pose_update += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
-        self.pose += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
-
-        q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
-        # self.pose_est_pub.publish(
-        #     PoseStamped(
-        #         header=Header(
-        #             stamp=rospy.Time.now(),
-        #             frame_id="map"
-        #         ),
-        #         pose=Pose(
-        #             position=Point(
-        #                 x=self.pose[0],
-        #                 y=self.pose[1],
-        #                 z=0
-        #             ),
-        #             orientation=Quaternion(
-        #                 x=q[0],
-        #                 y=q[1],
-        #                 z=q[2],
-        #                 w=q[3],
-        #             )
-        #         )
-        #     )
-
-        # )
+        self.pose_update += [x, y, vehicle_twist.angular.z]
+        self.pose += [x, y, vehicle_twist.angular.z]
 
     def got_laserscan(self,msg):
         self.laser_scan = np.array(msg.ranges)

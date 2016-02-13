@@ -1,0 +1,38 @@
+<!-- -*- mode: XML -*- -->
+
+<launch>
+
+  <group ns="lidar">
+    <node name="hokuyo_left" pkg="hokuyo_node" type="hokuyo_node">
+      <param name="port" type="string" value="/dev/sensors/hokuyo_H1008999" />
+      <remap from="scan" to="scan_left" />
+      <param name="frame_id" type="string" value="laser_left" />
+    </node>
+    <node name="hokuyo_middle" pkg="hokuyo_node" type="hokuyo_node">
+      <param name="port" type="string" value="/dev/sensors/hokuyo_H1009001" />
+      <remap from="scan" to="scan_middle" />
+      <param name="frame_id" type="string" value="laser_middle" />
+    </node>
+    <node name="hokuyo_right" pkg="hokuyo_node" type="hokuyo_node">
+      <param name="port" type="string" value="/dev/sensors/hokuyo_H1009061" />
+      <remap from="scan" to="scan_right" />
+      <param name="frame_id" type="string" value="laser_right" />
+    </node>  
+    <node pkg="ieee2016_navigation" type="laser_fuser.py" name="laser_fuser" output="screen"/>
+  </group>
+
+  <group ns="robot">
+      <node name="particle_filter" pkg="ieee2016_navigation" type="particle_filter.py" output="screen" />
+      <node name="tf_broadcaster" pkg="ieee2016_tf_broadcaster" type="tf_broadcaster.py" />
+      <node name="mecanum_control" pkg="ieee2016_controller" type="mecanum_controller.py" output="screen" />
+      <node name="vehicle_control" pkg="ieee2016_controller" type="vehicle_controller.py" output="screen" />
+      <node name="xmega_connector" pkg="ieee2016_xmega_connector_ported" type="xmega_connector_publisher.py" respawn="true" output="screen" >
+          <rosparam>
+              port: /dev/xmega_tty
+          </rosparam>
+      </node>
+  </group>
+
+  <!-- For remote control -->
+  <node name="joystick_control" pkg="ieee2016_diagnostics_ported" type="joystick_command" output="screen"/>
+</launch>
