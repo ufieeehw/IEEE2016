@@ -210,8 +210,7 @@ class Controller(object):
             x, y = np.dot(rot_mat, [vehicle_twist[0], vehicle_twist[1]]).A1
             #rospy.loginfo(self.pose)
 
-	    # By observation, odom data is backwards so subtract it instead of add it
-            self.pose += [x, y, vehicle_twist[2]]
+            self.pose -= [x, y, vehicle_twist[2]]
 
             orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
 
@@ -235,14 +234,14 @@ class Controller(object):
                 twist=TwistWithCovariance(
                     twist=Twist(
                         linear=Vector3(
-                            x=vehicle_twist[0],
-                            y=vehicle_twist[1],
+                            x=-vehicle_twist[0],
+                            y=-vehicle_twist[1],
                             z=0.0,
                         ),
                         angular=Vector3(
                             x=0.0,
                             y=0.0,
-                            z=vehicle_twist[2],
+                            z=-vehicle_twist[2],
                         )
                     ),
                     covariance=np.diag([0.3**2] * 6).flatten()
