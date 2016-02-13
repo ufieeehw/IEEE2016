@@ -63,7 +63,7 @@ class TFPublisher():
                         rospy.Time.now(), "laser_right", "base_link")
         self.tf_broad.sendTransform((0,0,-.03914), 
                         tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "laser_comb", "base_link")
+                        rospy.Time.now(), "laser_fused", "base_link")
 
         # base_link -> main camera
         self.tf_broad.sendTransform((.1524,0,.1524), 
