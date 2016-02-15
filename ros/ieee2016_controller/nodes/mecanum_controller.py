@@ -86,7 +86,6 @@ class Controller(object):
         dtype=np.float32)
         #rospy.loginfo(desired_action)
         self.send_mecanum(desired_action)
-        #self.spacenav_twist = twist_msg
 
     def got_twist_spacenav(self, twist_msg):
         if not self.on:
@@ -162,16 +161,15 @@ class Controller(object):
             [1] http://www2.informatik.uni-freiburg.de/~grisetti/teaching/ls-slam/lectures/pdf/ls-slam-03-hardware.pdf
 
         '''
-        # I am sorry to do this, I couldn't get y-twist to go in the right direction
-        v_target = np.array([-desired_action[0], -desired_action[1], desired_action[2]])
+        # I am sorry to add these negatives
+        v_target = np.array([desired_action[0], desired_action[1], desired_action[2]])
         mecanum_speeds = np.linalg.lstsq(self.mecanum_matrix, v_target)[0]
 
-        # These wheels are pointed backwards!
         wheel_speeds = [
-            mecanum_speeds[0], 
-            -mecanum_speeds[1], 
-            -mecanum_speeds[2], 
-            mecanum_speeds[3] 
+            -mecanum_speeds[0], 
+            mecanum_speeds[1], 
+            mecanum_speeds[2], 
+            -mecanum_speeds[3] 
         ]
         self.wheel_speed_proxy(*wheel_speeds)
 
@@ -194,15 +192,15 @@ class Controller(object):
         Each item (pose, odom) is formatted as [x, y, theta]
         Odometry messages are used because they contain covariances
         '''
-        freq = 10
-        r = rospy.Rate(freq) # 10hz
+        freq = 25 #hz
+        r = rospy.Rate(freq)
         while not rospy.is_shutdown():
             odom_srv = self.odometry_proxy()
             wheel_odom = np.array([
-                odom_srv.wheel1,
-                -odom_srv.wheel2,
-                -odom_srv.wheel3,
-                odom_srv.wheel4,
+                -odom_srv.wheel1,
+                odom_srv.wheel2,
+                odom_srv.wheel3,
+                -odom_srv.wheel4,
             ])
             vehicle_twist = np.dot(self.mecanum_matrix, wheel_odom).A1
             
@@ -210,7 +208,7 @@ class Controller(object):
             x, y = np.dot(rot_mat, [vehicle_twist[0], vehicle_twist[1]]).A1
             #rospy.loginfo(self.pose)
 
-            self.pose -= [x, y, vehicle_twist[2]]
+            self.pose += [x, y, vehicle_twist[2]]
 
             orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
 
@@ -234,14 +232,14 @@ class Controller(object):
                 twist=TwistWithCovariance(
                     twist=Twist(
                         linear=Vector3(
-                            x=-vehicle_twist[0],
-                            y=-vehicle_twist[1],
+                            x=vehicle_twist[0],
+                            y=vehicle_twist[1],
                             z=0.0,
                         ),
                         angular=Vector3(
                             x=0.0,
                             y=0.0,
-                            z=-vehicle_twist[2],
+                            z=vehicle_twist[2],
                         )
                     ),
                     covariance=np.diag([0.3**2] * 6).flatten()

@@ -148,7 +148,7 @@ class GPUAccFilter():
         # if abs(self.pose_update[0]) < tolerance and\
         #    abs(self.pose_update[1]) < tolerance and\
         #    abs(self.pose_update[2]) < tolerance: return
-        while len(self.laser_scan) == 0:
+        while len(self.laser_scan) == 0 and not rospy.is_shutdown():
             print "Waiting for scan."
 
         self.particles += self.pose_update
@@ -168,8 +168,7 @@ class GPUAccFilter():
         #Just for debugging ==================================
         print "WEIGHT PERCENTILE:", weight_percentile
         print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
-        print "PARTICLES REMOVED:", len(weights_raw)-len(weights) 
-        print "PARTICLE COUNT:", len(self.particles)
+        print "PARTICLE COUNT:", len(self.particles),"/",self.MAX_PARTICLES
 
         # Calculate pose esitmation before generating new particles
         new_x = np.mean(self.particles.T[0])

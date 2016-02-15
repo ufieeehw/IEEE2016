@@ -6,6 +6,7 @@ import sys
 import tf
 import os
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseStamped
 
 def save_waypoint(name, x, y, theta):
 	x_cor = str(x)
@@ -62,21 +63,22 @@ def load_waypoints():
 		return load_dict	
 
 def callback(data):
+	pos = (data.pose.position.x, data.pose.position.y)
 	#Converts quaternion coordinates to euler
-	quaternion = (data.pose.pose.orientation.x, data.pose.pose.orientation.y, data.pose.pose.orientation.z, data.pose.pose.orientation.w)
+	quaternion = (data.pose.orientation.x, data.pose.orientation.y, data.pose.orientation.z, data.pose.orientation.w)
 	euler = tf.transformations.euler_from_quaternion(quaternion)
-	roll = euler[0]
-	pitch = euler[1]
 	yaw = euler[2]
 
-	save_waypoint(sys.argv[1], roll, pitch, yaw)
+	save_waypoint(sys.argv[1], data.pose.position.x, data.pose.position.y, yaw)
 	sub.unregister()
+	print "Waypoint Saved:", sys.argv[1],data.pose.position.x,data.pose.position.y,yaw
 	rospy.signal_shutdown("Message saved")
 
 def listener():
 	rospy.init_node('listener', anonymous=True)
 	global sub
-	sub = rospy.Subscriber("robot_odom_filter", Odometry, callback)
+	#print "listneing"
+	sub = rospy.Subscriber("/robot/pf_pose_est", PoseStamped, callback)
 	rospy.spin()
 
 if __name__ == "__main__":

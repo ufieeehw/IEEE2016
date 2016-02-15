@@ -15,11 +15,11 @@ from ieee2015_msgs.srv import StopController, StopControllerResponse
 from nav_msgs.msg import Odometry
 
 # max_linear_vel = 1 # m/s
-max_linear_vel = 0.09
+max_linear_vel = 0.420
 max_linear_acc = max_linear_vel # m/s^2
 
 # max_angular_vel = 2 # rad/s
-max_angular_vel = 0.5 # rad/s
+max_angular_vel = 0.69 # rad/s
 max_angular_acc = max_angular_vel # rad/s^2 
 
 # (Jason says this is just called angular acceleration, # I call it angcelleration)
@@ -70,16 +70,16 @@ class Controller(object):
         self.yaw = None
 
         # Current pose sub
-        self.pose_sub = rospy.Subscriber('/pf_pose_est', PoseStamped, self.got_pose)
+        self.pose_sub = rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose)
         #self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
 
-        self.desired_pose_sub = rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.got_desired_pose)
+        self.desired_pose_sub = rospy.Subscriber('/robot/waypoint', PoseStamped, self.got_desired_pose)
 
         self.on = True
         rospy.Service('controller/stop', StopController, self.stop)
-        freq = 10
-        r = rospy.Rate(freq) # 10hz
-
+        freq = 50 #hz
+        r = rospy.Rate(freq)
+        print "Initialization Finished."
         while not rospy.is_shutdown():
             rospy.sleep(rospy.Duration(0.1))
             self.control()
@@ -100,7 +100,7 @@ class Controller(object):
 
     def send_twist(self, (xvel, yvel), angvel):
         '''Generate twist message'''
-        rospy.loginfo("Send")
+        #rospy.loginfo("Send")
         self.twist_pub.publish(
             TwistStamped(
                 header = Header(
@@ -108,8 +108,8 @@ class Controller(object):
                     frame_id='base_link',
                 ),
                 twist=Twist(
-                    linear=Vector3(-xvel, -yvel, 0),
-                    angular=Vector3(0, 0, -angvel),  # Radians
+                    linear=Vector3(xvel, yvel, 0),
+                    angular=Vector3(0, 0, angvel),  # Radians
                 )
             )
         )
@@ -182,72 +182,57 @@ class Controller(object):
         # World frame position
         position_error = self.des_position - self.position
         yaw_error = self.norm_angle_diff(self.des_yaw, self.yaw)
-        print position_error,yaw_error
-        position_error_len = np.linalg.norm(position_error)
+        print "RAW ERR:",position_error
 
-        if (position_error_len > 0.08): # 8cm stop-error
-            #yaw_target = np.arctan2(position_error[0], -position_error[1]) - (np.pi /2)
-            #yaw_error = self.norm_angle_diff(yaw_target, self.yaw)
+        rot_mat = np.array([[math.cos(self.yaw), -math.sin(self.yaw)],
+                            [math.sin(self.yaw),  math.cos(self.yaw)]])
+        
+        position_error = np.dot(position_error,rot_mat)
+        print "ERR:",position_error,yaw_error
 
-            # print 'error', position_error
-            # print 'yaw error', yaw_error
-            if np.fabs(yaw_error) > 0.08:
-                state = 'nav_start_rotate'
-            else:
-                state = 'nav_drive'
+        nav_tolerance = (.01,.01) #m, rads
+        command = [] # 'X' means move in x, 'Y' move in y, 'R' means rotate
 
-        elif np.fabs(yaw_error) > 0.05:
-            state = 'stop_rotate'
-
-        else:
-            state = 'stop'
+        # Determine which commands to send based on how close we are to target
+        if abs(position_error[0]) > nav_tolerance[0]:
+            command.append('X')
+        if abs(position_error[1]) > nav_tolerance[0]:
+            command.append('Y')
+        if abs(yaw_error) > nav_tolerance[1]:
+            command.append('R')
 
         # Determines the linear speed necessary to maintain a consant backward acceleration
         linear_speed = min(
-                            math.sqrt(2 * np.linalg.norm(position_error) * max_linear_acc),
+                            .3*math.sqrt(np.linalg.norm(position_error) * max_linear_acc),
                             max_linear_vel
                         )
         # Determines the angular speed necessary to maintain a constant angular acceleration 
         #  opposite the direction of motion
         angular_speed = min(
-                            math.sqrt(2 * abs(yaw_error) * max_angular_acc), 
+                            .5*math.sqrt(abs(yaw_error) * max_angular_acc), 
                             max_angular_vel
                         )
 
         # Provide direction for both linear and angular velocity
         desired_vel = linear_speed * self.unit_vec(position_error)
-        print desired_vel
         desired_angvel = angular_speed * self.sign(yaw_error)
 
-        # Unit vectors that determine the right-handed coordinate system of the robot in the world frame
-        #self.yaw = math.radians(90)
-        #forward = np.array([math.cos(self.yaw), math.sin(self.yaw)])
-        #left = np.array([math.cos(self.yaw + np.pi/2), math.sin(self.yaw + np.pi/2)])
-        rot_mat = np.array([[math.cos(self.yaw), -math.sin(self.yaw)],
-                            [math.sin(self.yaw),  math.cos(self.yaw)]])
-        print rot_mat
-
-        # Send twist if above error threshold
-        # Point at position, go to position, achieve desired orientation
-
-        print state
-        if state == 'nav_drive':
-            vel = rot_mat.dot(desired_vel)
+        print command
+        target_vel = [0,0]
+        target_angvel = 0
+        if 'X' in command:
+            target_vel[0] = desired_vel[0]
+        if 'Y' in command:
+            target_vel[1] = desired_vel[1]
+        if 'R' in command:
             target_angvel = desired_angvel
+        if not command:
+            self.des_position = None
+            self.des_yaw = None
 
-        elif state == 'nav_start_rotate':
-            vel = [0,0]
-            target_angvel = desired_angvel
+        print "VEL:",target_vel,target_angvel
 
-        elif state == 'stop_rotate':
-            vel = [0,0]
-            target_angvel = desired_angvel
-
-        elif state == 'stop':
-            vel = [0,0]
-            target_angvel = 0.0
-
-        self.send_twist(vel, target_angvel) 
+        self.send_twist(target_vel, target_angvel)
 
     def got_desired_pose(self, msg):
         '''Recieved desired pose message
