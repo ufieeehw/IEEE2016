@@ -2,8 +2,9 @@
 import rospy
 from std_msgs.msg import Header
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
-from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3
+from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped, Vector3
 from sensor_msgs.msg import LaserScan
+from ieee2016_msgs.srv import ResetOdom
 import tf
 
 import numpy as np
@@ -82,24 +83,30 @@ class GPUAccMap():
 class GPUAccFilter():
     def __init__(self, center, radius, heading_range, m):
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
+        
         # ROS Inits
+
+        # These are to manually set a pose in rviz
+        rospy.wait_for_service('/robot/reset_odom')
+        self.set_odometry_proxy = rospy.ServiceProxy('/robot/reset_odom', ResetOdom)
+        self.init_pose_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, self.got_pose_estimate)
+
         self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
-        self.laser_scan_vis = rospy.Publisher('/test_points', PoseArray, queue_size=2)
         self.pose_est_pub = rospy.Publisher('/robot/pf_pose_est', PoseStamped, queue_size=2)
         self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
-        #self.twist_sub = rospy.Subscriber('/test/twist', TwistStamped, self.got_twist)
         self.laser_scan_sub = rospy.Subscriber('/lidar/scan_fused', LaserScan, self.got_laserscan)
+
         self.br = tf.TransformBroadcaster()
 
         self.m = m
-        self.INIT_PARTICLES = 512
+        self.INIT_PARTICLES = 2048
         self.MAX_PARTICLES = 2048
 
         # We start at our esitmated starting position
-        self.pose = np.array([.2,.2,1.57], np.float32)
+        self.pose = np.array([center[0],center[1],sum(heading_range)/2.0], np.float32)
         self.pose_update = np.array([0,0,0], np.float32) 
 
-        self.pose_est = np.array([.2,.2,1.57], np.float32)
+        self.pose_est = np.array([center[0],center[1],sum(heading_range)/2.0], np.float32)
 
         # Generate random point in circle and add to array of particle coordinates
         self.particles = np.empty([1,3])
@@ -123,6 +130,22 @@ class GPUAccFilter():
             self.run_filter()
             #print "HZ:",1.0/(time.time()-start_time)
             start_time = time.time()
+
+    def got_pose_estimate(self, msg):
+        print msg
+        new_yaw = tf.transformations.euler_from_quaternion([msg.pose.pose.orientation.x,msg.pose.pose.orientation.y,msg.pose.pose.orientation.z,msg.pose.pose.orientation.w])[2]
+        new_pose = np.array([msg.pose.pose.position.x,msg.pose.pose.position.y,new_yaw])
+        self.pose_update = np.array([new_pose - self.pose])
+        self.pose = np.array(new_pose)
+
+        # Make new particles around that spot
+        self.particles = np.zeros([1,3])+1
+        self.gen_particles(self.INIT_PARTICLES, new_pose[:2], 2, (new_pose[2]-.5,new_pose[2]+.5))
+        self.particles = self.particles[1:]
+
+        self.set_odometry_proxy(x=new_pose[0],y=new_pose[1],yaw=new_pose[2])
+
+
 
     def gen_particles(self, number_of_particles, center, radius, heading_range):
         #print "GENERATING PARTICLES:", number_of_particles
@@ -156,35 +179,39 @@ class GPUAccFilter():
         # Reset the pose update so that the next run will contain the pose update from this point
         self.pose_update = np.array([0,0,0], np.float32)
 
-        # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
-        weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
+        try:
+            # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
+            weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
-        # # Remove low weights from particle and weights list
-        weight_percentile = 95 #percent
-        weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
-        weights = weights_raw[weights_indicies_to_keep]
-        self.particles = self.particles[weights_indicies_to_keep]
+            # Remove low weights from particle and weights list
+            weight_percentile = 95 #percent
+            weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
+            weights = weights_raw[weights_indicies_to_keep]
+            self.particles = self.particles[weights_indicies_to_keep]
 
-        #Just for debugging ==================================
-        print "WEIGHT PERCENTILE:", weight_percentile
-        print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
-        print "PARTICLE COUNT:", len(self.particles),"/",self.MAX_PARTICLES
+            #Just for debugging ==================================
+            print "WEIGHT PERCENTILE:", weight_percentile
+            print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
+            print "PARTICLE COUNT:", len(self.particles),"/",self.MAX_PARTICLES
 
-        # Calculate pose esitmation before generating new particles
-        new_x = np.mean(self.particles.T[0])
-        new_y = np.mean(self.particles.T[1])
-        new_head = np.mean(self.particles.T[2])
+            # Calculate pose esitmation before generating new particles
+            new_x = np.mean(self.particles.T[0])
+            new_y = np.mean(self.particles.T[1])
+            new_head = np.mean(self.particles.T[2])
+            print ""
+            print new_x,new_y,new_head
+            # Update Pose
+            self.publish_pose([new_x,new_y,new_head])
 
-        # Update Pose
-        self.publish_pose([new_x,new_y,new_head])
+            translation_vairance = .3  #m  #.1
+            rotational_vairance = .6 #rads #.5
 
-        translation_vairance = .3  #m  #.1
-        rotational_vairance = .6 #rads #.5
-
-        self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
-                            self.pose_est[:2],
-                            translation_vairance,
-                            (self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance) )
+            self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
+                                self.pose_est[:2],
+                                translation_vairance,
+                                (self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance) )
+        except:
+            print "Error was found and excepted."
         print 
 
     def publish_pose(self,particle_avg):
@@ -317,7 +344,7 @@ def add_noise(values,noise_size):
 
 rospy.init_node('particle_filter', anonymous=True)
 m = GPUAccMap()
-f = GPUAccFilter((.2,.2), .5, (1.3,1.8), m)
+f = GPUAccFilter((1.2,1.2), 3, (1.3,1.8), m)
 
 rospy.spin()
 

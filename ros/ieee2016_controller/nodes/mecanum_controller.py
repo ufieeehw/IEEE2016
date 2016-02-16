@@ -13,9 +13,9 @@ from geometry_msgs.msg import (Pose, PoseStamped, TwistStamped, Pose2D, PoseWith
     TwistWithCovariance, Twist)
 from sensor_msgs.msg import Joy
 from nav_msgs.msg import Odometry
-from ieee2015_msgs.msg import Mecanum
-from ieee2015_msgs.srv import StopMecanum, StopMecanumResponse, ResetOdom, ResetOdomResponse
-from xmega_connector.srv import * #Echo, EchoRequest, EchoResponse, SetWheelSpeeds
+from ieee2016_msgs.msg import Mecanum
+from ieee2016_msgs.srv import StopMecanum, StopMecanumResponse, ResetOdom, ResetOdomResponse
+from ieee2016_xmega_connector_ported.srv import * #Echo, EchoRequest, EchoResponse, SetWheelSpeeds
 
 class Controller(object):
     def __init__(self):
@@ -161,7 +161,6 @@ class Controller(object):
             [1] http://www2.informatik.uni-freiburg.de/~grisetti/teaching/ls-slam/lectures/pdf/ls-slam-03-hardware.pdf
 
         '''
-        # I am sorry to add these negatives
         v_target = np.array([desired_action[0], desired_action[1], desired_action[2]])
         mecanum_speeds = np.linalg.lstsq(self.mecanum_matrix, v_target)[0]
 
@@ -184,7 +183,7 @@ class Controller(object):
         return mat
 
     def reset(self, srv):
-        self.pose = np.array([0.0, 0.0, 0.0])
+        self.pose = np.array([srv.x, srv.y, srv.yaw])
         return ResetOdomResponse()
 
     def get_odom(self):
