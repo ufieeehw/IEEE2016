@@ -69,6 +69,8 @@ class Controller(object):
         self.position = None
         self.yaw = None
 
+        self.starting_move_error = None
+
         # Current pose sub
         self.pose_sub = rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose)
         #self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
@@ -171,13 +173,9 @@ class Controller(object):
         Velocity calcluation should be done in a separate thread
          this thread should have an independent information "watchdog" timing method
         '''
-        if (self.des_position is None) or (self.des_yaw is None) or (self.on is False):
-            #rospy.logwarn("des")
-            return
+        if (self.des_position is None) or (self.des_yaw is None) or (self.on is False): return
 
-        if (self.position is None) or (self.yaw is None):
-            #rospy.logwarn("curr")
-            return
+        if (self.position is None) or (self.yaw is None): return
 
         # World frame position
         position_error = self.des_position - self.position
@@ -190,7 +188,7 @@ class Controller(object):
         position_error = np.dot(position_error,rot_mat)
         print "ERR:",position_error,yaw_error
 
-        nav_tolerance = (.01,.01) #m, rads
+        nav_tolerance = (.001,.001) #m, rads
         command = [] # 'X' means move in x, 'Y' move in y, 'R' means rotate
 
         # Determine which commands to send based on how close we are to target
@@ -201,10 +199,15 @@ class Controller(object):
         if abs(yaw_error) > nav_tolerance[1]:
             command.append('R')
 
+        if self.starting_move_error is None: 
+            self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .01
+            print "MV_ERR",self.starting_move_error
+
+        linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc) * \
+                           math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
         # Determines the linear speed necessary to maintain a consant backward acceleration
         linear_speed = min(
-                            .3*math.sqrt(np.linalg.norm(position_error) * max_linear_acc),
-                            max_linear_vel
+                            .6*linear_speed_raw, max_linear_vel
                         )
         # Determines the angular speed necessary to maintain a constant angular acceleration 
         #  opposite the direction of motion
@@ -241,6 +244,7 @@ class Controller(object):
         #LearnToThreading
         (That's a hashtag)
         '''
+        self.starting_move_error = None
         self.des_position = np.array([msg.pose.position.x, msg.pose.position.y])
         self.des_yaw = tf_trans.euler_from_quaternion(xyzw_array(msg.pose.orientation))[2]
 

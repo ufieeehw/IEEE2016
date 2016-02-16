@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 import rospy
 from std_msgs.msg import Header
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
@@ -139,13 +139,11 @@ class GPUAccFilter():
         self.pose = np.array(new_pose)
 
         # Make new particles around that spot
-        self.particles = np.zeros([1,3])+1
-        self.gen_particles(self.INIT_PARTICLES, new_pose[:2], 2, (new_pose[2]-.5,new_pose[2]+.5))
+        self.particles = np.zeros([1,3])
+        self.gen_particles(self.INIT_PARTICLES, new_pose[:2], 3, (new_pose[2]-.5,new_pose[2]+.5))
         self.particles = self.particles[1:]
 
         self.set_odometry_proxy(x=new_pose[0],y=new_pose[1],yaw=new_pose[2])
-
-
 
     def gen_particles(self, number_of_particles, center, radius, heading_range):
         #print "GENERATING PARTICLES:", number_of_particles
@@ -344,7 +342,7 @@ def add_noise(values,noise_size):
 
 rospy.init_node('particle_filter', anonymous=True)
 m = GPUAccMap()
-f = GPUAccFilter((1.2,1.2), 3, (1.3,1.8), m)
+f = GPUAccFilter((.2,.2), 3, (1.3,1.8), m)
 
 rospy.spin()
 
