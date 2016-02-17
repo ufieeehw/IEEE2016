@@ -2,12 +2,16 @@
 import rospy
 import tf
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Int32
 
 
 class TFPublisher():
     def __init__(self,rate):
         self.tf_broad = tf.TransformBroadcaster()
         self.odom_sub = rospy.Subscriber("/robot/odom", Odometry, self.got_odom, queue_size=2)
+        self.elevator_sub = rospy.Subscriber("/robot/arms/elevator", Int32, self.got_elevator_pos, queue_size=2)
+        self.linear_rail_sub = rospy.Subscriber("/robot/arms/rail", Int32, self.got_linear_rail_pos, queue_size=2)
+        
         # base_link (0,0,0) = center base(top level) of Shia
 
         r = rospy.Rate(rate) #hz
@@ -17,6 +21,19 @@ class TFPublisher():
             self.static_tf()
 
             r.sleep()
+
+    def got_elevator_pos(self,msg):
+        self.tf_broad.sendTransform((0,0,msg.data/1000.0), 
+                tf.transformations.quaternion_from_euler(0,0,0),
+                rospy.Time.now(), "elevator", "base_link")
+
+    def got_linear_rail_pos(self,msg): 
+        self.tf_broad.sendTransform((msg.data/1000.0,-.05,0), 
+                tf.transformations.quaternion_from_euler(0,0,0),
+                rospy.Time.now(), "EE1", "elevator")
+        self.tf_broad.sendTransform((-msg.data/1000.0,.05,0), 
+                tf.transformations.quaternion_from_euler(0,0,3.1416),
+                rospy.Time.now(), "EE2", "elevator")
 
     def got_odom(self,msg):
         msg = msg.pose.pose
@@ -65,26 +82,18 @@ class TFPublisher():
                         tf.transformations.quaternion_from_euler(0,0,0),
                         rospy.Time.now(), "laser_fused", "base_link")
 
-        # base_link -> main camera
-        self.tf_broad.sendTransform((.1524,0,.1524), 
+        # base_link -> main cameras
+        self.tf_broad.sendTransform((0,0,.05), 
                         tf.transformations.quaternion_from_euler(1.57,3.1415,1.57),
-                        rospy.Time.now(), "cam_0", "base_link")
+                        rospy.Time.now(), "cam_1", "EE1")
+        self.tf_broad.sendTransform((0,0,.05), 
+                        tf.transformations.quaternion_from_euler(1.57,3.1415,1.57),
+                        rospy.Time.now(), "cam_2", "EE2")
 
         # base_link -> imu
         self.tf_broad.sendTransform((0,0,0), 
                         tf.transformations.quaternion_from_euler(0,0,0),
                         rospy.Time.now(), "imu", "base_link")
-
-        # TEMP
-        self.tf_broad.sendTransform((.15,.15,.15), 
-                        tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "EE1", "base_link")
-        self.tf_broad.sendTransform((0,-.15,.15), 
-                        tf.transformations.quaternion_from_euler(0,0,-1.57),
-                        rospy.Time.now(), "EE2", "base_link")        
-        #self.tf_broad.sendTransform((.2,.2,0), 
-        #                 tf.transformations.quaternion_from_euler(0,0,1.57),
-        #                 rospy.Time.now(), "base_link", "map") 
 
 if __name__ == "__main__":
     rospy.init_node('tf_broadcaster')
