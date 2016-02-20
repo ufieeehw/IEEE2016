@@ -24,7 +24,7 @@ class TFPublisher():
 
     def got_elevator_pos(self,msg):
         self.tf_broad.sendTransform((0,0,msg.data/1000.0), 
-                tf.transformations.quaternion_from_euler(0,0,0),
+                tf.transformations.quaternion_from_euler(0,0,1.5708),
                 rospy.Time.now(), "elevator", "base_link")
 
     def got_linear_rail_pos(self,msg): 
