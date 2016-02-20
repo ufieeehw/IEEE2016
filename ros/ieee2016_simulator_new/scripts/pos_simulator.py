@@ -5,6 +5,8 @@ import tf
 from std_msgs.msg import Header
 from geometry_msgs.msg import TwistStamped, Twist, Vector3, Pose, PoseStamped, Quaternion, Point
 
+import time
+
 class Simulator():
     def __init__(self, starting_point):
         # ROS inits
@@ -18,6 +20,7 @@ class Simulator():
 
         rate = rospy.Rate(10) #hz
         while not rospy.is_shutdown():
+            self.last_time = time.time()
             self.publish_pose()
 
             rate.sleep()
@@ -27,7 +30,9 @@ class Simulator():
         self.publish_pose()
 
     def got_twist(self, msg):
-        vel = np.array([msg.twist.linear.x/10.0,msg.twist.linear.y/10.0])
+        freq = (time.time() - self.last_time)
+        print freq
+        vel = np.array([msg.twist.linear.x*freq,msg.twist.linear.y*freq])
 
         c, s = np.cos(-self.pose[2]), np.sin(-self.pose[2])
         mat = np.array([
@@ -35,9 +40,9 @@ class Simulator():
             [s,      c],
         ])
         vel = np.dot(vel,mat)
-        print vel
-        self.pose += np.array([vel[0],vel[1],msg.twist.angular.z/100.0])
-
+        #print vel
+        self.pose += np.array([vel[0],vel[1],msg.twist.angular.z*freq])
+        self.last_time = time.time()
     def publish_pose(self):
         q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
         p_s = PoseStamped(
