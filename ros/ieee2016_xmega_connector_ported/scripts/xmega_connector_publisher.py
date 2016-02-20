@@ -10,7 +10,7 @@ import math
 import numpy
 from std_msgs.msg import Header, Float64
 from xmega_connector.msg import XMEGAPacket
-from xmega_connector.srv import * # Echo, EchoRequest, EchoResponse
+from xmega_connector.srv import *
 from geometry_msgs.msg import TwistStamped, Twist, Vector3, PoseStamped, Pose, Point, Quaternion
 from sensor_msgs.msg import Imu
 from tf import transformations
