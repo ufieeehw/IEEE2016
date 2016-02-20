@@ -53,10 +53,11 @@ add_message_files(
 
 add_service_files(
    FILES
-   ComputeDistance.srv
+   NavWaypoint.srv
    StopMecanum.srv
    StopController.srv
    ResetOdom.srv
+   ArmWaypoint.srv
 )
 
 ## Generate actions in the 'action' folder

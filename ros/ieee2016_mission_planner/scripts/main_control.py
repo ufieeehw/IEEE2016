@@ -2,22 +2,12 @@
 import rospy
 from std_msgs.msg import Bool, Int8, Header
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3
+from ieee2016_msgs.srv import NavWaypoint, ArmWaypoint
 import tf
 
 from waypoint_utils import load_waypoints
 import time
 import os
-
-"""
-For map version one WIP
-
-1. move to waypoint through_the_tunnel
-2. move to waypoint analyze_train_blocks, save locations of each qr code
-3. move to waypoint load_train_blocks, update locations of qr code enroute
-4. move to waypoint analyze_train, save train box locations and keep track of which color coor. to each box
-5. move to appropiate box waypoints to unload blocks
-6. repeat as necessary
-"""
 
 class ShiaStateMachine():
     def __init__(self):
@@ -44,16 +34,26 @@ class ShiaStateMachine():
         self.current_state+=1
 
         self.running = True
+        rate = rospy.Rate(25) #hz
         while not rospy.is_shutdown():
-            #print current_state
-            if self.current_state == 1:
-                print "=== STATE 1 ==="
-                self.ros_manager.set_waypoint(self.waypoints['through_the_tunnel'])
+            
+            self.ros_manager.publish_current_state(self.current_state)
 
+            if self.current_state == 1:
+                """
+                The goals of this state are to drive through the box, then rotate in order to get camera 1 in view of the blocks
+                """
+                print "=== STATE 1 ==="
+                self.ros_manager.set_waypoint(self.waypoints['through_box'])
+                self.ros_manager.set_waypoint(self.waypoints['examine_blocksC'])
                 self.current_state+=1
 
-            # elif self.current_state == 2:
-            #     self.find_target_blocks()
+            elif self.current_state == 2:
+                """
+                The goals of this state is to generate a point cloud of blocks for the C blocks
+                """
+                print "=== STATE 2 ==="
+                
             # elif self.current_state == 3:
             #     self.load_robot()
             # elif self.current_state == 4:
@@ -66,7 +66,7 @@ class ShiaStateMachine():
             #     self.return_to_block()
 
             if self.current_state > 7: self.current_state = 0
-            time.sleep(.01)
+            rate.sleep()
 
 class ros_manager():
     def __init__(self,s):
@@ -74,11 +74,15 @@ class ros_manager():
         self.map_version_set = False
 
         # ROS inits
+        self.nav_waypoint_pub = rospy.Publisher("/robot/waypoint", PoseStamped, queue_size=1)
+        self.state_pub = rospy.Publisher("/robot/current_state", Int8, queue_size=10)
+        self.nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
+        
         rospy.init_node('main_control')
+        
         rospy.Subscriber('/settings/start_command',Bool,self.recieve_start_command,self.state_machine)
         rospy.Subscriber('/settings/map_version',Int8,self.determine_map_version)
         
-        self.point_pub = rospy.Publisher("/robot/desired_pose", PoseStamped, queue_size=1)
 
     def recieve_start_command(self,msg,s):
         if msg.data and not self.state_machine.running and self.map_version_set:
@@ -93,8 +97,7 @@ class ros_manager():
 
     def set_waypoint(self,waypoint):
         q = tf.transformations.quaternion_from_euler(0, 0, waypoint[2])
-        self.point_pub.publish(
-            PoseStamped(
+        p_s = PoseStamped(
                 header=Header(
                     stamp=rospy.Time.now(),
                     frame_id="map"
@@ -113,9 +116,14 @@ class ros_manager():
                     )
                 )
             )
-        )
+        self.nav_waypoint_pub.publish(p_s)
         print "> Waypoint published:",waypoint
+        print "> Moving..."
+        success = self.nav_waypoint(p_s)
+        print "> Movement Complete!"
 
+    def publish_current_state(self,state):
+        self.state_pub.publish(state)
 
 if __name__ == "__main__":
     os.system("clear")

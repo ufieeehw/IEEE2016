@@ -10,8 +10,8 @@ import rospy
 ## Ros msgs
 from std_msgs.msg import Header
 from geometry_msgs.msg import Pose, PoseStamped, Twist, TwistStamped, Vector3
-from ieee2015_msgs.msg import Mecanum
-from ieee2015_msgs.srv import StopController, StopControllerResponse
+from ieee2016_msgs.msg import Mecanum
+from ieee2016_msgs.srv import StopController, NavWaypoint
 from nav_msgs.msg import Odometry
 
 # max_linear_vel = 1 # m/s
@@ -62,30 +62,29 @@ class Controller(object):
         # Twist pub
         self.twist_pub = rospy.Publisher('/robot/twist', TwistStamped, queue_size=1) 
         
+        self.tf_listener = tf.TransformListener()
+
         # Initializations to avoid weird desynchronizations
         self.des_position = None
         self.des_yaw = None
         # Don't want to have an a-priori position
         self.position = None
         self.yaw = None
-
+        # This will be used for the velocity profile
         self.starting_move_error = None
 
         # Current pose sub
         self.pose_sub = rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose)
         #self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
+        #self.desired_pose_sub = rospy.Subscriber('/robot/waypoint', PoseStamped, self.got_desired_pose)
 
-        self.desired_pose_sub = rospy.Subscriber('/robot/waypoint', PoseStamped, self.got_desired_pose)
+        rospy.Service('controller/stop', StopController, self.stop)
+        rospy.Service('/robot/nav_waypoint', NavWaypoint, self.got_desired_pose)
 
         self.on = True
-        rospy.Service('controller/stop', StopController, self.stop)
-        freq = 50 #hz
-        r = rospy.Rate(freq)
         print "Initialization Finished."
-        while not rospy.is_shutdown():
-            rospy.sleep(rospy.Duration(0.1))
-            self.control()
-            r.sleep()
+
+        rospy.spin()
 
     def stop(self, req):
         self.on = not req.stop
@@ -97,8 +96,6 @@ class Controller(object):
             rospy.logwarn("ENABLING MECANUM CONTROLLER")
             self.des_position = None
             self.des_yaw = None
-
-        return StopControllerResponse()
 
     def send_twist(self, (xvel, yvel), angvel):
         '''Generate twist message'''
@@ -168,76 +165,80 @@ class Controller(object):
             This will probably have to be done in a separate thread
 
         Changes from last year:
-            Enabled backwards and side to side motion.
+            Enabled backwards and side to side motion. Added a different velocity profile.
 
         Velocity calcluation should be done in a separate thread
          this thread should have an independent information "watchdog" timing method
         '''
-        if (self.des_position is None) or (self.des_yaw is None) or (self.on is False): return
-
-        if (self.position is None) or (self.yaw is None): return
-
-        # World frame position
-        position_error = self.des_position - self.position
-        yaw_error = self.norm_angle_diff(self.des_yaw, self.yaw)
-        print "RAW ERR:",position_error
-
-        rot_mat = np.array([[math.cos(self.yaw), -math.sin(self.yaw)],
-                            [math.sin(self.yaw),  math.cos(self.yaw)]])
+        if (self.position is None) or (self.yaw is None) or (self.on is False): return
         
-        position_error = np.dot(position_error,rot_mat)
-        print "ERR:",position_error,yaw_error
+        r = rospy.Rate(25) #hz
+        # Loop until there is no command being sent out.
+        command = ['_']
+        while command or not rospy.is_shutdown():
+            # World frame position
+            position_error = self.des_position - self.position
+            yaw_error = self.norm_angle_diff(self.des_yaw, self.yaw)
+            print "RAW ERR:",position_error
 
-        nav_tolerance = (.001,.001) #m, rads
-        command = [] # 'X' means move in x, 'Y' move in y, 'R' means rotate
+            rot_mat = np.array([[math.cos(self.yaw), -math.sin(self.yaw)],
+                                [math.sin(self.yaw),  math.cos(self.yaw)]])
+            
+            position_error = np.dot(position_error,rot_mat)
+            print "ERR:",position_error,yaw_error
 
-        # Determine which commands to send based on how close we are to target
-        if abs(position_error[0]) > nav_tolerance[0]:
-            command.append('X')
-        if abs(position_error[1]) > nav_tolerance[0]:
-            command.append('Y')
-        if abs(yaw_error) > nav_tolerance[1]:
-            command.append('R')
+            nav_tolerance = (.001,.001) #m, rads
+            command = [] # 'X' means move in x, 'Y' move in y, 'R' means rotate
 
-        if self.starting_move_error is None: 
-            self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .01
-            print "MV_ERR",self.starting_move_error
+            # Determine which commands to send based on how close we are to target
+            if abs(position_error[0]) > nav_tolerance[0]:
+                command.append('X')
+            if abs(position_error[1]) > nav_tolerance[0]:
+                command.append('Y')
+            if abs(yaw_error) > nav_tolerance[1]:
+                command.append('R')
 
-        linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc) * \
-                           math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
-        # Determines the linear speed necessary to maintain a consant backward acceleration
-        linear_speed = min(
-                            .6*linear_speed_raw, max_linear_vel
-                        )
-        # Determines the angular speed necessary to maintain a constant angular acceleration 
-        #  opposite the direction of motion
-        angular_speed = min(
-                            .5*math.sqrt(abs(yaw_error) * max_angular_acc), 
-                            max_angular_vel
-                        )
+            if self.starting_move_error is None: 
+                self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .01
+                print "MV_ERR",self.starting_move_error
 
-        # Provide direction for both linear and angular velocity
-        desired_vel = linear_speed * self.unit_vec(position_error)
-        desired_angvel = angular_speed * self.sign(yaw_error)
+            linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc) * \
+                               math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
+            # Determines the linear speed necessary to maintain a consant backward acceleration
+            linear_speed = min(
+                                .6*linear_speed_raw, max_linear_vel
+                            )
+            # Determines the angular speed necessary to maintain a constant angular acceleration 
+            #  opposite the direction of motion
+            angular_speed = min(
+                                .5*math.sqrt(abs(yaw_error) * max_angular_acc), 
+                                max_angular_vel
+                            )
 
-        print command
-        target_vel = [0,0]
-        target_angvel = 0
-        if 'X' in command:
-            target_vel[0] = desired_vel[0]
-        if 'Y' in command:
-            target_vel[1] = desired_vel[1]
-        if 'R' in command:
-            target_angvel = desired_angvel
-        if not command:
-            self.des_position = None
-            self.des_yaw = None
+            # Provide direction for both linear and angular velocity
+            desired_vel = linear_speed * self.unit_vec(position_error)
+            desired_angvel = angular_speed * self.sign(yaw_error)
 
-        print "VEL:",target_vel,target_angvel
+            print command
+            target_vel = [0,0]
+            target_angvel = 0
+            if 'X' in command:
+                target_vel[0] = desired_vel[0]
+            if 'Y' in command:
+                target_vel[1] = desired_vel[1]
+            if 'R' in command:
+                target_angvel = desired_angvel
+            if not command:
+                # Break when we are finished moving
+                break
 
-        self.send_twist(target_vel, target_angvel)
+            print "VEL:",target_vel,target_angvel
 
-    def got_desired_pose(self, msg):
+            self.send_twist(target_vel, target_angvel)
+            r.sleep()
+
+
+    def got_desired_pose(self, srv):
         '''Recieved desired pose message
         Figure out how to do this in a separate thread
         So we're not depending on a message to act
@@ -245,9 +246,22 @@ class Controller(object):
         (That's a hashtag)
         '''
         self.starting_move_error = None
+
+        msg = srv.des_pose
+        # Make sure the pose is in the map frame
+        try:
+            self.tf_listener.waitForTransform(msg.header.frame_id,"/map", rospy.Time.now(), rospy.Duration(1.0))
+            msg = self.tf_listener.transformPose("/map",msg)
+        except:
+            return False
+
         self.des_position = np.array([msg.pose.position.x, msg.pose.position.y])
         self.des_yaw = tf_trans.euler_from_quaternion(xyzw_array(msg.pose.orientation))[2]
 
+        # Only do this when we have a desired pose
+        self.control()
+        print "Movement Complete!"
+        return True
 
 if __name__ == '__main__':
     rospy.logwarn("Starting")
