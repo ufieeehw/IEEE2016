@@ -1,2 +1,2 @@
-KERNEL=="video[0-9]*", SUBSYSTEM=="video4linux",ATTRS{idVendor}=="046d", ATTRS{idProduct}=="082d", ATTRS{serial}=="57E86DAF", SYMLINK+="video_cam_1"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="046d", MODE="0666" 
 
