@@ -15,9 +15,6 @@ import os
 
 class CameraManager():
     def __init__(self):
-        # There may be a better way to init these cameras
-        self.cam_1 = cv2.VideoCapture(1)
-        self.cam_2 = cv2.VideoCapture(2)
 
         # ROS inits
         self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size=1)
@@ -26,13 +23,21 @@ class CameraManager():
         br = CvBridge()
         rospy.Service('/camera/camera_set', CameraSet, self.set_camera)  
 
+        # Find the cameras with the given parameters
+        self.cam_1 = cv2.VideoCapture(rospy.get_param("~cam_1_index"))
+        self.cam_1.set(3, rospy.get_param("~cam_1_width")) #CV_CAP_PROP_FRAME_WIDTH
+        self.cam_1.set(4, rospy.get_param("~cam_1_heigth")) #CV_CAP_PROP_FRAME_HEIGHT
 
+        self.cam_2 = cv2.VideoCapture(rospy.get_param("~cam_2_index"))
+        self.cam_2.set(3, rospy.get_param("~cam_2_width")) #CV_CAP_PROP_FRAME_WIDTH
+        self.cam_2.set(4, rospy.get_param("~cam_2_heigth")) #CV_CAP_PROP_FRAME_HEIGHT
 
         self.cam = None
         self.pub = None
     
+        print "> Initialization Complete."
         rate = rospy.Rate(10) #hz
-        run_rate = rospy.Rate(50) #hz
+        run_rate = rospy.Rate(30) #hz
         while not rospy.is_shutdown():
             if self.cam and self.pub: 
                 # Aint no rest for the wicked
@@ -44,11 +49,11 @@ class CameraManager():
     def set_camera(self, srv):
         cam_name = srv.cam_name.data
         if cam_name == "cam_1":
-            print "> Publishing camera 1"
+            print "> Publishing Camera 1."
             self.cam = self.cam_1
             self.pub = self.cam_1_pub
         elif cam_name == "cam_2":
-            print "> Publishing camera 2"
+            print "> Publishing Camera 2."
             self.cam = self.cam_2
             self.pub = self.cam_2_pub
 

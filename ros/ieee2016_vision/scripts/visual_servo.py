@@ -1,24 +1,23 @@
 #! /usr/bin/env python2
 import rospy
+from std_msgs.msg import String
 from sensor_msgs.msg import Image as Image_msg, CameraInfo, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
+
+from ieee2016_msgs.srv import CameraSet
+
 import cv2
 import numpy as np
-
-colors = []
-
-def on_mouse_click (event, x, y, flags, frame):
-    if event == cv2.EVENT_LBUTTONUP:
-        colors.append(frame[y,x].tolist())
-        print len(colors)
 
 def nothing(x):
     pass
 
-class temp():
+class VisualServo():
     def __init__(self):
-        rospy.init_node('color_picker')
+        rospy.init_node('visual_servo')
         rospy.Subscriber("/camera/cam_1",Image_msg,self.image_recieved)
+        self.cam_info = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data="cam_1"))
+
         self.image = np.zeros((500,500,3), np.float32)
         self.hsv = self.image
 
@@ -39,16 +38,15 @@ class temp():
             # Convert BGR to HSV
             hsv = cv2.cvtColor(img_copy, cv2.COLOR_BGR2HSV)
             hsv = cv2.bilateralFilter(hsv,3,75,75)
-            # Filtering
 
             cv2.imshow('sliders',sliders)
 
 
-            # define range of blue color in HSV
-            lower = np.array([cv2.getTrackbarPos('H_L','sliders'),cv2.getTrackbarPos('S_L','sliders'),cv2.getTrackbarPos('V_L','sliders')])
-            upper = np.array([cv2.getTrackbarPos('H_U','sliders'),cv2.getTrackbarPos('S_U','sliders'),cv2.getTrackbarPos('V_U','sliders')])
-            #lower = np.array([55,20,0])
-            #upper = np.array([100,255,255])
+            # define range color in HSV
+            #lower = np.array([cv2.getTrackbarPos('H_L','sliders'),cv2.getTrackbarPos('S_L','sliders'),cv2.getTrackbarPos('V_L','sliders')])
+            #upper = np.array([cv2.getTrackbarPos('H_U','sliders'),cv2.getTrackbarPos('S_U','sliders'),cv2.getTrackbarPos('V_U','sliders')])
+            lower = np.array([105,0,0])
+            upper = np.array([124,255,255])
 
             mask = cv2.inRange(hsv, lower, upper)
             kernel = np.ones((11,11),np.float32)/25
@@ -67,22 +65,24 @@ class temp():
 
             x,y,w,h = cv2.boundingRect(largest_cnt)
             cv2.rectangle(img_copy,(x,y),(x+w,y+h),(0,0,255),2)
-            epsilon = 0.05*cv2.arcLength(largest_cnt,True)
-            approx = cv2.approxPolyDP(largest_cnt,epsilon,True)
+
+            mid_point = int(x+w/2.0)
+            print "Delta:",img_copy.shape[1]/2-mid_point
+            cv2.line(img_copy,(mid_point,0),(mid_point,img_copy.shape[0]), (0,0,0), 2)
+
             #print approx
             cv2.drawContours(img_copy, largest_cnt, -1, (255,0,0), 3)
-            cv2.drawContours(img_copy, approx, -1, (0,255,0), 3)
 
             cv2.imshow('frame',img_copy)
             #cv2.imshow('mask',mask)
             #cv2.imshow('res',res)
 
     def image_recieved(self,msg):
-        print "Frame updated"
+        rospy.loginfo("Frame updated")
         try:
             self.image = CvBridge().imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
             print e
 
         
-t = temp()
+v = VisualServo()
