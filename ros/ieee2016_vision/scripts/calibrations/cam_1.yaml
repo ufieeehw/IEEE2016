@@ -1,6 +1,6 @@
 image_width: 1920
 image_height: 1080
-camera_name: cam_0
+camera_name: cam_1
 camera_matrix:
   rows: 3
   cols: 3

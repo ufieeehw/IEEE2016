@@ -18,7 +18,7 @@ def nothing(x):
 class temp():
     def __init__(self):
         rospy.init_node('color_picker')
-        rospy.Subscriber("/camera/image_raw",Image_msg,self.image_recieved)
+        rospy.Subscriber("/camera/cam_1",Image_msg,self.image_recieved)
         self.image = np.zeros((500,500,3), np.float32)
         self.hsv = self.image
 
@@ -78,7 +78,7 @@ class temp():
             #cv2.imshow('res',res)
 
     def image_recieved(self,msg):
-        #print "Frame updated"
+        print "Frame updated"
         try:
             self.image = CvBridge().imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:

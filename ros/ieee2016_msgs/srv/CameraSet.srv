@@ -1,0 +1,3 @@
+std_msgs/String cam_name           # The camera you want to be published
+---
+sensor_msgs/CameraInfo cam_info    # It will return the calibration data for that camera
