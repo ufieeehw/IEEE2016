@@ -85,10 +85,16 @@ class TFPublisher():
         # base_link -> main cameras
         self.tf_broad.sendTransform((0,0,.05), 
                         tf.transformations.quaternion_from_euler(1.57,3.1415,1.57),
-                        rospy.Time.now(), "cam_1", "EE1")
+                        rospy.Time.now(), "cam_1_vision", "EE1")
         self.tf_broad.sendTransform((0,0,.05), 
                         tf.transformations.quaternion_from_euler(1.57,3.1415,1.57),
-                        rospy.Time.now(), "cam_2", "EE2")
+                        rospy.Time.now(), "cam_2_vision", "EE2")
+        self.tf_broad.sendTransform((0,0,.05), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
+                        rospy.Time.now(), "cam_1_pose", "EE1")
+        self.tf_broad.sendTransform((0,0,.05), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
+                        rospy.Time.now(), "cam_2_pose", "EE2")
 
         # base_link -> imu
         self.tf_broad.sendTransform((0,0,0), 
@@ -98,5 +104,5 @@ class TFPublisher():
 if __name__ == "__main__":
     rospy.init_node('tf_broadcaster')
     # Maybe add a way to force a publish of TF
-    TFPublisher(10)
+    TFPublisher(50)
 

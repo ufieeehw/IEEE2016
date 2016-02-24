@@ -10,7 +10,7 @@ import rospy
 from sensor_msgs.msg import Joy
 from geometry_msgs.msg import Twist, TwistStamped, Vector3
 from std_msgs.msg import String
-from ieee2015_msgs.srv import StopMecanum, StopController
+from ieee2016_msgs.srv import StopMecanum, StopController
 
 rospy.init_node('joystick_command')
 
@@ -18,16 +18,15 @@ pub = rospy.Publisher('/robot/twist', TwistStamped, queue_size=3)
 
 # rospy.loginfo("------- Waiting for mecanum stop service ------")
 # rospy.wait_for_service('/mecanum/stop')
-# stop_proxy = rospy.ServiceProxy('/mecanum/stop', StopMecanum)
+stop_proxy = rospy.ServiceProxy('/robot/mecanum/stop', StopMecanum)
 # controller_stop_proxy = None
 
 def got_joy_msg(joy_msg):
     #6 start, 7 stop
-    # if joy_msg.buttons[6]:
-    #    stop_proxy(True)
-    # else:
-    #    if joy_msg.buttons[7]:
-    #        stop_proxy(False)
+    if joy_msg.buttons[6]:
+        stop_proxy(True)
+    elif joy_msg.buttons[7]:
+        stop_proxy(False)
 
     # if controller_stop_proxy is not None:
     #    if joy_msg.buttons[1]:
