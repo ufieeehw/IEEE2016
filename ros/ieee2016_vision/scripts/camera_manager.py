@@ -28,9 +28,9 @@ class CameraManager():
         self.cam_1.set(3, rospy.get_param("~cam_1_width")) #CV_CAP_PROP_FRAME_WIDTH
         self.cam_1.set(4, rospy.get_param("~cam_1_heigth")) #CV_CAP_PROP_FRAME_HEIGHT
 
-        self.cam_2 = cv2.VideoCapture(rospy.get_param("~cam_2_index"))
-        self.cam_2.set(3, rospy.get_param("~cam_2_width")) #CV_CAP_PROP_FRAME_WIDTH
-        self.cam_2.set(4, rospy.get_param("~cam_2_heigth")) #CV_CAP_PROP_FRAME_HEIGHT
+        #self.cam_2 = cv2.VideoCapture(rospy.get_param("~cam_2_index"))
+        #self.cam_2.set(3, rospy.get_param("~cam_2_width")) #CV_CAP_PROP_FRAME_WIDTH
+        #self.cam_2.set(4, rospy.get_param("~cam_2_heigth")) #CV_CAP_PROP_FRAME_HEIGHT
 
         self.cam = None
         self.pub = None
