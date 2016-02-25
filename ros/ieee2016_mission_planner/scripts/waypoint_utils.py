@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import rospkg
 import getopt
 import rospy
 import sys
@@ -8,16 +8,38 @@ import os
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 
+rospack = rospkg.RosPack()
+WAYPOINTS_FILE_URI = os.path.join(rospack.get_path('ieee2016_mission_planner'), 'scripts/waypoints.txt')
+
+def update_waypoints(old_names,new_names):
+	# Used to reassign waypoint names. Inputs MUST be lists.
+	waypoints_file = open(WAYPOINTS_FILE_URI,"r")
+	old_waypoints = waypoints_file.read().split('\n')[:-1]
+
+	# Close then reopen the file for writing
+	waypoints_file.close()
+	waypoints_file = open(WAYPOINTS_FILE_URI,"w")
+
+	waypoints_to_change = len(old_names)
+
+	# Go through each of the old names and replace them in the new list with the new names
+	for l in old_waypoints:
+		new_waypoint = l
+		for i in xrange(waypoints_to_change):
+			if l.split(' ', 1)[0] == old_names[i]: 
+				new_waypoint = str(new_names[i] + " " + l.split(' ', 1)[1])
+
+  		waypoints_file.write("%s\n" % new_waypoint)
+
 def save_waypoint(name, x, y, theta):
+	# Save waypoint with 'name' at [x,y,theta]
 	x_cor = str(x)
 	y_cor = str(y)
 	angle = str(theta)
 
-	f = os.path.join(os.path.dirname(__file__), 'waypoints.txt')
-
-	with open(f, "r") as in_file:
+	with open(WAYPOINTS_FILE_URI, "r") as in_file:
 		#Creates and writes all waypoints into a file before doing analysis
-		out_file = open(f, "a+")
+		out_file = open(WAYPOINTS_FILE_URI, "a+")
 		out_file.write("%s %s %s %s \n" % (name, x_cor, y_cor, angle))
 
 		#Creates a big list of all with each element as a separate index
@@ -30,7 +52,7 @@ def save_waypoint(name, x, y, theta):
 			names.append(lines[4 * x])
 
 		#Variables to be used for the unique waypoints
-		new_file = open(f, "r")
+		new_file = open(WAYPOINTS_FILE_URI, "r")
 		update_lines = new_file.readlines()
 
 		for x in range(0, (list_len / 4) - 1):
@@ -52,9 +74,9 @@ def save_waypoint(name, x, y, theta):
 		new_file.close()
 
 def load_waypoints():
-	f = os.path.join(os.path.dirname(__file__), 'waypoints.txt')
+	# Load waypoints and return dictionary of points
 
-	with open(f, "r") as in_file:
+	with open(WAYPOINTS_FILE_URI, "r") as in_file:
 		lines = in_file.read().split()
 		load_dict = {}
 		#Puts all coordinates into a dictionary
@@ -73,13 +95,12 @@ def callback(data):
 	sub.unregister()
 	print "Waypoint Saved:", sys.argv[1],data.pose.position.x,data.pose.position.y,yaw
 	rospy.signal_shutdown("Message saved")
+	exit()
 
-def listener():
-	rospy.init_node('listener', anonymous=True)
+if __name__ == "__main__":
 	global sub
+	# when you call this script from the command line, it will save the current position as the first arguemnt of the call
+	rospy.init_node('listener', anonymous=True)
 	#print "listneing"
 	sub = rospy.Subscriber("/robot/pf_pose_est", PoseStamped, callback)
 	rospy.spin()
-
-if __name__ == "__main__":
-	listener()
