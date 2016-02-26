@@ -11,6 +11,7 @@ from ieee2016_msgs.srv import CameraSet
 
 import cv2
 import numpy as np
+import time
 
 # These are the upper and lower boundaries for each color
 # These WILL be replaced by an automatically generated calibration file
@@ -42,7 +43,6 @@ class VisualServo():
         self.tf_listener = tf.TransformListener()
         
         self.frame = "/cam_1_pose"
-        print " > Searching for TF link."
         self.tf_listener.waitForTransform("base_link", self.frame, rospy.Time(0), rospy.Duration(5.0))
         print " > TF link established."
 
@@ -53,21 +53,17 @@ class VisualServo():
         self.image = np.zeros((500,500,3), np.float32)
         self.hsv = self.image
 
-        # Paramer
-        tolerance = 20
+        #sliders = np.zeros((10,500,3), np.float32)
+        # cv2.namedWindow('sliders')
 
-        sliders = np.zeros((10,500,3), np.float32)
-        cv2.namedWindow('sliders')
-
-        cv2.createTrackbar('H_L','sliders',0,255,nothing)
-        cv2.createTrackbar('H_U','sliders',0,255,nothing)
-        cv2.createTrackbar('S_L','sliders',0,255,nothing)
-        cv2.createTrackbar('S_U','sliders',0,255,nothing)
-        cv2.createTrackbar('V_L','sliders',0,255,nothing)
-        cv2.createTrackbar('V_U','sliders',0,255,nothing)
+        # cv2.createTrackbar('H_L','sliders',0,255,nothing)
+        # cv2.createTrackbar('H_U','sliders',0,255,nothing)
+        # cv2.createTrackbar('S_L','sliders',0,255,nothing)
+        # cv2.createTrackbar('S_U','sliders',0,255,nothing)
+        # cv2.createTrackbar('V_L','sliders',0,255,nothing)
+        # cv2.createTrackbar('V_U','sliders',0,255,nothing)
         #115,82,26
-
-        mid_point = None
+        #time.sleep(5)
 
         rate = rospy.Rate(10) #hz
         while not rospy.is_shutdown():
@@ -82,7 +78,7 @@ class VisualServo():
             #lower = np.array([cv2.getTrackbarPos('H_L','sliders'),cv2.getTrackbarPos('S_L','sliders'),cv2.getTrackbarPos('V_L','sliders')])
             #upper = np.array([cv2.getTrackbarPos('H_U','sliders'),cv2.getTrackbarPos('S_U','sliders'),cv2.getTrackbarPos('V_U','sliders')])
             lower = np.array([100,0,0])
-            upper = np.array([125,255,255])
+            upper = np.array([130,255,255])
 
             mask = cv2.inRange(hsv, lower, upper)
             kernel = np.ones((15,15),np.float32)/25
