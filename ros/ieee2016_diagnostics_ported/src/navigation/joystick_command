@@ -15,19 +15,18 @@ from ieee2015_msgs.srv import StopMecanum, StopController
 rospy.init_node('joystick_command')
 
 pub = rospy.Publisher('/robot/twist', TwistStamped, queue_size=3)
-
+pub = rospy.Publisher('/robot/twist', TwistStamped, queue_size=3)
 # rospy.loginfo("------- Waiting for mecanum stop service ------")
 # rospy.wait_for_service('/mecanum/stop')
 # stop_proxy = rospy.ServiceProxy('/mecanum/stop', StopMecanum)
 # controller_stop_proxy = None
 
 def got_joy_msg(joy_msg):
+    global twist_stamped_msg, active
     #6 start, 7 stop
-    # if joy_msg.buttons[6]:
-    #    stop_proxy(True)
-    # else:
-    #    if joy_msg.buttons[7]:
-    #        stop_proxy(False)
+
+    if joy_msg.buttons[0]:
+       active = not active
 
     # if controller_stop_proxy is not None:
     #    if joy_msg.buttons[1]:
@@ -39,7 +38,7 @@ def got_joy_msg(joy_msg):
     angular_z = joy_msg.axes[3] * max_angular_velocity
     seq = joy_msg.header.seq
 
-    twist_stamped_msg = TwistStamped()
+
     twist_stamped_msg.twist = Twist()
     twist_stamped_msg.twist.linear = Vector3()
     twist_stamped_msg.twist.angular = Vector3()
@@ -56,13 +55,21 @@ def got_joy_msg(joy_msg):
     twist_stamped_msg.header.seq = seq
     twist_stamped_msg.header.frame_id = '/robot'
     twist_stamped_msg.header.stamp = joy_msg.header.stamp
-    pub.publish(twist_stamped_msg)
+
 
 # These values are hardcoded for now.
 max_linear_velocity = 1 # rospy.get_param('max_linear_velocity')
 max_angular_velocity = 4 # rospy.get_param('max_angular_velocity')
 
+twist_stamped_msg = TwistStamped()
+active = False
+
 rospy.Subscriber('/joy', Joy, got_joy_msg)
+
+rate = rospy.Rate(25) #hz
+while not rospy.is_shutdown():
+    if active: pub.publish(twist_stamped_msg)
+    rate.sleep()
 
 #rospy.wait_for_service('/controller/stop')
 #print '------Found controller stop service---------'
