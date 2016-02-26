@@ -18,9 +18,14 @@ import os
 class Camera():
     def __init__(self, camera_name):
         self.camera_name = camera_name
-        self.frame_id = camera_name
+        
+        # Two TF frames. Perspective is used for drawing points in the map frame.
+        # Position can give the position and yaw of the camera.
+        self.perspective_frame_id = camera_name + "_vision"
+        self.position_frame_id = camera_name + "_pose"
 
         image_topic = "/camera/"+camera_name
+
         rospy.Subscriber(image_topic, Image, self.got_image)
         self.tf_listener = tf.TransformListener()
 
@@ -50,22 +55,22 @@ class Camera():
 
     def get_tf(self, target_frame="base_link"):
         # Returns the relative [x,y,yaw] between the target_frame and the camera
-        t = self.tf_listener.getLatestCommonTime(target_frame, self.frame_id)
-        pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.frame_id, t)
+        t = self.tf_listener.getLatestCommonTime(target_frame, self.position_frame_id)
+        pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.position_frame_id, t)
         rot = tf.transformations.euler_from_quaternion(quaternion)
 
         return np.array([pos[0],pos[1],rot[2]])
     
-    def transform_point(self, point, target_frame="base_link"):
-        # Given a point in the camera frame, return that point in the map frame.
+    def transform_point(self, point, target_frame="map"):
+        # Given a 3d point in the camera frame, return that point in the map frame.
 
         ''' UNTESTED AS OF RIGHT NOW '''
 
-        t = self.tf_listener.getLatestCommonTime(target_frame, self.frame_id)
+        t = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
         p_s = PointStamped(
                 header=Header(
                         stamp=t,
-                        frame_id=self.frame_id
+                        frame_id=self.perspective_frame_id
                     ),
                 point=Point(
                         x=point[0],
@@ -73,14 +78,12 @@ class Camera():
                         z=point[2]
                     )
             )
-        new_point = tf_listener.transformPoint(target_frame,p_s)
+        new_point = self.tf_listener.transformPoint(target_frame,p_s)
         return np.array([new_point.point.x,new_point.point.y,new_point.point.z])
 
-    def make_3d(self, point_1, point_2, distance_between):
+    def make_3d(self, point_1, point_2, distance_between, output_frame=None):
         # Given two planar points [u,v] and the real life distance between them (m), return the 3d camera frame coordiantes of those points.
-        # Returns [[x_1,y_1,z_1],[x_2,y_2,z_2]]
-
-        ''' UNTESTED AS OF RIGHT NOW '''
+        # Returns [[x_1,y_1,z_1],[x_2,y_2,z_2]] in whatever the output_frame is
 
         if self.proj_mat == None: return False
 
@@ -98,14 +101,20 @@ class Camera():
         vect_1 = proj_mat_pinv.dot(np.append(point_1,1).reshape((3,1))).reshape((1,4))[0][:3]
         vect_2 = proj_mat_pinv.dot(np.append(point_2,1).reshape((3,1))).reshape((1,4))[0][:3]
 
-        return np.array([vect_1 * dist / np.linalg.norm(vect), vect_2 * dist / np.linalg.norm(vect)])
+        points = np.array([vect_1 * dist / np.linalg.norm(vect_1), vect_2 * dist / np.linalg.norm(vect_2)])
+        
+        # Transform the output points to the appropriate frame
+        if not output_frame: return points
+        new_frame_points = []
+        for p in points:
+            new_frame_points.append(self.transform_point(p,output_frame))
+        return np.array(new_frame_points)
 
     def got_image(self,msg):
         try:
             self.image = CvBridge().imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
             print e
-
 
 class CameraManager():
     def __init__(self):
