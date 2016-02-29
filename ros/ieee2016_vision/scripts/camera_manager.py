@@ -44,7 +44,7 @@ class Camera():
         
         # Wait until an image is loaded to continue (or timeout)
         start_time = time.time()
-        while self.image == None and time.time() - start_time < default_timeout and not rospy.is_shutdown():
+        while self.image is None and time.time() - start_time < default_timeout and not rospy.is_shutdown():
             time.sleep(.1)
 
         self.active = True
@@ -63,8 +63,6 @@ class Camera():
     
     def transform_point(self, point, target_frame="map"):
         # Given a 3d point in the camera frame, return that point in the map frame.
-
-        ''' UNTESTED AS OF RIGHT NOW '''
 
         t = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
         p_s = PointStamped(
@@ -85,13 +83,11 @@ class Camera():
         # Given two planar points [u,v] and the real life distance between them (m), return the 3d camera frame coordiantes of those points.
         # Returns [[x_1,y_1,z_1],[x_2,y_2,z_2]] in whatever the output_frame is
 
-        if self.proj_mat == None: return False
-
-        proj_mat_pinv = np.linalg.pinv(np.array([self.proj_mat]).reshape((3,4)))
-
         # Genereate projection rays through points 1 and 2
-        ray_1 = proj_mat_pinv.dot(np.append(point_1,1).reshape((3,1))).reshape((1,4))[0]
-        ray_2 = proj_mat_pinv.dot(np.append(point_2,1).reshape((3,1))).reshape((1,4))[0]
+        ray_1 = self.make_3d_ray(point_1)
+        ray_2 = self.make_3d_ray(point_2)
+
+        if ray_1 == False: return False
 
         # Angle between two rays
         mag_1, mag_2 = np.sqrt(ray_1.dot(ray_1)), np.sqrt(ray_2.dot(ray_2))
@@ -109,6 +105,18 @@ class Camera():
         for p in points:
             new_frame_points.append(self.transform_point(p,output_frame))
         return np.array(new_frame_points)
+
+    def make_3d_ray(self, point):
+        # Given a point in the camera frame, make a 3d ray through the point that intersects with the object
+        # in the real world at some distance.
+        if self.proj_mat is None: return False
+
+        proj_mat_pinv = np.linalg.pinv(np.array([self.proj_mat]).reshape((3,4)))
+
+        # Genereate projection ray through point
+        ray = proj_mat_pinv.dot(np.append(point,1).reshape((3,1))).reshape((1,4))[0]
+
+        return np.array(ray)
 
     def got_image(self,msg):
         try:
@@ -161,9 +169,10 @@ class CameraManager():
             self.pub = self.cam_2_pub
         elif cam_name == "STOP":
             print "> Stopping Publishing."
+            self.cam.release()
             self.cam = None
             self.pub = None
-            return None
+            return CameraInfo()
 
         return self.get_cam_info(cam_name)
 
