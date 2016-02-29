@@ -1,0 +1,3 @@
+string[] lidar_names  # An Array of which lidars to use for particle filtering. (forward,left,right)
+---
+bool succeed

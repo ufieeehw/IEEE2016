@@ -60,6 +60,7 @@ add_service_files(
    ResetOdom.srv
    ArmWaypoint.srv
    CameraSet.srv
+   LidarSelector.srv
 )
 
 ## Generate actions in the 'action' folder
