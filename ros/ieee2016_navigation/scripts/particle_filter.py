@@ -4,7 +4,10 @@ from std_msgs.msg import Header
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped, Vector3
 from sensor_msgs.msg import LaserScan
+
 from ieee2016_msgs.srv import ResetOdom
+from ieee2016_msgs.srv import LidarSelector
+
 import tf
 
 import numpy as np
@@ -28,7 +31,7 @@ class GPUAccMap():
         self.max_range = 5.0 #m
         self.min_range = 0.0002
 
-        index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
+        self.index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
 
         # Set up pyopencl
         self.ctx = cl.Context([cl.get_platforms()[1].get_devices()[0]])
@@ -42,15 +45,18 @@ class GPUAccMap():
 
         # Only ranges at these indicies will be checked
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        deg_index = int(math.radians(45)/self.angle_increment)
+        self.deg_index = int(math.radians(45)/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
-        step = 1
+        self.step = 1
+
+        # The serivce to determine which LIDAR to navigate with
+        rospy.Service('/robot/navigation/select_lidar', LidarSelector, self.change_indicies_to_compare)
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
-            np.arange(index_count/4 - deg_index, index_count/4 + deg_index, step=step))
+            np.arange(self.index_count/4 - self.deg_index, self.index_count/4 + self.deg_index, step=self.step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
-            np.arange(index_count/2 - deg_index, index_count/2 + deg_index, step=step))
-        self.indicies_to_compare = np.append( self.indicies_to_compare,            
-            np.arange(3*index_count/4 - deg_index, 3*index_count/4 + deg_index, step=step))
+            np.arange(self.index_count/2 - self.deg_index, self.index_count/2 + self.deg_index, step=self.step))
+        # self.indicies_to_compare = np.append( self.indicies_to_compare,            
+        #     np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step))
 
         # To generate weights, we need those indices to be pre-converted to radian angle measures 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
@@ -60,7 +66,7 @@ class GPUAccMap():
 
     def generate_weights(self, particles, laser_scan):
         # Particles format: ax, ay, aheading, bx, by, bheading, ...
-
+        
         weights = np.zeros(particles.size/3).astype(np.float32)
         weights_cl = cl.Buffer(self.ctx, self.mf.WRITE_ONLY, weights.nbytes)
 
@@ -76,9 +82,30 @@ class GPUAccMap():
                                      np.uint32(self.angles_to_compare.size),
                                                                laserscan_cl, 
                                                                  weights_cl).wait()
-            
         cl.enqueue_copy(self.queue, weights, weights_cl).wait()
         return weights
+
+    def change_indicies_to_compare(self,srv):
+        lidars = srv.lidar_names
+
+        # This look like a big mess, and it is.
+        # We add the indicies of each LIDAR's FOV to the master list depending if it was selected or not
+        self.indicies_to_compare = np.array([])
+        if "right" in lidars:
+            self.indicies_to_compare = np.append( self.indicies_to_compare,            
+                np.arange(self.index_count/4 - self.deg_index, self.index_count/4 + self.deg_index, step=self.step) ).astype(np.int)
+        if "front" in lidars:
+            self.indicies_to_compare = np.append( self.indicies_to_compare,            
+                np.arange(self.index_count/2 - self.deg_index, self.index_count/2 + self.deg_index, step=self.step) ).astype(np.int)
+        if "left" in lidars:
+            self.indicies_to_compare = np.append( self.indicies_to_compare,            
+                np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step) ).astype(np.int)
+
+        # Update other necessary parameters 
+        self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
+        self.angles_to_compare_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.angles_to_compare)
+        print "Change",self.indicies_to_compare
+        return True
 
 class GPUAccFilter():
     def __init__(self, center, radius, heading_range, m):
@@ -182,7 +209,7 @@ class GPUAccFilter():
             weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
             # Remove low weights from particle and weights list
-            weight_percentile = 95 #percent
+            weight_percentile = 98 #percent
             weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
             weights = weights_raw[weights_indicies_to_keep]
             self.particles = self.particles[weights_indicies_to_keep]
@@ -196,8 +223,7 @@ class GPUAccFilter():
             new_x = np.mean(self.particles.T[0])
             new_y = np.mean(self.particles.T[1])
             new_head = np.mean(self.particles.T[2])
-            print ""
-            print new_x,new_y,new_head
+
             # Update Pose
             self.publish_pose([new_x,new_y,new_head])
 
@@ -342,7 +368,7 @@ def add_noise(values,noise_size):
 
 rospy.init_node('particle_filter', anonymous=True)
 m = GPUAccMap()
-f = GPUAccFilter((.2,.2), 3, (1.3,1.8), m)
+f = GPUAccFilter((.2,.2), .1, (1.4,1.65), m)
 
 rospy.spin()
 
