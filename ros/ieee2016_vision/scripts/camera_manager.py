@@ -53,11 +53,17 @@ class Camera():
         ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data="STOP"))
         self.active = False
 
-    def get_tf(self, target_frame="base_link"):
+    def get_tf(self, mode="pose", target_frame="base_link"):
         # Returns the relative [x,y,yaw] between the target_frame and the camera
-        t = self.tf_listener.getLatestCommonTime(target_frame, self.position_frame_id)
-        pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.position_frame_id, t)
-        rot = tf.transformations.euler_from_quaternion(quaternion)
+        # Mode can be 'pose' for the pose tf frame, or 'vision' for the vision frame. Default is 'pose'.
+        if mode == "pose":
+            t = self.tf_listener.getLatestCommonTime(target_frame, self.position_frame_id)
+            pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.position_frame_id, t)
+            rot = tf.transformations.euler_from_quaternion(quaternion)
+        elif mode == "vision":
+            t = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
+            pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.perspective_frame_id, t)
+            rot = tf.transformations.euler_from_quaternion(quaternion)
 
         return np.array([pos[0],pos[1],rot[2]])
     
@@ -94,10 +100,7 @@ class Camera():
         theta = np.arccos(np.dot(ray_1,ray_2)/(mag_1 * mag_2))    
         dist = (distance_between / 2.0) / (np.arctan(theta / 2.0))
 
-        vect_1 = proj_mat_pinv.dot(np.append(point_1,1).reshape((3,1))).reshape((1,4))[0][:3]
-        vect_2 = proj_mat_pinv.dot(np.append(point_2,1).reshape((3,1))).reshape((1,4))[0][:3]
-
-        points = np.array([vect_1 * dist / np.linalg.norm(vect_1), vect_2 * dist / np.linalg.norm(vect_2)])
+        points = np.array([ray_1[:3] * dist / np.linalg.norm(ray_1[:3]), ray_2[:3] * dist / np.linalg.norm(ray_2[:3])])
         
         # Transform the output points to the appropriate frame
         if not output_frame: return points
@@ -106,12 +109,20 @@ class Camera():
             new_frame_points.append(self.transform_point(p,output_frame))
         return np.array(new_frame_points)
 
+    def make_3d(self, vector, dist, output_frame=None):
+        # Given a vector through a point and a real world distance to that point from the camera
+        # make return [x,y,z] of that point in the output_frame (default is the camera frame)
+        point = vect * dist / np.linalg.norm(vect)
+
+        if not output_frame: return point
+        return self.transform_point(point,output_frame)
+
     def make_3d_ray(self, point):
         # Given a point in the camera frame, make a 3d ray through the point that intersects with the object
         # in the real world at some distance.
         if self.proj_mat is None: return False
 
-        proj_mat_pinv = np.linalg.pinv(np.array([self.proj_mat]).reshape((3,4)))
+        proj_mat_pinv = np.linalg.pinv(np.array([self.proj_mat]))
 
         # Genereate projection ray through point
         ray = proj_mat_pinv.dot(np.append(point,1).reshape((3,1))).reshape((1,4))[0]
@@ -169,7 +180,6 @@ class CameraManager():
             self.pub = self.cam_2_pub
         elif cam_name == "STOP":
             print "> Stopping Publishing."
-            self.cam.release()
             self.cam = None
             self.pub = None
             return CameraInfo()
