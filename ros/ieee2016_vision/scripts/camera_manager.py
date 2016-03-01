@@ -53,16 +53,16 @@ class Camera():
         ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data="STOP"))
         self.active = False
 
-    def get_tf(self, mode="pose", target_frame="base_link"):
+    def get_tf(self, mode="pose", target_frame="base_link", time = None):
         # Returns the relative [x,y,yaw] between the target_frame and the camera
-        # Mode can be 'pose' for the pose tf frame, or 'vision' for the vision frame. Default is 'pose'.
+        # Mode can be 'pose' for the pose tf frame, or 'vision' for the vision frame at 'time'. Default is 'pose'.
         if mode == "pose":
-            t = self.tf_listener.getLatestCommonTime(target_frame, self.position_frame_id)
-            pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.position_frame_id, t)
+            if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.position_frame_id)
+            pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.position_frame_id, time)
             rot = tf.transformations.euler_from_quaternion(quaternion)
         elif mode == "vision":
-            t = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
-            pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.perspective_frame_id, t)
+            if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
+            pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.perspective_frame_id, time)
             rot = tf.transformations.euler_from_quaternion(quaternion)
 
         return np.array([pos[0],pos[1],rot[2]])
@@ -85,7 +85,7 @@ class Camera():
         new_point = self.tf_listener.transformPoint(target_frame,p_s)
         return np.array([new_point.point.x,new_point.point.y,new_point.point.z])
 
-    def make_3d(self, point_1, point_2, distance_between, output_frame=None):
+    def make_3d_point(self, point_1, point_2, distance_between, output_frame=None):
         # Given two planar points [u,v] and the real life distance between them (m), return the 3d camera frame coordiantes of those points.
         # Returns [[x_1,y_1,z_1],[x_2,y_2,z_2]] in whatever the output_frame is
 
@@ -109,7 +109,7 @@ class Camera():
             new_frame_points.append(self.transform_point(p,output_frame))
         return np.array(new_frame_points)
 
-    def make_3d(self, vector, dist, output_frame=None):
+    def make_3d_point(self, vector, dist, output_frame=None):
         # Given a vector through a point and a real world distance to that point from the camera
         # make return [x,y,z] of that point in the output_frame (default is the camera frame)
         point = vect * dist / np.linalg.norm(vect)
