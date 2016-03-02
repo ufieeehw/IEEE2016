@@ -16,15 +16,15 @@ import yaml
 import os
 
 class Camera():
-    def __init__(self, camera_name):
-        self.camera_name = camera_name
+    def __init__(self, name):
+        self.name = name
         
         # Two TF frames. Perspective is used for drawing points in the map frame.
         # Position can give the position and yaw of the camera.
-        self.perspective_frame_id = camera_name + "_vision"
-        self.position_frame_id = camera_name + "_pose"
+        self.perspective_frame_id = name + "_vision"
+        self.position_frame_id = name + "_pose"
 
-        image_topic = "/camera/"+camera_name
+        image_topic = "/camera/"+name
 
         rospy.Subscriber(image_topic, Image, self.got_image)
         self.tf_listener = tf.TransformListener()
@@ -35,13 +35,14 @@ class Camera():
         self.active = False
 
     def __repr__(self):
-        return self.camera_name
+        return self.name
 
     def activate(self):
         default_timeout = 2
-        ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data=self.camera_name))
+        ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data=self.name))
         self.proj_mat = np.array([ret.cam_info.P]).reshape((3,4))
-        
+        self.proj_mat_pinv = np.linalg.pinv(self.proj_mat)
+
         # Wait until an image is loaded to continue (or timeout)
         start_time = time.time()
         while self.image is None and time.time() - start_time < default_timeout and not rospy.is_shutdown():
@@ -53,7 +54,7 @@ class Camera():
         ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data="STOP"))
         self.active = False
 
-    def get_tf(self, mode="pose", target_frame="base_link", time = None):
+    def get_tf(self, mode="pose", target_frame="base_link", time=None):
         # Returns the relative [x,y,yaw] between the target_frame and the camera
         # Mode can be 'pose' for the pose tf frame, or 'vision' for the vision frame at 'time'. Default is 'pose'.
         if mode == "pose":
@@ -67,13 +68,12 @@ class Camera():
 
         return np.array([pos[0],pos[1],rot[2]])
     
-    def transform_point(self, point, target_frame="map"):
+    def transform_point(self, point, target_frame="map", time=None):
         # Given a 3d point in the camera frame, return that point in the map frame.
-
-        t = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
+        if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
         p_s = PointStamped(
                 header=Header(
-                        stamp=t,
+                        stamp=time,
                         frame_id=self.perspective_frame_id
                     ),
                 point=Point(
@@ -103,31 +103,28 @@ class Camera():
         points = np.array([ray_1[:3] * dist / np.linalg.norm(ray_1[:3]), ray_2[:3] * dist / np.linalg.norm(ray_2[:3])])
         
         # Transform the output points to the appropriate frame
-        if not output_frame: return points
+        if output_frame is None: return points
         new_frame_points = []
         for p in points:
             new_frame_points.append(self.transform_point(p,output_frame))
         return np.array(new_frame_points)
 
-    def make_3d_point(self, vector, dist, output_frame=None):
+    def make_3d_point(self, vector, dist, output_frame=None, time=None):
         # Given a vector through a point and a real world distance to that point from the camera
         # make return [x,y,z] of that point in the output_frame (default is the camera frame)
-        point = vect * dist / np.linalg.norm(vect)
+        point = vector * dist / np.linalg.norm(vector)
 
-        if not output_frame: return point
-        return self.transform_point(point,output_frame)
+        if output_frame is None: return point
+        return self.transform_point(point, target_frame=output_frame, time=time)
 
-    def make_3d_ray(self, point):
-        # Given a point in the camera frame, make a 3d ray through the point that intersects with the object
-        # in the real world at some distance.
+    def make_3d_vector(self, point):
+        # Given a point in the camera frame, make a 3d vector pointing toward the point that intersects with 
+        # the object in the real world at some distance.
         if self.proj_mat is None: return False
 
-        proj_mat_pinv = np.linalg.pinv(np.array([self.proj_mat]))
-
         # Genereate projection ray through point
-        ray = proj_mat_pinv.dot(np.append(point,1).reshape((3,1))).reshape((1,4))[0]
-
-        return np.array(ray)
+        vect = self.proj_mat_pinv.dot(np.append(point,1).reshape((3,1))).reshape((1,4))[0][:3]
+        return np.array(vect)
 
     def got_image(self,msg):
         try:
