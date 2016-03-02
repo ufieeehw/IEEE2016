@@ -1,8 +1,11 @@
+#!/usr/bin/env python
 import rospy
 import rospkg
+from std_msgs.msg import Header
 from sensor_msgs.msg import Image as Image_msg, CameraInfo, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
 
+from ieee2016_msgs.msg import BlockStamped
 
 import QR
 import zbar
@@ -188,8 +191,9 @@ class DetectQRCodeZBar(object):
 
 class DetectQRCodeTemplateMethod(object):
     def __init__(self, qr_code_count, camera):
-        # ROS inits for image updating
-        #rospy.init_node('QR_caller', anonymous=True)
+        # ROS inits
+        self.block_pub = rospy.Publisher("/camera/block_detection", BlockStamped, queue_size=50)
+
         self.camera = camera
         self.qr_code_count_max = qr_code_count
         #self.timeout = timeout
@@ -251,6 +255,18 @@ class DetectQRCodeTemplateMethod(object):
                 rot_mat = cv2.getRotationMatrix2D((cols/2,rows/2),theta,1)
                 cv2.imwrite(self.base_path+color+"/"+str(theta)+".jpg",cv2.warpAffine(template,rot_mat,(cols,rows)))
 
+    def publish_block(self,uv_point,color):
+        #print uv_point
+        b_s = BlockStamped(
+                header=Header(
+                        stamp=rospy.Time.now(),
+                        frame_id=self.camera.name
+                    ),
+                point=uv_point,
+                color=color
+            )
+        self.block_pub.publish(b_s)
+
     def match_templates(self):
         threshold = .65
         group_distance = 20
@@ -260,8 +276,8 @@ class DetectQRCodeTemplateMethod(object):
         greens = self.greens 
         yellows = self.yellows 
 
-
         frame_count = 0
+            
         while not rospy.is_shutdown():
             found = 0
             image = self.camera.image
@@ -270,12 +286,10 @@ class DetectQRCodeTemplateMethod(object):
             
             existing_points = []
 
-            mid_point = self.blues[0].shape[::-1]
-
             if frame_count == 0:
+                mid_point = np.array(self.blues[0].shape[::-1])/2
                 for template in self.blues:
                     # Apply matching threshold for this rotation/scale
-                    mid_point = template.shape[::-1]
                     res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                     loc = np.where( res >= threshold)
                     for pt in zip(*loc[::-1]):
@@ -289,11 +303,12 @@ class DetectQRCodeTemplateMethod(object):
                         
                         if not exists:
                             found+=1
-                            existing_points.append(pt)
-                            cv2.circle(image, (pt[0] + mid_point[0]/2,pt[1] + mid_point[1]/2), 15, (255,0,0), -1)
+                            #existing_points.append(pt)
+                            self.publish_block(pt+mid_point,"blue")
+                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
                     #print existing_points
             elif frame_count == 1:
-                existing_points = []
+                mid_point = np.array(self.reds[0].shape[::-1])/2
                 for template in self.reds:
                     # Apply matching threshold for this rotation/scale
                     #mid_point = template.shape[::-1]
@@ -310,11 +325,11 @@ class DetectQRCodeTemplateMethod(object):
                         
                         if not exists:
                             found+=1
-                            existing_points.append(pt)
-                            cv2.circle(image, (pt[0] + mid_point[0]/2,pt[1] + mid_point[1]/2), 15, (0,0,255), -1)
+                            self.publish_block(pt+mid_point,"red")
+                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
                     #print existing_points
             elif frame_count == 2:
-                existing_points = []
+                mid_point = np.array(self.greens[0].shape[::-1])/2
                 for template in self.greens:
                     # Apply matching threshold for this rotation/scale
                     #mid_point = template.shape[::-1]
@@ -331,12 +346,13 @@ class DetectQRCodeTemplateMethod(object):
                         
                         if not exists:
                             found+=1
-                            existing_points.append(pt)
-                            cv2.circle(image, (pt[0] + mid_point[0]/2,pt[1] + mid_point[1]/2), 15, (0,255,0), -1)
+                            self.publish_block(pt+mid_point,"green")
+                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
                     #print existing_points
                     existing_points = []
 
             elif frame_count == 3:
+                mid_point = np.array(self.yellows[0].shape[::-1])/2
                 for template in self.yellows:
                     # Apply matching threshold for this rotation/scale
                     #mid_point = template.shape[::-1]
@@ -353,12 +369,12 @@ class DetectQRCodeTemplateMethod(object):
                         
                         if not exists:
                             found+=1
-                            existing_points.append(pt)
-                            cv2.circle(image, (pt[0] + mid_point[0]/2,pt[1] + mid_point[1]/2), 15, (0,255,255), -1)
+                            self.publish_block(pt+mid_point,"yellow")
+                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,255), -1)
                     #print existing_point
 
             frame_count += 1
             if frame_count > len(self.blues): frame_count = 0
-            print frame_count
+            #print frame_count
             cv2.imshow("found",image)
             cv2.waitKey(1)
