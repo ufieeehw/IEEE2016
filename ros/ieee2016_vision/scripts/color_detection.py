@@ -1,27 +1,23 @@
 #!/usr/bin/env python
 
+from pycparser.c_ast import Case
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 import rospy
 from sensor_msgs.msg import Image
 
-
 # Baseline operating parameters
-OPERATING_IMAGE_WIDTH = 640
+OPERATING_IMAGE_WIDTH = 150
 IMAGE_COLOR_DEPTH = 16
 
 # These are the upper and lower boundaries for each color
 # These WILL be replaced by an automatically generated calibration file
-LOWER_RED = np.array([0, 180, 180])
-UPPER_RED = np.array([20, 255, 255])
-LOWER_GREEN = np.array([50, 40, 40])
-UPPER_GREEN = np.array([80, 250, 250])
-LOWER_BLUE = np.array([80, 80, 80])
-UPPER_BLUE = np.array([150, 255, 255])
-LOWER_YELLOW = np.array([20, 120, 120])
-UPPER_YELLOW = np.array([50, 255, 255])
-
+RED_HUE = (np.array([0, 100, 100]), np.array([20, 255, 255]))
+GREEN_HUE = (np.array([50, 42, 42]), np.array([80, 255, 255]))
+BLUE_HUE = (np.array([80, 100, 100]), np.array([150, 255, 255]))
+YELLOW_HUE = (np.array([20, 110, 110]), np.array([50, 255, 255]))
+HUE_RANGES = (RED_HUE, GREEN_HUE, BLUE_HUE, YELLOW_HUE)
 
 def resize_image(msg):
 	'''
@@ -54,31 +50,62 @@ def reduce_colors(frame):
 
 	# Use K-Means clustering to identify the 16 most predominant colors
 	criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-	null, label, center = cv2.kmeans(working_frame, IMAGE_COLOR_DEPTH, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+	ret, label, center = cv2.kmeans(working_frame, IMAGE_COLOR_DEPTH, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
 
 	# Reduces the colors in the original image based on the clustering results
 	center = np.uint8(center)
 	redux_frame = center[label.flatten()]
 	redux_frame = redux_frame.reshape((frame.shape))
 
+ 	# Blurs the remaining colors to reduce noise
+ 	redux_frame = cv2.GaussianBlur(frame, (5, 5), 0)
+
 	return redux_frame
 
 
-def color_extraction(frame):
+def color_extraction(frame, color):
 	'''
-	Generates four images from the passed frame that contain hues specified
-	within the defined boundaries.
+	Generates an image from the passed frame that contain hues specified within
+	the defined boundaries for the color id passed. Colors id's are as follows:
+	red = 0, green = 1, blue = 2, and yellow = 3.
 	'''
-	# Converts the image from RGB to HSV
+	# Creates a mask for the selected hue range and overlays them onto the frame
 	working_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+	mask = cv2.inRange(working_frame, HUE_RANGES[color][0], HUE_RANGES[color][1])
+	color_frame = cv2.bitwise_and(working_frame, working_frame, mask = mask)
 
-	# Creates masks for each hue range
-	red_mask = cv2.inRange(working_frame, LOWER_RED, UPPER_RED)
-	green_mask = cv2.inRange(working_frame, LOWER_GREEN, UPPER_GREEN)
-	blue_mask = cv2.inRange(working_frame, LOWER_BLUE, UPPER_BLUE)
-	yellow_mask = cv2.inRange(working_frame, LOWER_YELLOW, UPPER_YELLOW)
+	return(color_frame)
 
-	return(red_mask, green_mask, blue_mask, yellow_mask)
+def select_largest_object(frame, color):
+	'''
+	MAKE SURE THIS IS FORMATED CORRECTLY AND ADD A DOC STRING.
+	'''
+	largest_area = -1
+	largest_contour_index = -1
+
+	# Generates a gray frame for the passed color id
+	working_frame = color_extraction(frame, color)
+ 	working_frame = cv2.cvtColor(working_frame, cv2.COLOR_BGR2GRAY)
+
+	# Finds all contours within the frame
+	ret, thresh = cv2.threshold(working_frame, 50, 255, 0)
+	contours, hierarchy = cv2.findContours(thresh, 1, 2)
+
+	# Selects the largest contour in the frame
+	for i in range(len(contours)):
+		area = cv2.contourArea(contours[i])
+		if (area > largest_area):
+			largest_area = area
+			largest_contour_index = i
+	if (largest_contour_index != -1):
+		rect = cv2.minAreaRect(contours[largest_contour_index])
+		box = cv2.cv.BoxPoints(rect)
+
+		# Returns the four corner points of the selected object
+		return box
+
+	else:
+		return -1
 
 def testing(msg):
 	'''
@@ -86,23 +113,16 @@ def testing(msg):
 	of each processed frame.
 	'''
 	# The main image processing chain
-	frame = resize_image(msg)
-	redux_frame = reduce_colors(frame)
-	red_mask, green_mask, blue_mask, yellow_mask = color_extraction(redux_frame)
+	redux_frame = reduce_colors(resize_image(msg))
+	box = select_largest_object(redux_frame, 2)
 
-	# Overlays the masks onto the original frame for each hue range
-	red_frame = cv2.bitwise_and(frame, frame, mask = red_mask)
-	green_frame = cv2.bitwise_and(frame, frame, mask = green_mask)
-	blue_frame = cv2.bitwise_and(frame, frame, mask = blue_mask)
-	yellow_frame = cv2.bitwise_and(frame, frame, mask = yellow_mask)
+	# Draw a box around the selected object in the captured frame
+	if (box != -1):
+		box = np.int0(box)
+		cv2.drawContours(redux_frame, [box], 0, (0, 0, 255), 2)
 
-	# Display all frames for debugging
-	cv2.imshow('Captured Frame', frame)
-	cv2.imshow('Reduced Color Depth', redux_frame)
-	cv2.imshow('Extracted Red', red_frame)
-	cv2.imshow('Extracted Green', green_frame)
-	cv2.imshow('Extracted Blue', blue_frame)
-	cv2.imshow('Extracted Yellow', yellow_frame)
+	# Display the frames for debugging
+	cv2.imshow('Selected Object', redux_frame)
 	cv2.waitKey(5)
 
 rospy.init_node("color_detection")
