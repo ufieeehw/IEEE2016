@@ -50,6 +50,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   Mecanum.msg
+  BlockStamped.msg
 )
 
 add_service_files(
