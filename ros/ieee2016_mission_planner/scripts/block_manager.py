@@ -1,16 +1,23 @@
 #!/usr/bin/env python
 import rospy
+import roslib
 from std_msgs.msg import Bool, Int8, Header
 from geometry_msgs.msg import Pose, Point32, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, PointStamped
 from sensor_msgs.msg import PointCloud,ChannelFloat32
 import tf
 
+roslib.load_manifest('ieee2016_vision')
+from camera_manager import Camera
+from point_intersector import PointIntersector
+from ieee2016_msgs.msg import BlockStamped
+
 import numpy as np
+from kd_tree import KDTree
 
 class Block():
     def __init__(self, color, coordinate = 'na'):
         self.color = color
-        # This will allow the user to input a point message from ros or a list from python
+        # This will allow the program to input a point message from ros or a list from python
         try:
             self.coordinate = [coordinate.x,coordinate.y,coordinate.z]
         except:
@@ -20,25 +27,29 @@ class Block():
         # How the object prints
         return "%06s" % self.color
 
+
 class EndEffector():
-    def __init__(self, gripper_count):
+    def __init__(self, gripper_count, frame_id):
         self.gripper_count = gripper_count
-        
+        self.frame_id = frame_id
+
         # Array of the blocks in the gripper - 0 is the left most gripper
         self.block_positions = []
         self.holding = 0
+
         for i in range(gripper_count):
             b = Block("none")
             self.block_positions.append(b)
     
-    def pickup(self, block, gripper_number):
+    def pickup(self, block, *gripper_number):
         # Adds the block to gripper specified
-        if self.block_positions[gripper_number] == "none":
-            self.block_positions[gripper_number] = block
-            self.holding += 1
-            return True
-        else:
-            return False
+        for g in gripper_number:
+            if self.block_positions[g] == "none":
+                self.block_positions[g] = block
+                self.holding += 1
+                return True
+            else:
+                return False
 
     def which_gripper(self,color):
         # Returns the gripper numbers of the grippers containing the blocks with specified color
@@ -47,6 +58,11 @@ class EndEffector():
             if b.color == color: gripper_numbers.append(i)
 
         return gripper_numbers
+
+    def __repr__(self):
+        # How the object prints
+        return str(self.block_positions)
+
 
 class ProcessBlocks():
     def __init__(self, *end_effectors):
@@ -281,11 +297,33 @@ class ProcessBlocks():
         )
         print point
 
+
+class BlockServer():
+    '''
+    BlockServer acts as a server to deal with block detection from the cameras. Given a BlockStamped message, 
+    the server will find the actual point in the map frame and keep an updated pointcloud as Shia moves.
+    After detecting the correct number of blocks, it will pass that pointcloud off to ProcessBlocks.
+    '''
+    def __init__(self, *cameras):
+        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=500)
+        self.cameras = cameras
+
+        # Make kd-tree with a .01 m tolerance when trying to add duplicated blocks
+        self.k = KDTree(.01)
+        self.intersector = PointIntersector()
+
+    def got_block(self,msg):
+        # Find the camera that this image was taken in.
+        camera = [c for c in self.cameras if c.name == msg.header.frame_id][0]
+        map_point = self.intersector.intersect_point(camera, msg.point, time=msg.header.stamp)
+        print map_point
+        #self.k.insert_unique()
+
+
 if __name__ == "__main__":
-    rospy.init_node('str_command')
-    e1 = EndEffector(4)
-    e2 = EndEffector(4)
-    
-    ProcessBlocks(e1,e2)
+    rospy.init_node('block_manager')
+    c1 = Camera("cam_1")
+    c1.activate()
+    b_s = BlockServer(c1)
 
     rospy.spin()

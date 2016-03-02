@@ -5,7 +5,7 @@ from camera_manager import Camera
 
 import numpy as np
 
-class IntersectPoint():
+class PointIntersector():
     '''
     Given a point in the camera frame and Shia's current position estimate where that point is along the wall.
     (We are assuming that the blocks will be flush against the wall, or have some offset from the wall.)
@@ -15,23 +15,25 @@ class IntersectPoint():
         self.map = np.array([0, 0, 0, .784, 0, .784, .015, .784, .015, .784, .015, 1.158, 0, 1.158, .015, 1.158, 0, 1.158, 0, 2.153, .464, .784, .479, .784, .479, .784, .479, 1.158, .464, .784, .464, 1.158, .464, 1.158, .479, 1.158, 0, 0, .549, 0, .549, 0, .549, .317, .549, .317, .569, .317, .569, 0, .569, .317, .569, 0, .809, 0, .809, 0, .809, .317, .809, .317, .829, .317, .829, 0, .829, .317, .829, 0, 2.458, 0, 0, 2.153, 2.458, 2.153, 2.458, 0, 2.458, .907, 2.161, .907, 2.458, .907, 2.161, .907, 2.161, 1.178, 2.161, 1.178, 2.458, 1.178, 2.458, 1.178, 2.458, 1.181, 2.161, 1.181, 2.458, 1.181, 2.161, 1.181, 2.161, 1.452, 2.161, 1.452, 2.458, 1.452, 2.458, 1.452, 2.458, 1.482, 2.161, 1.482, 2.458, 1.482, 2.161, 1.482, 2.161, 1.753, 2.161, 1.753, 2.458, 1.753, 2.458, 1.753, 2.458, 1.783, 2.161, 1.783, 2.458, 1.783, 2.161, 1.783, 2.161, 2.054, 2.161, 2.054, 2.458, 2.054, 2.458, 2.054, 2.458, 2.153]).astype(np.float32)
         #rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose, queue_size=10)
 
-    def intersect_point(self, camera, point):
+    def intersect_point(self, camera, point, time=None):
         # Make a ray and remove components we don't need
-        ray = camera.make_3d_ray(point)[:3]
+        ray = camera.make_3d_vector(point)
         ray[1] = 0
         unit_ray = ray / np.linalg.norm(ray)
 
-        # Calculate alpha between [0,0,1] and the unit_ray in the camera frame
+        # Calculate alpha angle between [0,0,1] and the unit_ray in the camera frame
         forward_ray = np.array([0,0,1])
         alpha = np.arccos(np.dot(unit_ray,forward_ray))
         signed_alpha = -1 * np.sign(unit_ray[0]) * alpha
 
         # Find map frame position of the camera
-        cam_tf = camera.get_tf("map")
+        cam_tf = camera.get_tf(target_frame="map",time=time)
         theta = cam_tf[2] + signed_alpha
         point = cam_tf[:2]
-        print ray
         
+        dist = self.simulate_scan(point, theta)
+        return camera.make_3d_point(ray,dist,output_frame="map",time=time)
+
     def simulate_scan(self, point, theta):
         '''
         The works similarly to the particle filter raytracer. We just need to calculate theta for our point
@@ -79,3 +81,4 @@ if __name__ == "__main__":
     i = IntersectPoint()
     i.intersect_point(c,(1920/2,108))
     c.deactivate()
+    #print np.array([0.00464233,-0.30620446,1.0]) * c.proj_mat
