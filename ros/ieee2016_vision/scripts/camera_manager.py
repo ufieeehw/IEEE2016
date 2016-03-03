@@ -59,10 +59,12 @@ class Camera():
         # Mode can be 'pose' for the pose tf frame, or 'vision' for the vision frame at 'time'. Default is 'pose'.
         if mode == "pose":
             if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.position_frame_id)
+            self.tf_listener.waitForTransform(target_frame, self.position_frame_id, time, rospy.Duration(1.0))
             pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.position_frame_id, time)
             rot = tf.transformations.euler_from_quaternion(quaternion)
         elif mode == "vision":
             if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
+            self.tf_listener.waitForTransform(target_frame, self.position_frame_id, time, rospy.Duration(1.0))
             pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.perspective_frame_id, time)
             rot = tf.transformations.euler_from_quaternion(quaternion)
 
@@ -71,6 +73,7 @@ class Camera():
     def transform_point(self, point, target_frame="map", time=None):
         # Given a 3d point in the camera frame, return that point in the map frame.
         if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
+        self.tf_listener.waitForTransform(target_frame, self.perspective_frame_id, time, rospy.Duration(1.0))
         p_s = PointStamped(
                 header=Header(
                         stamp=time,
