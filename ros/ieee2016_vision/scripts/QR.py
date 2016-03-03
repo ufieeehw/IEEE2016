@@ -279,102 +279,105 @@ class DetectQRCodeTemplateMethod(object):
         frame_count = 0
             
         while not rospy.is_shutdown():
-            found = 0
+            temp = raw_input("> Go?")
+            # Actual loop, the above is just to not run it all the time
             image = self.camera.image
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             gray = cv2.equalizeHist(gray)
-            
-            existing_points = []
+            for frame_count in range(len(self.blues)):
+                found = 0
+                
+                existing_points = []
 
-            if frame_count == 0:
-                mid_point = np.array(self.blues[0].shape[::-1])/2
-                for template in self.blues:
-                    # Apply matching threshold for this rotation/scale
-                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
-                        # then just the first one it finds.
-                        exists = False
-                        # for existing_point in existing_points:
-                        #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
-                        #         exists = True
-                        #         break
-                        
-                        if not exists:
-                            found+=1
-                            #existing_points.append(pt)
-                            self.publish_block(pt+mid_point,"blue")
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
-                    #print existing_points
-            elif frame_count == 1:
-                mid_point = np.array(self.reds[0].shape[::-1])/2
-                for template in self.reds:
-                    # Apply matching threshold for this rotation/scale
-                    #mid_point = template.shape[::-1]
-                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
-                        # then just the first one it finds.
-                        exists = False
-                        # for existing_point in existing_points:
-                        #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
-                        #         exists = True
-                        #         break
-                        
-                        if not exists:
-                            found+=1
-                            self.publish_block(pt+mid_point,"red")
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
-                    #print existing_points
-            elif frame_count == 2:
-                mid_point = np.array(self.greens[0].shape[::-1])/2
-                for template in self.greens:
-                    # Apply matching threshold for this rotation/scale
-                    #mid_point = template.shape[::-1]
-                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
-                        # then just the first one it finds.
-                        exists = False
-                        # for existing_point in existing_points:
-                        #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
-                        #         exists = True
-                        #         break
-                        
-                        if not exists:
-                            found+=1
-                            self.publish_block(pt+mid_point,"green")
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
-                    #print existing_points
-                    existing_points = []
+                if frame_count == 0:
+                    mid_point = np.array(self.blues[0].shape[::-1])/2
+                    for template in self.blues:
+                        # Apply matching threshold for this rotation/scale
+                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                        loc = np.where( res >= threshold)
+                        for pt in zip(*loc[::-1]):
+                            # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
+                            # then just the first one it finds.
+                            exists = False
+                            # for existing_point in existing_points:
+                            #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
+                            #         exists = True
+                            #         break
+                            
+                            if not exists:
+                                found+=1
+                                #existing_points.append(pt)
+                                self.publish_block(pt+mid_point,"blue")
+                                cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
+                        #print existing_points
+                elif frame_count == 1:
+                    mid_point = np.array(self.reds[0].shape[::-1])/2
+                    for template in self.reds:
+                        # Apply matching threshold for this rotation/scale
+                        #mid_point = template.shape[::-1]
+                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                        loc = np.where( res >= threshold)
+                        for pt in zip(*loc[::-1]):
+                            # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
+                            # then just the first one it finds.
+                            exists = False
+                            # for existing_point in existing_points:
+                            #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
+                            #         exists = True
+                            #         break
+                            
+                            if not exists:
+                                found+=1
+                                self.publish_block(pt+mid_point,"red")
+                                cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
+                        #print existing_points
+                elif frame_count == 2:
+                    mid_point = np.array(self.greens[0].shape[::-1])/2
+                    for template in self.greens:
+                        # Apply matching threshold for this rotation/scale
+                        #mid_point = template.shape[::-1]
+                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                        loc = np.where( res >= threshold)
+                        for pt in zip(*loc[::-1]):
+                            # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
+                            # then just the first one it finds.
+                            exists = False
+                            # for existing_point in existing_points:
+                            #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
+                            #         exists = True
+                            #         break
+                            
+                            if not exists:
+                                found+=1
+                                self.publish_block(pt+mid_point,"green")
+                                cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
+                        #print existing_points
+                        existing_points = []
 
-            elif frame_count == 3:
-                mid_point = np.array(self.yellows[0].shape[::-1])/2
-                for template in self.yellows:
-                    # Apply matching threshold for this rotation/scale
-                    #mid_point = template.shape[::-1]
-                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
-                        # then just the first one it finds.
-                        exists = False
-                        # for existing_point in existing_points:
-                        #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
-                        #         exists = True
-                        #         break
-                        
-                        if not exists:
-                            found+=1
-                            self.publish_block(pt+mid_point,"yellow")
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,255), -1)
-                    #print existing_point
+                elif frame_count == 3:
+                    mid_point = np.array(self.yellows[0].shape[::-1])/2
+                    for template in self.yellows:
+                        # Apply matching threshold for this rotation/scale
+                        #mid_point = template.shape[::-1]
+                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                        loc = np.where( res >= threshold)
+                        for pt in zip(*loc[::-1]):
+                            # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
+                            # then just the first one it finds.
+                            exists = False
+                            # for existing_point in existing_points:
+                            #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
+                            #         exists = True
+                            #         break
+                            
+                            if not exists:
+                                found+=1
+                                print pt
+                                print pt+mid_point
+                                self.publish_block(pt+mid_point,"yellow")
+                                cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
+                        #print existing_point
 
-            frame_count += 1
-            if frame_count > len(self.blues): frame_count = 0
-            #print frame_count
-            cv2.imshow("found",image)
-            cv2.waitKey(1)
+                #print frame_count
+                cv2.imshow("found",image)
+                cv2.waitKey(1)
