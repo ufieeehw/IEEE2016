@@ -45,7 +45,7 @@ class GPUAccMap():
 
         # Only ranges at these indicies will be checked
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        self.deg_index = int(math.radians(45)/self.angle_increment)
+        self.deg_index = int(math.radians(20)/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
         self.step = 1
 
@@ -55,8 +55,8 @@ class GPUAccMap():
             np.arange(self.index_count/4 - self.deg_index, self.index_count/4 + self.deg_index, step=self.step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(self.index_count/2 - self.deg_index, self.index_count/2 + self.deg_index, step=self.step))
-        # self.indicies_to_compare = np.append( self.indicies_to_compare,            
-        #     np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step))
 
         # To generate weights, we need those indices to be pre-converted to radian angle measures 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
@@ -198,6 +198,7 @@ class GPUAccFilter():
         #    abs(self.pose_update[2]) < tolerance: return
         while len(self.laser_scan) == 0 and not rospy.is_shutdown():
             print "Waiting for scan."
+            time.sleep(.1)
 
         self.particles += self.pose_update
         
@@ -209,7 +210,7 @@ class GPUAccFilter():
             weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
             # Remove low weights from particle and weights list
-            weight_percentile = 98 #percent
+            weight_percentile = 92 #percent
             weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
             weights = weights_raw[weights_indicies_to_keep]
             self.particles = self.particles[weights_indicies_to_keep]
@@ -266,7 +267,7 @@ class GPUAccFilter():
             )
         )
 
-        self.br.sendTransform((self.pose_est[0], self.pose_est[1], 0), q,
+        self.br.sendTransform((self.pose_est[0], self.pose_est[1], .129), q,
                  rospy.Time.now(),
                  "base_link",
                  "map")
@@ -368,7 +369,7 @@ def add_noise(values,noise_size):
 
 rospy.init_node('particle_filter', anonymous=True)
 m = GPUAccMap()
-f = GPUAccFilter((.2,.2), .1, (1.4,1.65), m)
+f = GPUAccFilter((.45,1.54), 1, (-3.14,3.14), m)
 
 rospy.spin()
 

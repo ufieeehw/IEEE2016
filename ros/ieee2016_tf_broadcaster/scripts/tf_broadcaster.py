@@ -70,7 +70,7 @@ class TFPublisher():
 
         # base_link -> Each LIDAR
         self.tf_broad.sendTransform((0, .125368, -.03914),  
-                        tf.transformations.quaternion_from_euler(0, 3.14159, -1.570796),
+                        tf.transformations.quaternion_from_euler(0, 3.14159, -1.590796),
                         rospy.Time.now(), "laser_left", "base_link")
         self.tf_broad.sendTransform((.11, 0, -.03914),  
                         tf.transformations.quaternion_from_euler(3.14159, 0, 0),
