@@ -2,7 +2,7 @@
 import rospy
 import roslib
 from std_msgs.msg import Bool, Int8, Header
-from geometry_msgs.msg import Pose, Point32, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, PointStamped
+from geometry_msgs.msg import Pose, Point32, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, PointStamped, Point
 from sensor_msgs.msg import PointCloud,ChannelFloat32
 import tf
 
@@ -10,6 +10,7 @@ roslib.load_manifest('ieee2016_vision')
 from camera_manager import Camera
 from point_intersector import PointIntersector
 from ieee2016_msgs.msg import BlockStamped
+from ieee2016_msgs.srv import ArmWaypoint
 
 import numpy as np
 from kd_tree import KDTree
@@ -27,25 +28,43 @@ class Block():
         # How the object prints
         return "%06s" % self.color
 
+class Gripper():
+    '''
+    There are multiple grippers on the end of each end effector. This deals with keeping track of the blocks in
+    each gripper and the TF frames associated with each gripper.
+    '''
+    def __init__(self, parent_ee_number, gripper_number, block):
+        self.frame_id = str(parent_ee_number) + "-G" + str(gripper_number)
+        self.block = block
+
+    def  __repr__(self):
+        return self.frame_id
 
 class EndEffector():
-    def __init__(self, gripper_count, frame_id):
+    '''
+    The end effector is a grouping of grippers. The end effector object deals with keeping track of the grippers.
+    Gripper 0 is the gripper leftmost gripper.
+    '''
+    def __init__(self, gripper_count, ee_number, cam_position):
         self.gripper_count = gripper_count
-        self.frame_id = frame_id
+        self.frame_id = "EE"+str(ee_number)
 
         # Array of the blocks in the gripper - 0 is the left most gripper
-        self.block_positions = []
+        self.gripper_positions = []
+        self.cam_position = cam_position
         self.holding = 0
 
         for i in range(gripper_count):
-            b = Block("none")
-            self.block_positions.append(b)
+            # Define new gripper and add it to the gripper list
+            self.gripper_positions.append( Gripper(ee_number, i, Block("none") ) )
+
+        print self.gripper_positions
     
     def pickup(self, block, *gripper_number):
         # Adds the block to gripper specified
         for g in gripper_number:
-            if self.block_positions[g] == "none":
-                self.block_positions[g] = block
+            if self.gripper_positions[g] == "none":
+                self.gripper_positions[g] = block
                 self.holding += 1
                 return True
             else:
@@ -54,21 +73,29 @@ class EndEffector():
     def which_gripper(self,color):
         # Returns the gripper numbers of the grippers containing the blocks with specified color
         gripper_numbers = []
-        for i,b in enumerate(self.block_positions):
-            if b.color == color: gripper_numbers.append(i)
+        for i,b in enumerate(self.gripper_positions):
+            if b.color == color: gripper_positions.append(i)
 
         return gripper_numbers
 
     def __repr__(self):
         # How the object prints
-        return str(self.block_positions)
+        return str(self.gripper_positions)
 
 
 class ProcessBlocks():
-    def __init__(self, *end_effectors):
-        self.point_sub = rospy.Subscriber("/blocks", PointCloud, self.got_points, queue_size=1)
-        self.ee_point_pub = rospy.Publisher("/ee_move", PointStamped, queue_size=1)
+    '''
+    Take detected blocks from a kd-tree populated with blocks, try to find missing blocks, generate a position for the 
+    grippers to move to based on how many blocks are left, then deal with dropping off the blocks into the appropriate bins.
+    
+    '''
+    def __init__(self,  block_tree, *end_effectors):
+        self.ee_pose_pub = rospy.Publisher("/arm/waypoint", PoseStamped, queue_size=1)
+        self.point_sub = rospy.Subscriber("/camera/block_point_cloud", PointCloud, self.got_points, queue_size=1)
 
+        self.move_arm = rospy.ServiceProxy('/robot/arms/set_waypoint', ArmWaypoint)
+
+        
         self.blocks = np.array([])
         self.expected_blocks = 16
         
@@ -209,20 +236,10 @@ class ProcessBlocks():
 
     def pickup_blocks(self):
         # Pick up blocks and keep track of the order they are in
-        # # Temp sorted blocks modifier
-
-        # self.blocks_sorted[0][0].color = "none"
-        # self.blocks_sorted[0][1].color = "none"
-        # self.blocks_sorted[0][2].color = "none"
-        # self.blocks_sorted[0][3].color = "none"
-        # self.blocks_sorted[0][4].color = "none"
-        # self.blocks_sorted[0][5].color = "none"
-        # self.blocks_sorted[0][6].color = "none"
-        # self.blocks_sorted[0][7].color = "none"
 
         # One-by-one, move each end effector in position to pick up certain sets of blocks, then pick up blocks and register the locations.
         temp_planner_blocks = self.blocks_sorted
-        for e in self.end_effectors:
+        for ee in self.end_effectors:
             # Find the group of blocks to pick up. We're looking for the largest group of topmost blocks
             valid_counter_top = 0
             valid_counter_bottom = 0
@@ -248,10 +265,10 @@ class ProcessBlocks():
                     valid_counter_top = 0
                 
                 # Save max sized groupings
-                if valid_counter_top == e.gripper_count:
+                if valid_counter_top == ee.gripper_count:
                     groups[0].append([index - valid_counter_top + 1, valid_counter_top])
                     valid_counter_top = 0
-                if valid_counter_bottom == e.gripper_count:
+                if valid_counter_bottom == ee.gripper_count:
                     groups[1].append([index-valid_counter_bottom + 1,valid_counter_bottom])
                     valid_counter_bottom = 0
                 
@@ -263,40 +280,42 @@ class ProcessBlocks():
             largest_group = max(groups[0], key=lambda g:g[1])
             waypoint = np.array([0,0,0]).astype(np.float64)
 
-            # Determine the best location to move the end effector
+            # Should we pick up blocks in row 0 or row 1
             row = 0
             if largest_group[1] == 0: 
                 largest_group = max(groups[1], key=lambda g:g[1])
                 row = 1
                 if largest_group[1] == 0: print "Nothing left"
             
-            
-            for b in self.blocks_sorted[row][largest_group[0]:largest_group[0]+largest_group[1]]: 
-                waypoint += np.array(b.coordinate)
-                
-            waypoint /= largest_group[1]
-            self.pub_ee_point(waypoint)
-            #print waypoint
+
+            # The waypoint is set so that the gripper with the camera above it will move to
+            # the grouping of blocks. This may not be nessicary, but it can't hurt.
+            waypoint = self.blocks_sorted[row][largest_group[0]+1].coordinate
+            # We dont want the point to be exactly on the block, instead we want it a safe buffer
+            # distance out infront of the block.
+            buffer_distance = .2 #m
+            waypoint -= np.array([0,buffer_distance,0])
+
+            self.pub_ee_pose(ee.gripper_positions[ee.cam_position],waypoint)
 
     def drop_color(self, en):
         pass
 
-
-    def pub_ee_point(self,point):
-        self.ee_point_pub.publish(PointStamped(
+    def pub_ee_pose(self,gripper,point):
+        q = tf.transformations.quaternion_from_euler(0, 0, 1.5707)
+        pose_stamped = PoseStamped(
                 header=Header(
-                    stamp=rospy.Time.now(),
-                    frame_id="base_link"
-                ),
-                point=Point32(
-                    x=point[0],
-                    y=point[1],
-                    z=point[2],
-                )
+                        stamp=rospy.Time.now(),
+                        frame_id="map"
+                    ),
+                pose=Pose(
+                        position=Point(*point),
+                        orientation=Quaternion(*q)
+                    )
             )
-        )
         print point
-
+        self.ee_pose_pub.publish(pose_stamped)
+        self.move_arm(str(gripper),pose_stamped)
 
 class BlockServer():
     '''
@@ -308,8 +327,8 @@ class BlockServer():
         rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=500)
         self.cameras = cameras
 
-        # Make kd-tree with a .01 m tolerance when trying to add duplicated blocks
-        self.k = KDTree(.01)
+        # Make kd-tree with a tolerance when trying to add duplicated blocks
+        self.k = KDTree(.03175)
         self.intersector = PointIntersector()
 
     def got_block(self,msg):
@@ -322,8 +341,9 @@ class BlockServer():
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
-    c1 = Camera("cam_1")
-    c1.activate()
-    b_s = BlockServer(c1)
-
+    # c1 = Camera("cam_1")
+    # c1.activate()
+    # b_s = BlockServer(c1)
+    ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
+    ProcessBlocks(ee1)
     rospy.spin()
