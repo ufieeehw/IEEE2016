@@ -7,9 +7,9 @@ from geometry_msgs.msg import Point32
 import random
 
 colors = ["blue","blue","blue","blue","red","red","red","red","yellow","yellow","yellow","yellow","green","green","green","green"]
-coordinates = [(0,127,0),(0,127,3.81),(6.35,127,0),(6.35,127,3.81),(6.35*2,127,0),(6.35*2,127,3.81),(6.35*3,127,0),(6.35*3,127,3.81),(6.35*4,127,0),(6.35*4,127,3.81),(6.35*5,127,0),(6.35*5,127,3.81),(6.35*6,127,0),(6.35*6,127,3.81),(6.35*7,127,0),(6.35*7,127,3.81)]
+coordinates = [(0,215.3,25),(0,215.3,28.81),(6.35,215.3,25),(6.35,215.3,28.81),(6.35*2,215.3,25),(6.35*2,215.3,28.81),(6.35*3,215.3,25),(6.35*3,215.3,28.81),(6.35*4,215.3,25),(6.35*4,215.3,28.81),(6.35*5,215.3,25),(6.35*5,215.3,28.81),(6.35*6,215.3,25),(6.35*6,215.3,28.81),(6.35*7,215.3,25),(6.35*7,215.3,28.81)]
 found_points = []
-for p in range(12):
+for p in range(16):
     color = random.randint(0,len(colors)-1)
     coor = random.randint(0,len(coordinates)-1)
     found_points.append([colors[color],coordinates[coor]])
@@ -38,13 +38,13 @@ for p in found_points:
         channels[2].append(0) #B
 
     points.append(Point32(
-            x=p[1][0]/100.0 + random.uniform(-.005, .005),
+            x=p[1][0]/100.0 + random.uniform(-.005, .005) + .9,
             y=p[1][1]/100.0 + random.uniform(-.005, .005),
             z=p[1][2]/100.0 + random.uniform(-.005, .005)
         )
     )
 rospy.init_node('temp')
-point_pub = rospy.Publisher("/blocks", PointCloud, queue_size=1)
+point_pub = rospy.Publisher("/camera/block_point_cloud", PointCloud, queue_size=1)
 
 rgb_channels = [ChannelFloat32(name="r", values=channels[0]),
                 ChannelFloat32(name="g", values=channels[1]),
@@ -56,7 +56,7 @@ while not rospy.is_shutdown():
     point_pub.publish(PointCloud(
             header=Header(
                 stamp=rospy.Time.now(),
-                frame_id="base_link"
+                frame_id="map"
                 ),
             points=points,
             channels=rgb_channels
