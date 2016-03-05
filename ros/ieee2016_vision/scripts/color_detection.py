@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python2
 
 from camera_manager import Camera
 import cv2
@@ -12,7 +12,7 @@ RED_HUE = (np.array([0, 100, 100]), np.array([20, 255, 255]))
 GREEN_HUE = (np.array([50, 42, 42]), np.array([80, 255, 255]))
 BLUE_HUE = (np.array([80, 100, 100]), np.array([150, 255, 255]))
 YELLOW_HUE = (np.array([20, 110, 110]), np.array([50, 255, 255]))
-HUE_RANGES = (RED_HUE, GREEN_HUE, BLUE_HUE, YELLOW_HUE)
+HUE_RANGES = {"red": RED_HUE, "green": GREEN_HUE, "blue": BLUE_HUE, "yellow": YELLOW_HUE}
 
 
 class ColorProcessing():
@@ -20,14 +20,18 @@ class ColorProcessing():
 	Contains various color operations that are in the structure of a chain
 	(e.g. top level methods call the methods that they depend on). Some methods
 	require the selection of a color to proceed. Colors id's are as follows:
-	red = 0, green = 1, blue = 2, and yellow = 3. Current top level methods are
-	as follows: resize_frame, select_largest_object, and average_box.
+	red, green, blue, and yellow. Current top level methods are as follows:
+	resize_frame, select_largest_object, average_box, and get_box_center.
 	'''
 	def __init__(self, camera):
 		# Baseline operating parameters
 		self.operating_image_width = 320
 		self.image_color_depth = 16
+
 		self.camera = camera
+		self.frame = self.camera.image
+		self.box = None
+		self.box_center = None
 
 	def resize_frame(self):
 		'''
@@ -142,6 +146,24 @@ class ColorProcessing():
 					box_avg[j][k] = (box_avg[j][k] / amount)
 			self.box = box_avg
 
+	def get_box_center(self):
+		'''
+		Finds the center point of the class object's box variable by averaging
+		the (x, y) points of the corners. If there is no box, it sets self.box
+		to None.
+		'''
+		box_avg = [0, 0]
+
+		if (self.box):
+			for j in range(4):
+				for k in range(2):
+					box_avg[k] = box_avg[k] + self.box[j][k]
+			for k in range(2):
+				box_avg[k] = (int)(box_avg[k] / 4)
+			self.box_center = tuple(box_avg)
+		else:
+			self.box_center = None
+
 
 if __name__ == "__main__":
 	'''
@@ -152,10 +174,16 @@ if __name__ == "__main__":
 	camera = Camera("cam_1")
 	camera.activate()
 	processing = ColorProcessing(camera)
+
 	while (True):
-		processing.average_box(processing.select_largest_object, 2, 8)
+		# The actual processing of the image
+		processing.average_box(processing.select_largest_object, "blue", 8)
+		processing.get_box_center()
+
+		# Pulling values used to render the debugging image
 		processing.resize_frame()
 		box = processing.box
+		box_center = processing.box_center
 		frame = processing.frame
 
 		# Draw a box around the selected object in the captured frame
@@ -163,9 +191,14 @@ if __name__ == "__main__":
 			box = np.int0(box)
 			cv2.drawContours(frame, [box], 0, (0, 0, 255), 2)
 
-		# Display all frames for debugging
+		# Draw the center point of the box in the captured frame
+		if (box_center):
+			cv2.circle(frame, box_center, 3, (0, 255, 0))
+
+		# Display the frame for debugging
 		cv2.imshow('Debugging', frame)
 		if (cv2.waitKey(5) == 27):
 			cv2.destroyAllWindows
 			break
+
 	camera.deactivate()
