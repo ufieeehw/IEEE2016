@@ -50,21 +50,21 @@ class EndEffector():
         self.frame_id = "EE"+str(ee_number)
 
         # Array of the blocks in the gripper - 0 is the left most gripper
-        self.gripper_positions = []
+        self.block_positions = []
         self.cam_position = cam_position
         self.holding = 0
 
         for i in range(gripper_count):
             # Define new gripper and add it to the gripper list
-            self.gripper_positions.append( Gripper(ee_number, i, Block("none") ) )
+            self.block_positions.append( Gripper(ee_number, i, Block("none") ) )
 
-        print self.gripper_positions
+        print self.block_positions
     
     def pickup(self, block, *gripper_number):
         # Adds the block to gripper specified
         for g in gripper_number:
-            if self.gripper_positions[g] == "none":
-                self.gripper_positions[g] = block
+            if self.block_positions[g] == "none":
+                self.block_positions[g] = block
                 self.holding += 1
                 return True
             else:
@@ -73,30 +73,29 @@ class EndEffector():
     def which_gripper(self,color):
         # Returns the gripper numbers of the grippers containing the blocks with specified color
         gripper_numbers = []
-        for i,b in enumerate(self.gripper_positions):
-            if b.color == color: gripper_positions.append(i)
+        for i,b in enumerate(self.block_positions):
+            if b.color == color: block_positions.append(i)
 
         return gripper_numbers
 
     def __repr__(self):
         # How the object prints
-        return str(self.gripper_positions)
+        return str(self.block_positions)
 
 
 class ProcessBlocks():
     '''
     Take detected blocks from a kd-tree populated with blocks, try to find missing blocks, generate a position for the 
     grippers to move to based on how many blocks are left, then deal with dropping off the blocks into the appropriate bins.
-    
+
+    This needs to be modified to work in all cases, with half blocks namely.
     '''
-    def __init__(self,  block_tree, *end_effectors):
+    def __init__(self, *end_effectors):
         self.ee_pose_pub = rospy.Publisher("/arm/waypoint", PoseStamped, queue_size=1)
-        self.point_sub = rospy.Subscriber("/camera/block_point_cloud", PointCloud, self.got_points, queue_size=1)
+        #self.point_sub = rospy.Subscriber("/camera/block_point_cloud", PointCloud, self.got_points, queue_size=1)
 
         self.move_arm = rospy.ServiceProxy('/robot/arms/set_waypoint', ArmWaypoint)
 
-        
-        self.blocks = np.array([])
         self.expected_blocks = 16
         
         self.end_effectors = end_effectors
@@ -104,6 +103,10 @@ class ProcessBlocks():
         print "Waiting for message..."
 
     def got_points(self,msg):
+        '''
+        Depreciated, now we are just passing a kd_tree of blocks in rather then sending them as a ros point cloud.
+        '''
+
         #if len(self.points) < 1:
         #print msg.channels[0].values
         for i,p in enumerate(msg.points):
@@ -131,7 +134,13 @@ class ProcessBlocks():
         self.point_sub.unregister()
         self.find_missing_blocks()
 
-    def find_missing_blocks(self):
+    def find_missing_blocks(self, block_tree):
+        # Go through the tree we were given and extract block information.
+        self.blocks = np.array([])
+        for b in block_tree:
+            block = Block(b[1].point,b[1].linked_object)
+            self.blocks = np.append(self.blocks,block)
+
         # Find out how many missing blocks there are and identify where they should be
         missing = self.expected_blocks-len(self.blocks)
         print "Detected",missing,"blocks missing."
@@ -234,8 +243,10 @@ class ProcessBlocks():
         self.blocks_sorted = blocks_sorted
         self.pickup_blocks()
 
-    def pickup_blocks(self):
+    def make_arm_waypoints(self):
         # Pick up blocks and keep track of the order they are in
+
+        arm_waypoints = []
 
         # One-by-one, move each end effector in position to pick up certain sets of blocks, then pick up blocks and register the locations.
         temp_planner_blocks = self.blocks_sorted
@@ -296,9 +307,18 @@ class ProcessBlocks():
             buffer_distance = .2 #m
             waypoint -= np.array([0,buffer_distance,0])
 
-            self.pub_ee_pose(ee.gripper_positions[ee.cam_position],waypoint)
+            # Even though the gripper isnt actually holding the block, we assume it will be
+            self.set_gripper_blocks(self.blocks_sorted[row][largest_group[0]:largest_group[0]+largest_group[1]])
 
-    def drop_color(self, en):
+            arm_waypoints.append([ee.gripper_positions[ee.cam_position],waypoint])
+
+        return arm_waypoints
+
+    def set_gripper_blocks(self, ee, blocks):
+        for gripper,block in zip(ee.block_positions,blocks):
+            gripper.block = block
+
+    def drop_color(self, ee):
         pass
 
     def pub_ee_pose(self,gripper,point):
@@ -319,25 +339,23 @@ class ProcessBlocks():
 
 class BlockServer():
     '''
-    BlockServer acts as a server to deal with block detection from the cameras. Given a BlockStamped message, 
-    the server will find the actual point in the map frame and keep an updated pointcloud as Shia moves.
-    After detecting the correct number of blocks, it will pass that pointcloud off to ProcessBlocks.
+    BlockServer acts as a server to deal with block detection from the cameras. 
+
+    Given a BlockStamped message, the server will find the actual point in the map frame and keep an updated pointcloud as Shia moves.
     '''
     def __init__(self, *cameras):
-        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=500)
+        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=20)
         self.cameras = cameras
 
         # Make kd-tree with a tolerance when trying to add duplicated blocks
-        self.k = KDTree(.03175)
+        self.k = KDTree(.03175) #m
         self.intersector = PointIntersector()
 
     def got_block(self,msg):
-        # Find the camera that this image was taken in.
+        # Find the camera that this image was taken in and transform points appropriately.
         camera = [c for c in self.cameras if c.name == msg.header.frame_id][0]
         map_point = self.intersector.intersect_point(camera, msg.point, time=msg.header.stamp)
-        print map_point
-        #self.k.insert_unique()
-
+        self.k.insert_unique(map_point,msg.color)
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
