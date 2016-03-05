@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import rospy
-from std_msgs.msg import Header
+from std_msgs.msg import Header, Int8
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped, Vector3
 from sensor_msgs.msg import LaserScan
@@ -20,9 +20,12 @@ import pyopencl as cl
 os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
 class GPUAccMap():
-    def __init__(self):
+    def __init__(self, map_orientation):
         # Each line segment in the form: ax1, ay1, ax2, ay2, bx1, by1, bx2, by2, ...
-        self.map = np.array([0, 0, 0, .784, 0, .784, .015, .784, .015, .784, .015, 1.158, 0, 1.158, .015, 1.158, 0, 1.158, 0, 2.153, .464, .784, .479, .784, .479, .784, .479, 1.158, .464, .784, .464, 1.158, .464, 1.158, .479, 1.158, 0, 0, .549, 0, .549, 0, .549, .317, .549, .317, .569, .317, .569, 0, .569, .317, .569, 0, .809, 0, .809, 0, .809, .317, .809, .317, .829, .317, .829, 0, .829, .317, .829, 0, 2.458, 0, 0, 2.153, 2.458, 2.153, 2.458, 0, 2.458, .907, 2.161, .907, 2.458, .907, 2.161, .907, 2.161, 1.178, 2.161, 1.178, 2.458, 1.178, 2.458, 1.178, 2.458, 1.181, 2.161, 1.181, 2.458, 1.181, 2.161, 1.181, 2.161, 1.452, 2.161, 1.452, 2.458, 1.452, 2.458, 1.452, 2.458, 1.482, 2.161, 1.482, 2.458, 1.482, 2.161, 1.482, 2.161, 1.753, 2.161, 1.753, 2.458, 1.753, 2.458, 1.753, 2.458, 1.783, 2.161, 1.783, 2.458, 1.783, 2.161, 1.783, 2.161, 2.054, 2.161, 2.054, 2.458, 2.054, 2.458, 2.054, 2.458, 2.153]).astype(np.float32)
+        if map_orientation == 1:
+            self.map = np.array([])            
+        elif map_orientation == 2:
+            self.map = np.array([0, 0, 0, .784, 0, .784, .015, .784, .015, .784, .015, 1.158, 0, 1.158, .015, 1.158, 0, 1.158, 0, 2.153, .464, .784, .479, .784, .479, .784, .479, 1.158, .464, .784, .464, 1.158, .464, 1.158, .479, 1.158, 0, 0, .549, 0, .549, 0, .549, .317, .549, .317, .569, .317, .569, 0, .569, .317, .569, 0, .809, 0, .809, 0, .809, .317, .809, .317, .829, .317, .829, 0, .829, .317, .829, 0, 2.458, 0, 0, 2.153, 2.458, 2.153, 2.458, 0, 2.458, .907, 2.161, .907, 2.458, .907, 2.161, .907, 2.161, 1.178, 2.161, 1.178, 2.458, 1.178, 2.458, 1.178, 2.458, 1.181, 2.161, 1.181, 2.458, 1.181, 2.161, 1.181, 2.161, 1.452, 2.161, 1.452, 2.458, 1.452, 2.458, 1.452, 2.458, 1.482, 2.161, 1.482, 2.458, 1.482, 2.161, 1.482, 2.161, 1.753, 2.161, 1.753, 2.458, 1.753, 2.458, 1.753, 2.458, 1.783, 2.161, 1.783, 2.458, 1.783, 2.161, 1.783, 2.161, 2.054, 2.161, 2.054, 2.458, 2.054, 2.458, 2.054, 2.458, 2.153]).astype(np.float32)            
 
         # LaserScan parameters
         self.angle_increment = .007 #rads/index
@@ -34,7 +37,7 @@ class GPUAccMap():
         self.index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
 
         # Set up pyopencl
-        self.ctx = cl.Context([cl.get_platforms()[1].get_devices()[0]])
+        self.ctx = cl.Context([cl.get_platforms()[0].get_devices()[0]])
         self.queue = cl.CommandQueue(self.ctx)
         self.mf = cl.mem_flags
 
@@ -45,12 +48,12 @@ class GPUAccMap():
 
         # Only ranges at these indicies will be checked
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        self.deg_index = int(math.radians(20)/self.angle_increment)
+        self.deg_index = int(math.radians(30)/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
         self.step = 1
 
         # The serivce to determine which LIDAR to navigate with
-        rospy.Service('/robot/navigation/select_lidar', LidarSelector, self.change_indicies_to_compare)
+        rospy.Service('/select_lidar', LidarSelector, self.change_indicies_to_compare)
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(self.index_count/4 - self.deg_index, self.index_count/4 + self.deg_index, step=self.step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
@@ -110,16 +113,15 @@ class GPUAccMap():
 class GPUAccFilter():
     def __init__(self, center, radius, heading_range, m):
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
-        
-        # ROS Inits
 
-        # These are to manually set a pose in rviz
-        rospy.wait_for_service('/robot/reset_odom')
-        self.set_odometry_proxy = rospy.ServiceProxy('/robot/reset_odom', ResetOdom)
-        self.init_pose_sub = rospy.Subscriber('/initialpose', PoseWithCovarianceStamped, self.got_pose_estimate)
+        # These are to manually set a pose in rviz (does not work)
+        #ospy.wait_for_service('/robot/reset_odom')
+        #self.set_odometry_proxy = rospy.ServiceProxy('/robot/reset_odom', ResetOdom)
+        self.init_pose_sub = rospy.Subscriber('/robot/initialpose', PoseStamped, self.got_pose_estimate)
 
         self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
         self.pose_est_pub = rospy.Publisher('/robot/pf_pose_est', PoseStamped, queue_size=2)
+
         self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
         self.laser_scan_sub = rospy.Subscriber('/lidar/scan_fused', LaserScan, self.got_laserscan)
 
@@ -145,29 +147,19 @@ class GPUAccFilter():
         #print self.particles
         self.laser_scan = np.array([])
 
-        # For keeping track of time
-        self.prev_time = time.time()
-
-        self.hz_counter = 0
-        r = rospy.Rate(20) #hz
-        start_time = time.time()
-        while not rospy.is_shutdown():
-            r.sleep()
-            
-            self.run_filter()
-            #print "HZ:",1.0/(time.time()-start_time)
-            start_time = time.time()
+        # Begin running the filter
+        self.run_filter()
 
     def got_pose_estimate(self, msg):
         print msg
-        new_yaw = tf.transformations.euler_from_quaternion([msg.pose.pose.orientation.x,msg.pose.pose.orientation.y,msg.pose.pose.orientation.z,msg.pose.pose.orientation.w])[2]
+        new_yaw = tf.transformations.euler_from_quaternion([msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z,msg.pose.orientation.w])[2]
         new_pose = np.array([msg.pose.pose.position.x,msg.pose.pose.position.y,new_yaw])
-        self.pose_update = np.array([new_pose - self.pose])
+        self.pose_update = np.array([0,0,0])
         self.pose = np.array(new_pose)
 
         # Make new particles around that spot
         self.particles = np.zeros([1,3])
-        self.gen_particles(self.INIT_PARTICLES, new_pose[:2], 3, (new_pose[2]-.5,new_pose[2]+.5))
+        self.gen_particles(self.INIT_PARTICLES, new_pose[:2], 3, (new_pose[2]-.3,new_pose[2]+.3))
         self.particles = self.particles[1:]
 
         self.set_odometry_proxy(x=new_pose[0],y=new_pose[1],yaw=new_pose[2])
@@ -189,55 +181,58 @@ class GPUAccFilter():
         self.publish_particle_array()
 
     def run_filter(self):
-        # This is where the filter does its work
+        '''
+        This function deals with actually running the filter.
+        '''
+        print "running"
+        r = rospy.Rate(20) #hz
+        start_time = time.time()
+        while not rospy.is_shutdown():
+            r.sleep()
 
-        # Check our updated position from the last run of the filter, if it is 0 or close to it, then break and dont worry about running the filter
-        # tolerance = 1e-4
-        # if abs(self.pose_update[0]) < tolerance and\
-        #    abs(self.pose_update[1]) < tolerance and\
-        #    abs(self.pose_update[2]) < tolerance: return
-        while len(self.laser_scan) == 0 and not rospy.is_shutdown():
-            print "Waiting for scan."
-            time.sleep(.1)
+            while len(self.laser_scan) == 0 and not rospy.is_shutdown():
+                print "Waiting for scan."
+                continue
 
-        self.particles += self.pose_update
-        
-        # Reset the pose update so that the next run will contain the pose update from this point
-        self.pose_update = np.array([0,0,0], np.float32)
+            self.particles += self.pose_update
+            
+            # Reset the pose update so that the next run will contain the pose update from this point
+            self.pose_update = np.array([0,0,0], np.float32)
 
-        try:
-            # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
-            weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
+            try:
+                # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
+                weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
-            # Remove low weights from particle and weights list
-            weight_percentile = 92 #percent
-            weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
-            weights = weights_raw[weights_indicies_to_keep]
-            self.particles = self.particles[weights_indicies_to_keep]
+                # Remove low weights from particle and weights list
+                weight_percentile = 92 #percent
+                weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
+                weights = weights_raw[weights_indicies_to_keep]
+                self.particles = self.particles[weights_indicies_to_keep]
 
-            #Just for debugging ==================================
-            print "WEIGHT PERCENTILE:", weight_percentile
-            print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
-            print "PARTICLE COUNT:", len(self.particles),"/",self.MAX_PARTICLES
+                #Just for debugging ==================================
+                print "WEIGHT PERCENTILE:", weight_percentile
+                print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
+                print "PARTICLE COUNT:", len(self.particles),"/",self.MAX_PARTICLES
 
-            # Calculate pose esitmation before generating new particles
-            new_x = np.mean(self.particles.T[0])
-            new_y = np.mean(self.particles.T[1])
-            new_head = np.mean(self.particles.T[2])
+                # Calculate pose esitmation before generating new particles
+                new_x = np.mean(self.particles.T[0])
+                new_y = np.mean(self.particles.T[1])
+                new_head = np.mean(self.particles.T[2])
 
-            # Update Pose
-            self.publish_pose([new_x,new_y,new_head])
+                # Update Pose
+                self.publish_pose([new_x,new_y,new_head])
 
-            translation_vairance = .3  #m  #.1
-            rotational_vairance = .6 #rads #.5
+                translation_vairance = .3  #m  #.1
+                rotational_vairance = .6 #rads #.5
 
-            self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
-                                self.pose_est[:2],
-                                translation_vairance,
-                                (self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance) )
-        except:
-            print "Error was found and excepted."
-        print 
+                self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
+                                    self.pose_est[:2],
+                                    translation_vairance,
+                                    (self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance) )
+            except:
+                print "Error was found and excepted."
+            print 
+            running = False
 
     def publish_pose(self,particle_avg):
         # Update pose and TF
@@ -267,7 +262,7 @@ class GPUAccFilter():
             )
         )
 
-        self.br.sendTransform((self.pose_est[0], self.pose_est[1], .129), q,
+        self.br.sendTransform((self.pose_est[0], self.pose_est[1], .125), q,
                  rospy.Time.now(),
                  "base_link",
                  "map")
@@ -361,16 +356,20 @@ class GPUAccFilter():
         )
         #print "PUBLISHED PARTICLES"
 
+def start_navigation(msg):
+    m = GPUAccMap(msg.data)
+    if msg.data == 1:
+        print "> Starting navigation with map configuration:",msg.data
+        f = GPUAccFilter((.45,1.54), 1, (1.5707-.5,1.5707+.5), m)
+    elif msg.data == 2:
+        print "> Starting navigation with map configuration:",msg.data
+        f = GPUAccFilter((.2,.2), .4, (1.5707-.5,1.5707+.5), m)
+    
 
-def add_noise(values,noise_size):
-    # Adds noise to scan to some data
-    return values + np.random.uniform(0,noise_size-noise_size/2.0,values.size)
-
-
-rospy.init_node('particle_filter', anonymous=True)
-m = GPUAccMap()
-f = GPUAccFilter((.45,1.54), 1, (-3.14,3.14), m)
-
+# Set up start command subscriber and wait until we get that signal
+rospy.init_node('particle_filter')
+rospy.Subscriber("/robot/start_navigation", Int8, start_navigation)
+print "> Waiting for navigation start command..."
 rospy.spin()
 
 
