@@ -190,13 +190,18 @@ class DetectQRCodeZBar(object):
         return poin
 
 class DetectQRCodeTemplateMethod(object):
-    def __init__(self, qr_code_count, camera):
+    '''
+    Object that deals with detecting QR codes in an image using a template matching method.
+
+    The pros to this are that it will work in various different lighting conditions and works very reliably and very quickly.
+    The cons are that template matching is very scale/rotationaly intolerant meaning that we have to be at preset distances.
+
+    Pass in a list of distances (cm) we will be operating at. Note that the template files must exist at that distance. 
+    This object is able to create rotated images from a base template image.
+    '''
+    def __init__(self, distances):
         # ROS inits
         self.block_pub = rospy.Publisher("/camera/block_detection", BlockStamped, queue_size=50)
-
-        self.camera = camera
-        self.qr_code_count_max = qr_code_count
-        #self.timeout = timeout
 
         # Template Lists
         self.blues = []
@@ -204,21 +209,17 @@ class DetectQRCodeTemplateMethod(object):
         self.greens = []
         self.yellows = []
 
-        self.detected_codes = []
-
-        self.load_templates(57)
-        self.match_templates()
-
+        self.load_templates(distances[0])
 
     def load_templates(self,dist):
-        # Find the closest distance folder (the folders are in cm)
+        # Only works with one distance right now
         self.base_path = os.path.join(TEMPLATES_FOLDER, str(dist)) #str(min(QR_DISTANCES, key=lambda x:abs(x-dist))))
 
         colors = {"/blue":self.blues,"/red":self.reds,"/green":self.greens,"/yellow":self.yellows}
         thetas = [0,90,180,270]
 
-        # Save raw image
-        cv2.imwrite(self.base_path+"/raw.jpg",self.camera.image)
+        # Save raw image for manually getting templates from. Need to specify a camera for this.
+        #cv2.imwrite(self.base_path+"/raw.jpg",self.camera.image)
 
         # Check if there is already a folder with rotated and scaled images in it 
         if cv2.imread(self.base_path+"/blue/0.jpg") is None:
@@ -255,6 +256,73 @@ class DetectQRCodeTemplateMethod(object):
                 rot_mat = cv2.getRotationMatrix2D((cols/2,rows/2),theta,1)
                 cv2.imwrite(self.base_path+color+"/"+str(theta)+".jpg",cv2.warpAffine(template,rot_mat,(cols,rows)))
 
+    def match_templates(self, dist, camera):
+        '''
+        Called by main program to process an image from the specified camera and to find QR Codes in that image.
+        
+        This method takes in the distance to the blocks. We will probably work at 2-4 different distances. Close up and far
+            away for both full blocks and the back half blocks
+
+        This method will publish BlockStamped messages that can be recived by the processing node.
+        '''
+
+        threshold = .65
+        
+        blues = self.blues 
+        reds = self.reds 
+        greens = self.greens 
+        yellows = self.yellows 
+
+        # Load image from camera, save it 
+        image = self.camera.image
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.equalizeHist(gray)
+
+        for frame_count in range(len(self.blues)):
+            if frame_count == 0:
+                mid_point = np.array(self.blues[0].shape[::-1])/2
+                for template in self.blues:
+                    # Apply matching threshold for this rotation/scale
+                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                    loc = np.where( res >= threshold)
+                    for pt in zip(*loc[::-1]):
+                        self.publish_block(pt+mid_point,"blue")
+                        cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
+
+            elif frame_count == 1:
+                mid_point = np.array(self.reds[0].shape[::-1])/2
+                for template in self.reds:
+                    # Apply matching threshold for this rotation/scale
+                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                    loc = np.where( res >= threshold)
+                    for pt in zip(*loc[::-1]):
+                        self.publish_block(pt+mid_point,"red")
+                        cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
+
+            elif frame_count == 2:
+                mid_point = np.array(self.greens[0].shape[::-1])/2
+                for template in self.greens:
+                    # Apply matching threshold for this rotation/scale
+                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                    loc = np.where( res >= threshold)
+                    for pt in zip(*loc[::-1]):
+                        self.publish_block(pt+mid_point,"green")
+                        cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
+
+            elif frame_count == 3:
+                mid_point = np.array(self.yellows[0].shape[::-1])/2
+                for template in self.yellows:
+                    # Apply matching threshold for this rotation/scale
+                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                    loc = np.where( res >= threshold)
+                    for pt in zip(*loc[::-1]):
+                        self.publish_block(pt+mid_point,"yellow")
+                        cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
+
+            # Only for displaying
+            cv2.imshow("found",image)
+            cv2.waitKey(1)
+
     def publish_block(self,uv_point,color):
         #print uv_point
         b_s = BlockStamped(
@@ -266,118 +334,3 @@ class DetectQRCodeTemplateMethod(object):
                 color=color
             )
         self.block_pub.publish(b_s)
-
-    def match_templates(self):
-        threshold = .65
-        group_distance = 20
-        
-        blues = self.blues 
-        reds = self.reds 
-        greens = self.greens 
-        yellows = self.yellows 
-
-        frame_count = 0
-            
-        while not rospy.is_shutdown():
-            temp = raw_input("> Go?")
-            # Actual loop, the above is just to not run it all the time
-            image = self.camera.image
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            gray = cv2.equalizeHist(gray)
-            for frame_count in range(len(self.blues)):
-                found = 0
-                
-                existing_points = []
-
-                if frame_count == 0:
-                    mid_point = np.array(self.blues[0].shape[::-1])/2
-                    for template in self.blues:
-                        # Apply matching threshold for this rotation/scale
-                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                        loc = np.where( res >= threshold)
-                        for pt in zip(*loc[::-1]):
-                            # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
-                            # then just the first one it finds.
-                            exists = False
-                            # for existing_point in existing_points:
-                            #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
-                            #         exists = True
-                            #         break
-                            
-                            if not exists:
-                                found+=1
-                                #existing_points.append(pt)
-                                self.publish_block(pt+mid_point,"blue")
-                                cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
-                        #print existing_points
-                elif frame_count == 1:
-                    mid_point = np.array(self.reds[0].shape[::-1])/2
-                    for template in self.reds:
-                        # Apply matching threshold for this rotation/scale
-                        #mid_point = template.shape[::-1]
-                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                        loc = np.where( res >= threshold)
-                        for pt in zip(*loc[::-1]):
-                            # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
-                            # then just the first one it finds.
-                            exists = False
-                            # for existing_point in existing_points:
-                            #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
-                            #         exists = True
-                            #         break
-                            
-                            if not exists:
-                                found+=1
-                                self.publish_block(pt+mid_point,"red")
-                                cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
-                        #print existing_points
-                elif frame_count == 2:
-                    mid_point = np.array(self.greens[0].shape[::-1])/2
-                    for template in self.greens:
-                        # Apply matching threshold for this rotation/scale
-                        #mid_point = template.shape[::-1]
-                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                        loc = np.where( res >= threshold)
-                        for pt in zip(*loc[::-1]):
-                            # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
-                            # then just the first one it finds.
-                            exists = False
-                            # for existing_point in existing_points:
-                            #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
-                            #         exists = True
-                            #         break
-                            
-                            if not exists:
-                                found+=1
-                                self.publish_block(pt+mid_point,"green")
-                                cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
-                        #print existing_points
-                        existing_points = []
-
-                elif frame_count == 3:
-                    mid_point = np.array(self.yellows[0].shape[::-1])/2
-                    for template in self.yellows:
-                        # Apply matching threshold for this rotation/scale
-                        #mid_point = template.shape[::-1]
-                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                        loc = np.where( res >= threshold)
-                        for pt in zip(*loc[::-1]):
-                            # Check if the found point already exists. This should be optimized and made to use an average of centers rather 
-                            # then just the first one it finds.
-                            exists = False
-                            # for existing_point in existing_points:
-                            #     if np.linalg.norm(np.array(existing_point) - np.array(pt)) < group_distance:
-                            #         exists = True
-                            #         break
-                            
-                            if not exists:
-                                found+=1
-                                print pt
-                                print pt+mid_point
-                                self.publish_block(pt+mid_point,"yellow")
-                                cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
-                        #print existing_point
-
-                #print frame_count
-                cv2.imshow("found",image)
-                cv2.waitKey(1)
