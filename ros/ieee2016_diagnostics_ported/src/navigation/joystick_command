@@ -9,17 +9,18 @@ import rospy
 
 from sensor_msgs.msg import Joy
 from geometry_msgs.msg import Twist, TwistStamped, Vector3
-from std_msgs.msg import String
+from std_msgs.msg import String, Int8, Bool
 from ieee2016_msgs.srv import StopMecanum, StopController
+
+import time
 
 rospy.init_node('joystick_command')
 
 pub = rospy.Publisher('/robot/twist', TwistStamped, queue_size=3)
-pub = rospy.Publisher('/robot/twist', TwistStamped, queue_size=3)
-# rospy.loginfo("------- Waiting for mecanum stop service ------")
-# rospy.wait_for_service('/mecanum/stop')
+start = rospy.Publisher('/settings/start_command', Bool, queue_size=3)
+map_version = rospy.Publisher('/settings/map_version', Int8, queue_size=3)
+
 stop_proxy = rospy.ServiceProxy('/robot/mecanum/stop', StopMecanum)
-# controller_stop_proxy = None
 
 def got_joy_msg(joy_msg):
     global twist_stamped_msg, active
@@ -27,17 +28,18 @@ def got_joy_msg(joy_msg):
     if joy_msg.buttons[0]:
        active = not active
 
+    if joy_msg.buttons[3]:
+       map_version.publish(Int8(data=2))
+       time.sleep(.2)
+       start.publish(Bool(data=True))
+
     #6 start, 7 stop
     if joy_msg.buttons[6]:
         stop_proxy(True)
     elif joy_msg.buttons[7]:
         stop_proxy(False)
 
-    # if controller_stop_proxy is not None:
-    #    if joy_msg.buttons[1]:
-    #        controller_stop_proxy(True)
-    #    elif joy_msg.buttons[3]:
-    #        controller_stop_proxy(False)
+
     linear_x = joy_msg.axes[1] * max_linear_velocity
     linear_y = joy_msg.axes[0] * max_linear_velocity
     angular_z = joy_msg.axes[3] * max_angular_velocity
@@ -75,11 +77,6 @@ rate = rospy.Rate(25) #hz
 while not rospy.is_shutdown():
     if active: pub.publish(twist_stamped_msg)
     rate.sleep()
-
-#rospy.wait_for_service('/controller/stop')
-#print '------Found controller stop service---------'
-#controller_stop_proxy = rospy.ServiceProxy('/controller/stop', StopController)
-
 
 rospy.spin()    
 

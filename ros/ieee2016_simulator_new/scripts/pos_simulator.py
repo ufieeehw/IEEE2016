@@ -18,7 +18,7 @@ class Simulator():
 
         self.pose = np.array(starting_point).astype(np.float32)
 
-        rate = rospy.Rate(10) #hz
+        rate = rospy.Rate(25) #hz
         while not rospy.is_shutdown():
             self.last_time = time.time()
             self.publish_pose()
@@ -30,8 +30,9 @@ class Simulator():
         self.publish_pose()
 
     def got_twist(self, msg):
-        freq = (time.time() - self.last_time)
-        print freq
+        freq = 1/25.0#(time.time() - self.last_time)
+        #print 1/freq
+        self.last_time = time.time()
         vel = np.array([msg.twist.linear.x*freq,msg.twist.linear.y*freq])
 
         c, s = np.cos(-self.pose[2]), np.sin(-self.pose[2])
@@ -42,7 +43,7 @@ class Simulator():
         vel = np.dot(vel,mat)
         #print vel
         self.pose += np.array([vel[0],vel[1],msg.twist.angular.z*freq])
-        self.last_time = time.time()
+        
     def publish_pose(self):
         q = tf.transformations.quaternion_from_euler(0, 0, self.pose[2])
         p_s = PoseStamped(
@@ -54,7 +55,7 @@ class Simulator():
                         position=Point(
                                 x=self.pose[0],
                                 y=self.pose[1],
-                                z=0
+                                z=.129
                             ),
                         orientation=Quaternion(
                                 x=q[0],
@@ -66,7 +67,7 @@ class Simulator():
             )
         self.pose_est_pub.publish(p_s)
 
-        self.tf_broad.sendTransform((self.pose[0],self.pose[1],0), 
+        self.tf_broad.sendTransform((self.pose[0],self.pose[1],.129), 
                 tf.transformations.quaternion_from_euler(0,0,self.pose[2]),
                 rospy.Time.now(), "base_link", "map")
 
