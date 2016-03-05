@@ -16,15 +16,15 @@ import yaml
 import os
 
 class Camera():
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, cam_number):
+        self.name = "cam_" + str(cam_number)
         
         # Two TF frames. Perspective is used for drawing points in the map frame.
         # Position can give the position and yaw of the camera.
-        self.perspective_frame_id = name + "_vision"
-        self.position_frame_id = name + "_pose"
+        self.perspective_frame_id = self.name + "_vision"
+        self.position_frame_id = self.name + "_pose"
 
-        image_topic = "/camera/"+name
+        image_topic = "/camera/"+self.name
 
         rospy.Subscriber(image_topic, Image, self.got_image)
         self.tf_listener = tf.TransformListener()
@@ -33,6 +33,8 @@ class Camera():
         self.proj_mat = None
         self.image = None
         self.active = False
+
+        print self.name
 
     def __repr__(self):
         return self.name
