@@ -92,7 +92,7 @@ class GPUAccMap():
 
         # Only ranges at these indicies will be checked
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        self.deg_index = int(math.radians(90)/self.angle_increment)
+        self.deg_index = int(math.radians(30)/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
         self.step = 1
 
@@ -104,6 +104,10 @@ class GPUAccMap():
             np.arange(self.index_count/2 - self.deg_index, self.index_count/2 + self.deg_index, step=self.step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(0, self.deg_index, step=self.step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(self.index_count - self.deg_index, self.index_count, step=self.step))
 
         #self.indicies_to_compare = np.arange(1256,step=8)
 

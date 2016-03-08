@@ -69,12 +69,15 @@ class TFPublisher():
         self.tf_broad.sendTransform((0, .125368, -.0775),  
                         tf.transformations.quaternion_from_euler(0, 3.14159, -1.590796),
                         rospy.Time.now(), "laser_left", "base_link")
-        self.tf_broad.sendTransform((.11, 0, -.0775),  
+        self.tf_broad.sendTransform((.1, 0, -.0775),  
                         tf.transformations.quaternion_from_euler(3.14159, 0, 0),
-                        rospy.Time.now(), "laser_middle", "base_link")
+                        rospy.Time.now(), "laser_front", "base_link")
         self.tf_broad.sendTransform((0, -.125368, -.0775),  
                         tf.transformations.quaternion_from_euler(0, 3.14159, 1.570796),
                         rospy.Time.now(), "laser_right", "base_link")
+        self.tf_broad.sendTransform((-.1, 0, -.0775),  
+                        tf.transformations.quaternion_from_euler(3.14159, 0, 3.14159),
+                        rospy.Time.now(), "laser_back", "base_link")
         self.tf_broad.sendTransform((0,0,-.0775), 
                         tf.transformations.quaternion_from_euler(0,0,0),
                         rospy.Time.now(), "laser_fused", "base_link")
