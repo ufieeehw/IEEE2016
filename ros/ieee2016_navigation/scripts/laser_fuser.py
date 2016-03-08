@@ -20,17 +20,19 @@ class LaserFuser():
         print
         print " > Waiting for TF..."
         self.tf_listener.waitForTransform("base_link","laser_left", rospy.Time(0), rospy.Duration(5.0))
-        self.tf_listener.waitForTransform("base_link","laser_middle", rospy.Time(0), rospy.Duration(5.0))
+        self.tf_listener.waitForTransform("base_link","laser_front", rospy.Time(0), rospy.Duration(5.0))
         self.tf_listener.waitForTransform("base_link","laser_right", rospy.Time(0), rospy.Duration(5.0))
-        self.frames = ["laser_left","laser_middle","laser_right"]
-        self.FOVs = [100,100,100] #degrees
+        self.tf_listener.waitForTransform("base_link","laser_back", rospy.Time(0), rospy.Duration(5.0))
+        self.frames = ["laser_left","laser_front","laser_right","laser_back"]
+        self.FOVs = [100,100,100,100] #degrees
         print " > TF Found! Starting Fuser."
 
         # Define our message filters - these will make sure the laserscans come in at the same time
         left_sub = message_filters.Subscriber('scan_left',LaserScan)
-        middle_sub = message_filters.Subscriber('scan_middle',LaserScan) 
+        front_sub = message_filters.Subscriber('scan_front',LaserScan) 
         right_sub = message_filters.Subscriber('scan_right',LaserScan)
-        mf_ts = message_filters.ApproximateTimeSynchronizer([left_sub,middle_sub,right_sub], 10, .1)
+        back_sub = message_filters.Subscriber('scan_back',LaserScan) 
+        mf_ts = message_filters.ApproximateTimeSynchronizer([left_sub,front_sub,right_sub,back_sub], 10, .1)
         mf_ts.registerCallback(self.got_scans)
 
         # Define new laserscan
@@ -87,12 +89,12 @@ class LaserFuser():
     def polar_to_cart(self,r_theta,translation,frame):
         # Convert (r,theta) into (x,y)
         # Since the LIDAR are flipped and rotated in different directions, you have to change the signs of x and y based on the scan
-        if frame == "laser_middle":
+        if frame == "laser_front" or frame == "laser_back":
             x = (r_theta[0] * np.cos(r_theta[1]) + translation[0])
             y = -(r_theta[0] * np.sin(r_theta[1]) + translation[1])
         else:
-            x = -r_theta[0] * np.cos(r_theta[1]) + translation[0]
-            y = r_theta[0] * np.sin(r_theta[1]) + translation[1]
+            x = -(r_theta[0] * np.cos(r_theta[1])) + translation[0]
+            y = (r_theta[0] * np.sin(r_theta[1])) + translation[1]
 
         return x,y
 

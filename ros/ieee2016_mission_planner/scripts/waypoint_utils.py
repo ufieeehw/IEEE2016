@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import print_function
+
 import rospkg
 import getopt
 import rospy
@@ -16,62 +18,38 @@ def update_waypoints(old_names,new_names):
 	waypoints_file = open(WAYPOINTS_FILE_URI,"r")
 	old_waypoints = waypoints_file.read().split('\n')[:-1]
 
-	# Close then reopen the file for writing
-	waypoints_file.close()
-	waypoints_file = open(WAYPOINTS_FILE_URI,"w")
-
 	waypoints_to_change = len(old_names)
 
 	# Go through each of the old names and replace them in the new list with the new names
 	for l in old_waypoints:
 		new_waypoint = l
 		for i in xrange(waypoints_to_change):
-			if l.split(' ', 1)[0] == old_names[i]: 
-				new_waypoint = str(new_names[i] + " " + l.split(' ', 1)[1])
-
-  		waypoints_file.write("%s\n" % new_waypoint)
+			if l.split(' ', 1)[0] == old_names[i]:
+				save_waypoint_coor(new_names[i],l.split(' ', 1)[1].split())
 
 def save_waypoint(name, x, y, theta):
-	# Save waypoint with 'name' at [x,y,theta]
-	x_cor = str(x)
-	y_cor = str(y)
-	angle = str(theta)
+		# Take a name and a coordinate [x y yaw] (with no []) and write them to waypoints file, updating if there are repeats.
+	existing_waypoints = load_waypoints()
+	new_waypoint = {name:coor}
 
-	with open(WAYPOINTS_FILE_URI, "r") as in_file:
-		#Creates and writes all waypoints into a file before doing analysis
-		out_file = open(WAYPOINTS_FILE_URI, "a+")
-		out_file.write("%s %s %s %s \n" % (name, x_cor, y_cor, angle))
+	existing_waypoints.update(new_waypoint)
 
-		#Creates a big list of all with each element as a separate index
-		lines = in_file.read().split()
-		list_len = len(lines)
+	f = open(WAYPOINTS_FILE_URI,'w')
+	for name in existing_waypoints:
+		f.write("%s %s %s %s \n" % (name, x, y, theta))
+	f.close()
 
-		#Makes a list of all unique names
-		names = []
-		for x in range(list_len / 4):
-			names.append(lines[4 * x])
+def save_waypoint_coor(name, coor):
+	# Take a name and a coordinate [x y yaw] (with no []) and write them to waypoints file, updating if there are repeats.
+	existing_waypoints = load_waypoints()
+	new_waypoint = {name:coor}
 
-		#Variables to be used for the unique waypoints
-		new_file = open(WAYPOINTS_FILE_URI, "r")
-		update_lines = new_file.readlines()
+	existing_waypoints.update(new_waypoint)
 
-		for x in range(0, (list_len / 4) - 1):
-			#Loops through the list of names and finds if there is a match
-			for y in range(list_len / 4):
-
-				#If a duplicate is found, deletes the oldest coordinate with the matching name and rewrites the file
-				if name == names[y]:
-					dupe = names.index(name)
-					del update_lines[dupe]
-
-					file_update = open(f, "w")
-					file_update.writelines(update_lines)	
-
-					file_update.close()
-					return
-										
-		in_file.close()
-		new_file.close()
+	f = open(WAYPOINTS_FILE_URI,'w')
+	for name in existing_waypoints:
+		f.write("%s %s %s %s \n" % (name, existing_waypoints[name][0], existing_waypoints[name][1], existing_waypoints[name][2]))
+	f.close()
 
 def load_waypoints():
 	# Load waypoints and return dictionary of points
@@ -93,7 +71,7 @@ def callback(data):
 
 	save_waypoint(sys.argv[1], data.pose.position.x, data.pose.position.y, yaw)
 	sub.unregister()
-	print "Waypoint Saved:", sys.argv[1],data.pose.position.x,data.pose.position.y,yaw
+	print("Waypoint Saved:",sys.argv[1],data.pose.position.x,data.pose.position.y,yaw)
 	rospy.signal_shutdown("Message saved")
 	exit()
 

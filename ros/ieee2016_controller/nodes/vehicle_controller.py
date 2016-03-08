@@ -15,11 +15,11 @@ from ieee2016_msgs.srv import StopController, NavWaypoint
 from nav_msgs.msg import Odometry
 
 # max_linear_vel = 1 # m/s
-max_linear_vel = 0.420
+max_linear_vel = 0.5
 max_linear_acc = max_linear_vel # m/s^2
 
 # max_angular_vel = 2 # rad/s
-max_angular_vel = 0.69 # rad/s
+max_angular_vel = 0.7 # rad/s
 max_angular_acc = max_angular_vel # rad/s^2 
 
 # (Jason says this is just called angular acceleration, # I call it angcelleration)
@@ -199,7 +199,7 @@ class Controller(object):
                 command.append('R')
 
             if self.starting_move_error is None: 
-                self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .01
+                self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .03
                 print "MV_ERR",self.starting_move_error
 
             linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc) * \

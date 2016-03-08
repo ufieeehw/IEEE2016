@@ -16,15 +16,15 @@ import yaml
 import os
 
 class Camera():
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, cam_number):
+        self.name = "cam_" + str(cam_number)
         
         # Two TF frames. Perspective is used for drawing points in the map frame.
         # Position can give the position and yaw of the camera.
-        self.perspective_frame_id = name + "_vision"
-        self.position_frame_id = name + "_pose"
+        self.perspective_frame_id = self.name + "_vision"
+        self.position_frame_id = self.name + "_pose"
 
-        image_topic = "/camera/"+name
+        image_topic = "/camera/"+self.name
 
         rospy.Subscriber(image_topic, Image, self.got_image)
         self.tf_listener = tf.TransformListener()
@@ -33,6 +33,8 @@ class Camera():
         self.proj_mat = None
         self.image = None
         self.active = False
+
+        print self.name
 
     def __repr__(self):
         return self.name
@@ -60,10 +62,12 @@ class Camera():
         # Mode can be 'pose' for the pose tf frame, or 'vision' for the vision frame at 'time'. Default is 'pose'.
         if mode == "pose":
             if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.position_frame_id)
+            self.tf_listener.waitForTransform(target_frame, self.position_frame_id, time, rospy.Duration(1.0))
             pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.position_frame_id, time)
             rot = tf.transformations.euler_from_quaternion(quaternion)
         elif mode == "vision":
             if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
+            self.tf_listener.waitForTransform(target_frame, self.position_frame_id, time, rospy.Duration(1.0))
             pos, quaternion = self.tf_listener.lookupTransform(target_frame,self.perspective_frame_id, time)
             rot = tf.transformations.euler_from_quaternion(quaternion)
 
@@ -72,6 +76,7 @@ class Camera():
     def transform_point(self, point, target_frame="map", time=None):
         # Given a 3d point in the camera frame, return that point in the map frame.
         if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
+        self.tf_listener.waitForTransform(target_frame, self.perspective_frame_id, time, rospy.Duration(1.0))
         p_s = PointStamped(
                 header=Header(
                         stamp=time,

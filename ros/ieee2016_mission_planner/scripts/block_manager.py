@@ -2,7 +2,7 @@
 import rospy
 import roslib
 from std_msgs.msg import Bool, Int8, Header
-from geometry_msgs.msg import Pose, Point32, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, PointStamped
+from geometry_msgs.msg import Pose, Point32, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, PointStamped, Point
 from sensor_msgs.msg import PointCloud,ChannelFloat32
 import tf
 
@@ -10,6 +10,7 @@ roslib.load_manifest('ieee2016_vision')
 from camera_manager import Camera
 from point_intersector import PointIntersector
 from ieee2016_msgs.msg import BlockStamped
+from ieee2016_msgs.srv import ArmWaypoint
 
 import numpy as np
 from kd_tree import KDTree
@@ -17,7 +18,8 @@ from kd_tree import KDTree
 class Block():
     def __init__(self, color, coordinate = 'na'):
         self.color = color
-        # This will allow the program to input a point message from ros or a list from python
+        # Coordinates stored here are depreicated
+        # This will allow the program to input a point message from ros or a list from python.
         try:
             self.coordinate = [coordinate.x,coordinate.y,coordinate.z]
         except:
@@ -27,49 +29,88 @@ class Block():
         # How the object prints
         return "%06s" % self.color
 
+class Gripper():
+    '''
+    There are multiple grippers on the end of each end effector. This deals with keeping track of the blocks in
+    each gripper and the TF frames associated with each gripper.
+    '''
+    def __init__(self, parent_ee_number, gripper_number, block):
+        self.frame_id = str(parent_ee_number) + "-G" + str(gripper_number)
+        self.block = block
+
+    def  __repr__(self):
+        return self.frame_id
+
+    def get_tf(self,tf_listener,from_frame):
+        '''
+        Given a tf_listener (not defined here so we don't create 8 instances of a tf listner), return [[x,y,z],[rx,ry,rz]]
+        between the tf frame 'from_frame' to this grippers frame.
+        Used for determining how many blocks we can pick up.
+        '''
+        time = tf_listener.getLatestCommonTime(from_frame, self.frame_id)
+        tf_listener.waitForTransform(from_frame, self.frame_id, time, rospy.Duration(1.0))
+        pos, quaternion = tf_listener.lookupTransform(from_frame,self.frame_id, time)
+        rot = tf.transformations.euler_from_quaternion(quaternion)
+
+        return np.array([pos,rot])
 
 class EndEffector():
-    def __init__(self, gripper_count, frame_id):
+    '''
+    The end effector is a grouping of grippers. The end effector object deals with keeping track of the grippers.
+    Gripper 0 is the leftmost gripper.
+    '''
+    def __init__(self, gripper_count, ee_number, cam_position):
         self.gripper_count = gripper_count
-        self.frame_id = frame_id
+        self.frame_id = "EE"+str(ee_number)
 
         # Array of the blocks in the gripper - 0 is the left most gripper
-        self.block_positions = []
+        self.gripper_positions = []
+        self.cam_position = cam_position
         self.holding = 0
 
         for i in range(gripper_count):
-            b = Block("none")
-            self.block_positions.append(b)
+            # Define new gripper and add it to the gripper list
+            self.gripper_positions.append( Gripper(ee_number, i, Block("none") ) )
+
+        print self.gripper_positions
     
-    def pickup(self, block, *gripper_number):
+    def pickup(self, block, gripper):
         # Adds the block to gripper specified
-        for g in gripper_number:
-            if self.block_positions[g] == "none":
-                self.block_positions[g] = block
-                self.holding += 1
-                return True
-            else:
-                return False
+        g = self.gripper_positions.index(gripper)
+        self.gripper_positions[g].block = block
+        self.holding += 1
+
+    def drop(self, gripper):
+        # Adds the block to gripper specified
+        g = self.gripper_positions.index(gripper)
+        self.gripper_positions[g].block = Block("none")
+        self.holding -= 1
 
     def which_gripper(self,color):
         # Returns the gripper numbers of the grippers containing the blocks with specified color
         gripper_numbers = []
-        for i,b in enumerate(self.block_positions):
-            if b.color == color: gripper_numbers.append(i)
+        for i,b in enumerate(self.gripper_positions):
+            if b.color == color: gripper_positions.append(i)
 
         return gripper_numbers
 
     def __repr__(self):
         # How the object prints
-        return str(self.block_positions)
-
+        return str(self.gripper_positions)
 
 class ProcessBlocks():
-    def __init__(self, *end_effectors):
-        self.point_sub = rospy.Subscriber("/blocks", PointCloud, self.got_points, queue_size=1)
-        self.ee_point_pub = rospy.Publisher("/ee_move", PointStamped, queue_size=1)
+    '''
+    Take detected blocks from a kd-tree populated with blocks, try to find missing blocks, generate a position for the 
+    grippers to move to based on how many blocks are left, then deal with dropping off the blocks into the appropriate bins.
 
-        self.blocks = np.array([])
+    This needs to be modified to work in all cases, with half blocks namely.
+    '''
+    def __init__(self, *end_effectors):
+        self.ee_pose_pub = rospy.Publisher("/arm/waypoint", PoseStamped, queue_size=1)
+        #self.point_sub = rospy.Subscriber("/camera/block_point_cloud", PointCloud, self.got_points, queue_size=1)
+
+        self.move_arm = rospy.ServiceProxy('/robot/arms/set_waypoint', ArmWaypoint)
+
         self.expected_blocks = 16
         
         self.end_effectors = end_effectors
@@ -77,6 +118,10 @@ class ProcessBlocks():
         print "Waiting for message..."
 
     def got_points(self,msg):
+        '''
+        Depreciated, now we are just passing a kd_tree of blocks in rather then sending them as a ros point cloud.
+        '''
+
         #if len(self.points) < 1:
         #print msg.channels[0].values
         for i,p in enumerate(msg.points):
@@ -104,7 +149,13 @@ class ProcessBlocks():
         self.point_sub.unregister()
         self.find_missing_blocks()
 
-    def find_missing_blocks(self):
+    def find_missing_blocks(self, block_tree):
+        # Go through the tree we were given and extract block information.
+        self.blocks = np.array([])
+        for b in block_tree:
+            block = Block(b[1].point,b[1].linked_object)
+            self.blocks = np.append(self.blocks,block)
+
         # Find out how many missing blocks there are and identify where they should be
         missing = self.expected_blocks-len(self.blocks)
         print "Detected",missing,"blocks missing."
@@ -207,22 +258,14 @@ class ProcessBlocks():
         self.blocks_sorted = blocks_sorted
         self.pickup_blocks()
 
-    def pickup_blocks(self):
+    def make_arm_waypoints(self):
         # Pick up blocks and keep track of the order they are in
-        # # Temp sorted blocks modifier
 
-        # self.blocks_sorted[0][0].color = "none"
-        # self.blocks_sorted[0][1].color = "none"
-        # self.blocks_sorted[0][2].color = "none"
-        # self.blocks_sorted[0][3].color = "none"
-        # self.blocks_sorted[0][4].color = "none"
-        # self.blocks_sorted[0][5].color = "none"
-        # self.blocks_sorted[0][6].color = "none"
-        # self.blocks_sorted[0][7].color = "none"
+        arm_waypoints = []
 
         # One-by-one, move each end effector in position to pick up certain sets of blocks, then pick up blocks and register the locations.
         temp_planner_blocks = self.blocks_sorted
-        for e in self.end_effectors:
+        for ee in self.end_effectors:
             # Find the group of blocks to pick up. We're looking for the largest group of topmost blocks
             valid_counter_top = 0
             valid_counter_bottom = 0
@@ -248,10 +291,10 @@ class ProcessBlocks():
                     valid_counter_top = 0
                 
                 # Save max sized groupings
-                if valid_counter_top == e.gripper_count:
+                if valid_counter_top == ee.gripper_count:
                     groups[0].append([index - valid_counter_top + 1, valid_counter_top])
                     valid_counter_top = 0
-                if valid_counter_bottom == e.gripper_count:
+                if valid_counter_bottom == ee.gripper_count:
                     groups[1].append([index-valid_counter_bottom + 1,valid_counter_bottom])
                     valid_counter_bottom = 0
                 
@@ -263,67 +306,195 @@ class ProcessBlocks():
             largest_group = max(groups[0], key=lambda g:g[1])
             waypoint = np.array([0,0,0]).astype(np.float64)
 
-            # Determine the best location to move the end effector
+            # Should we pick up blocks in row 0 or row 1
             row = 0
             if largest_group[1] == 0: 
                 largest_group = max(groups[1], key=lambda g:g[1])
                 row = 1
                 if largest_group[1] == 0: print "Nothing left"
             
-            
-            for b in self.blocks_sorted[row][largest_group[0]:largest_group[0]+largest_group[1]]: 
-                waypoint += np.array(b.coordinate)
-                
-            waypoint /= largest_group[1]
-            self.pub_ee_point(waypoint)
-            #print waypoint
 
-    def drop_color(self, en):
+            # The waypoint is set so that the gripper with the camera above it will move to
+            # the grouping of blocks. This may not be nessicary, but it can't hurt.
+            waypoint = self.blocks_sorted[row][largest_group[0]+1].coordinate
+            # We dont want the point to be exactly on the block, instead we want it a safe buffer
+            # distance out infront of the block.
+            buffer_distance = .2 #m
+            waypoint -= np.array([0,buffer_distance,0])
+
+            # Even though the gripper isnt actually holding the block, we assume it will be
+            self.set_gripper_blocks(self.blocks_sorted[row][largest_group[0]:largest_group[0]+largest_group[1]])
+
+            arm_waypoints.append([ee.gripper_positions[ee.cam_position],waypoint])
+
+        return arm_waypoints
+
+    def set_gripper_blocks(self, ee, blocks):
+        for gripper,block in zip(ee.block_positions,blocks):
+            gripper.block = block
+
+    def drop_color(self, ee):
         pass
 
-
-    def pub_ee_point(self,point):
-        self.ee_point_pub.publish(PointStamped(
+    def pub_ee_pose(self,gripper,point):
+        q = tf.transformations.quaternion_from_euler(0, 0, 1.5707)
+        pose_stamped = PoseStamped(
                 header=Header(
-                    stamp=rospy.Time.now(),
-                    frame_id="base_link"
-                ),
-                point=Point32(
-                    x=point[0],
-                    y=point[1],
-                    z=point[2],
-                )
+                        stamp=rospy.Time.now(),
+                        frame_id="map"
+                    ),
+                pose=Pose(
+                        position=Point(*point),
+                        orientation=Quaternion(*q)
+                    )
             )
-        )
         print point
+        self.ee_pose_pub.publish(pose_stamped)
+        self.move_arm(str(gripper),pose_stamped)
 
+class WaypointGenerator():
+    '''
+    The arm waypoints generator. The algorithm we will use is still in the works.
+    '''
+    def __init__(self,*ee):
+        self.ee_pose_pub = rospy.Publisher("/arm/waypoint", PoseStamped, queue_size=1)
+
+        self.ee_list = ee
+
+        self.tf_listener = tf.TransformListener()
+        print "> Waypoint Generator Online."
+
+    def generate_arm_waypoints(self,block_tree,pickup,simulation_blocks):
+        '''
+        Given some block_tree, try to pick up 'pickup' number of blocks with all the end effectors. Starting
+        If pickup is -1, we will try to pick up as many blocks as the end effector can.
+
+        Waypoints are returned as a list [[ee1_base, ee1_base_target_location, grippers_to_actuate],[ee2_base, ee2_base_target_location, grippers_to_actuate]]
+
+        This could have problems picking up blocks on the edges of the map. Future self: test and fix that.
+        '''
+
+        waypoints_list = []
+
+        # Needed to remove none blocks, just for simulation
+        sorted_blocks = []
+        for block in block_tree.nodes:
+            #print block
+            if block.linked_object != "none":
+                sorted_blocks.append(block)
+
+        block_tree = self.make_temp_tree(sorted_blocks)
+
+        #print block_tree.nodes
+        for ee in self.ee_list:
+            if pickup == -1:
+                pickup = 0
+                for gripper in ee.gripper_positions:
+                    if gripper.block.color == "none": pickup += 1
+
+            # Loop through this until our gripper is full.
+            while ee.holding < pickup and len(block_tree.nodes) != 0:
+                # Sort by order of largest z then smallest x, also remove any none blocks.
+                # None blocks can be globally changed but we need them for simulation.
+                sorted_blocks = sorted(block_tree.nodes, key=lambda node:(-node.point[2],node.point[0]))
+
+                # Find the base gripper.
+                for gripper in ee.gripper_positions:
+                    if gripper.block.color == "none":
+                        base_gripper = gripper
+                        grippers_to_actuate = [ee.gripper_positions.index(gripper)]
+                        break
+
+                # Find location to move the base gripper to. Then add that block to the gripper.
+                target_waypoint = sorted_blocks[0].point
+                ee.pickup(Block(sorted_blocks[0].linked_object),base_gripper)
+
+                #print "Gripper:",base_gripper,"to:",sorted_blocks[0]
+                #print "Grippers to Actuate:",grippers_to_actuate
+
+                block_tree = self.make_temp_tree(sorted_blocks[1:])
+
+                #print simulation_blocks
+                simulation_blocks[simulation_blocks.index([sorted_blocks[0].point.tolist(),sorted_blocks[0].linked_object])][1] = "none"
+
+                # Loop through the remaining grippers and check if they can pick up and blocks.
+                block_tolerance = .01 # m
+                for i in range(grippers_to_actuate[0]+1,pickup):
+                    # Get the relative y position and check if there is a block within tolerance of that point.
+                    rel_gripper_position = abs(ee.gripper_positions[i].get_tf(self.tf_listener,from_frame=base_gripper.frame_id)[0][1])
+                    expected_location = target_waypoint+np.array([rel_gripper_position,0,0])
+
+                    closest_block = block_tree.search(expected_location)
+
+                    if closest_block is None: break
+                    if closest_block[0] < block_tolerance:
+                        #print "Block found! :",closest_block
+
+                        # Add that block to the gripper, assume we will pick it up soon. 
+                        ee.pickup(Block(closest_block[1].linked_object),ee.gripper_positions[i])
+                        grippers_to_actuate.append(i)
+                        
+
+                        simulation_blocks[simulation_blocks.index([closest_block[1].point.tolist(),closest_block[1].linked_object])][1] = "none"
+
+                        # Now that we have saved it to the gripper, remove it and search for the next gripper block.
+                        block_tree.nodes.remove(closest_block[1])
+                        block_tree = self.make_temp_tree(block_tree.nodes)
+                    else:
+                        # If theres no block adjacent to the previous gripper, then we dont want to continue
+                        break
+                waypoints_list.append([base_gripper.frame_id,target_waypoint,grippers_to_actuate])
+
+            # We have added all the contiuous blocks starting from the top left, now if there is still space left in the gripper
+            # see if we can fit any more blocks onto the gripper.
+            # if ee.holding < ee.gripper_count:
+            #     sorted_blocks = sorted(block_tree.nodes, key=lambda node:node.point[2])
+
+
+        # Now temp tree has only the remaining blocks in it.
+        # Returning the new tree, the waypoints for the gripper, and the temp simulation block list
+        return block_tree, waypoints_list, simulation_blocks
+
+
+
+    
+    def make_temp_tree(self, new_list):
+        '''
+        Generates a new tree with the new list. List elements should be Node objects.
+        Move this to KDTree at some point
+        '''
+        temp_tree = KDTree()
+        for l in new_list:
+            temp_tree.insert(l.point,linked_object=l.linked_object)
+        return temp_tree
 
 class BlockServer():
     '''
-    BlockServer acts as a server to deal with block detection from the cameras. Given a BlockStamped message, 
-    the server will find the actual point in the map frame and keep an updated pointcloud as Shia moves.
-    After detecting the correct number of blocks, it will pass that pointcloud off to ProcessBlocks.
+    BlockServer acts as a server to deal with block detection from the cameras. 
+
+    Given a BlockStamped message, the server will find the actual point in the map frame and keep an updated pointcloud as Shia moves.
     '''
     def __init__(self, *cameras):
-        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=500)
+        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=20)
         self.cameras = cameras
 
-        # Make kd-tree with a .01 m tolerance when trying to add duplicated blocks
-        self.k = KDTree(.01)
+        # Make kd-tree with a tolerance when trying to add duplicated blocks
+        self.k = KDTree(.03175) #m
         self.intersector = PointIntersector()
 
     def got_block(self,msg):
-        # Find the camera that this image was taken in.
+        # Find the camera that this image was taken in and transform points appropriately.
         camera = [c for c in self.cameras if c.name == msg.header.frame_id][0]
         map_point = self.intersector.intersect_point(camera, msg.point, time=msg.header.stamp)
-        print map_point
-        #self.k.insert_unique()
+        self.k.insert_unique(map_point,msg.color)
+
 
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
-    c1 = Camera("cam_1")
-    c1.activate()
-    b_s = BlockServer(c1)
-
+    # c1 = Camera("cam_1")
+    # c1.activate()
+    # b_s = BlockServer(c1)
+    ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
+    ProcessBlocks(ee1)
     rospy.spin()

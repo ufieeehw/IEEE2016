@@ -18,6 +18,7 @@ class PointIntersector():
     def intersect_point(self, camera, point, time=None):
         # Make a ray and remove components we don't need
         ray = camera.make_3d_vector(point)
+        raw_ray = np.copy(ray)
         ray[1] = 0
         unit_ray = ray / np.linalg.norm(ray)
 
@@ -32,7 +33,7 @@ class PointIntersector():
         point = cam_tf[:2]
         
         dist = self.simulate_scan(point, theta)
-        return camera.make_3d_point(ray,dist,output_frame="map",time=time)
+        return camera.make_3d_point(raw_ray,dist,output_frame="map",time=time)
 
     def simulate_scan(self, point, theta):
         '''
