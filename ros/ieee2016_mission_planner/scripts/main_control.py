@@ -38,13 +38,14 @@ class temp_ProcessTrainBoxes():
         #print colors
         self.train_points = []
         for point,color in zip(raw_points,colors):
+            print color
             self.train_points.append([color,point])
 
         print "> Linking Train Waypoints"
         self.publish_points()
         #update_waypoints(['box_1','box_2','box_3','box_4'],colors)
 
-        train_colors = {'box_1':colors[0],'box_2':colors[1],'box_3':colors[2],'box_4':colors[3]}
+        train_colors = {'box_1':colors[3],'box_2':colors[2],'box_3':colors[1],'box_4':colors[0]}
         return train_colors
 
     def publish_points(self):
@@ -175,20 +176,20 @@ class temp_GenerateBlockPoints():
         for i in range(8,16):
             this_x = base_x + self.dx*(i-8)
             self.b_tree_diag.insert_unique([this_x,self.y,base_z],self.b_blocks[i])
-            self.b_blocks[i] = [[this_x,self.y,base_z+self.dz],self.b_blocks[i]]
+            self.b_blocks[i] = [[this_x,self.y,base_z],self.b_blocks[i]]
             #print ('%7s')%self.b_blocks[i],
         #print
         #print
         for i in range(16,24):
             this_x = base_x + self.dx*(i-16)
             self.b_tree_diag.insert_unique([this_x,self.y+self.dy,base_z+self.dz],self.b_blocks[i])
-            self.b_blocks[i] = [[this_x,self.y,base_z+self.dz],self.b_blocks[i]]
+            self.b_blocks[i] = [[this_x,self.y+self.dy,base_z+self.dz],self.b_blocks[i]]
             #print ('%7s')%self.b_blocks[i],
         #print
         for i in range(24,32):
             this_x = base_x + self.dx*(i-24)
             self.b_tree_diag.insert_unique([this_x,self.y+self.dy,base_z],self.b_blocks[i])
-            self.b_blocks[i] = [[this_x,self.y,base_z+self.dz],self.b_blocks[i]]
+            self.b_blocks[i] = [[this_x,self.y+self.dy,base_z],self.b_blocks[i]]
             #print ('%7s')%self.b_blocks[i],
         #print
 
@@ -268,7 +269,7 @@ class temp_GenerateBlockPoints():
             points.append(Point32(*p.point))
 
         rgb_channels = [ChannelFloat32(name="r", values=channels[0]),ChannelFloat32(name="g", values=channels[1]),ChannelFloat32(name="b", values=channels[2])]
-        time.sleep(.5)
+        time.sleep(.25)
         topic.publish(PointCloud(
                 header=Header(
                     stamp=rospy.Time.now(),
@@ -343,10 +344,11 @@ class ShiaStateMachine():
                 '''
                 print "=== STATE 1 ==="
                 self.ros_manager.set_nav_waypoint(self.waypoints['through_box'])
-                self.train_box_link = self.train_box_processor.process_train_blocks()
+                train_box_colors = self.train_box_processor.process_train_blocks()
+                print train_box_colors
                 self.ros_manager.set_nav_waypoint(self.waypoints['process_b_1'])
 
-                self.current_state += 1
+                self.current_state = 4
 
             elif self.current_state == 2:
                 '''
@@ -359,10 +361,9 @@ class ShiaStateMachine():
                 print "=== STATE 2 ==="
                 b_tree = self.point_cloud_generator.generate_b_camera_view()
                 b_blocks = self.point_cloud_generator.b_blocks.tolist()
-
                 b_tree, arm_waypoints, b_blocks = self.waypoint_generator.generate_arm_waypoints(b_tree, -1, b_blocks)
-
-                self.ros_manager.set_nav_waypoint(self.waypoints['process_b_2'])
+                print "> Waypoints Generated."
+                #self.ros_manager.set_nav_waypoint(self.waypoints['process_b_2'])
 
                 self.current_state += 1
 
@@ -373,33 +374,52 @@ class ShiaStateMachine():
                     2. Do this again for the second end effector
                 '''
                 print "=== STATE 3 ==="
+                print "> Executing waypoints"
 
+                # Used to determine if we need to rotate or naw.
+                last_ee = 0
+                # Go through each waypoint and make sure we dont hit anything
                 for gripper,waypoint,grippers_to_acutate in arm_waypoints:
-                    # We don't want to move and rotate here - so just rotate and get lined up .5m from the wall.
+                    # We don't want to move and rotate here (unless we arent rotating) - so just rotate and get lined up away from the wall.
                     # Should move this to be part of the controller, but for now it can just go here.
-                    rotate_waypoint = np.copy(waypoint)
-                    rotate_waypoint[1] = 1.5 #m
-                    print "Lining Up"
-                    self.ros_manager.set_arm_waypoint(gripper,rotate_waypoint)
+                    if gripper[:1] != last_ee:
+                        # We need to back up slighly in order to rotate
+                        backup_movement = np.copy(self.ros_manager.pose)
+                        backup_movement[1] = 2.153-.57 #m
+                        self.ros_manager.set_nav_waypoint(backup_movement)
+
+                        # Then rotate in place
+                        rotate_waypoint = np.copy(waypoint)
+                        rotate_waypoint[1] = 2.153-.57 #m
+                        print "Lining Up"
+                        self.ros_manager.set_arm_waypoint(gripper,rotate_waypoint)
 
                     # Now move in close to the wall. We move so that the edge of the robot is some distance from the wall.
                     # .1524m is 6 inches, or half the robot size
                     distance_off_wall = .002032 #m
                     print "Moving Close"
-                    self.ros_manager.set_arm_waypoint(gripper,waypoint - np.array([0,.1524+distance_off_wall,0]))
+                    waypoint[1] = 2.153-(.1524+distance_off_wall)
+                    self.ros_manager.set_arm_waypoint(gripper,waypoint)
 
                     # Pick up the blocks IRL somehow
+                    print "Picking up with:",grippers_to_acutate
                     time.sleep(1)
 
-                    # We need to back up slighly in order to rotate
-                    backup_movement = self.ros_manager.pose - np.array([0,.5,0])
-                    self.ros_manager.set_nav_waypoint(backup_movement)
+                    # Used to determine if we need to rotate or naw.
+                    last_ee = gripper[:1]
 
                 # Regenerate point cloud - for simulation only
                 self.point_cloud_generator.publish_points(b_tree,self.point_cloud_generator.point_cloud_pub)
                 #self.point_cloud_generator.b_blocks = np.array(b_blocks, dtype=object)
                 #self.point_cloud_generator.generate_b_camera_view()
-                break
+                for gripper_1,gripper_2 in zip(self.ee1.gripper_positions,self.ee2.gripper_positions):
+                    self.ee1.drop(gripper_1)
+                    self.ee2.drop(gripper_2)
+
+                if len(b_tree.nodes) == 0:
+                    self.current_state+=1
+                else:
+                    self.current_state-=1
 
             elif self.current_state == 4:
                 '''
@@ -410,6 +430,8 @@ class ShiaStateMachine():
                     5. Turn around and repeat with the other end effector - starting from box 4.
                 '''
                 print "=== STATE 4 ==="
+                self.ros_manager.set_nav_waypoint(self.waypoints['process_b_2'])                
+                break
 
             elif self.current_state == 5:
                 '''
@@ -434,7 +456,7 @@ class ShiaStateMachine():
                 print "=== TEMP STATE 1 ===" 
                 b_tree = self.point_cloud_generator.generate_b_camera_view()
                 b_blocks = self.point_cloud_generator.b_blocks.tolist()
-
+                print b_tree
                 b_tree, arm_waypoints, b_blocks = self.waypoint_generator.generate_arm_waypoints(b_tree, -1, b_blocks)
             
                 #time.sleep(3)

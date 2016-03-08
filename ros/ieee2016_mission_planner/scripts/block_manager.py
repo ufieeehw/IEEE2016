@@ -74,15 +74,17 @@ class EndEffector():
 
         print self.gripper_positions
     
-    def pickup(self, block, *gripper_number):
+    def pickup(self, block, gripper):
         # Adds the block to gripper specified
-        for g in gripper_number:
-            if self.gripper_positions[g] == "none":
-                self.gripper_positions[g] = block
-                self.holding += 1
-                return True
-            else:
-                return False
+        g = self.gripper_positions.index(gripper)
+        self.gripper_positions[g].block = block
+        self.holding += 1
+
+    def drop(self, gripper):
+        # Adds the block to gripper specified
+        g = self.gripper_positions.index(gripper)
+        self.gripper_positions[g].block = Block("none")
+        self.holding -= 1
 
     def which_gripper(self,color):
         # Returns the gripper numbers of the grippers containing the blocks with specified color
@@ -370,59 +372,78 @@ class WaypointGenerator():
         Waypoints are returned as a list [[ee1_base, ee1_base_target_location, grippers_to_actuate],[ee2_base, ee2_base_target_location, grippers_to_actuate]]
 
         This could have problems picking up blocks on the edges of the map. Future self: test and fix that.
-        Need a way to specify base gripper.
         '''
 
         waypoints_list = []
+
+        # Needed to remove none blocks, just for simulation
+        sorted_blocks = []
+        for block in block_tree.nodes:
+            #print block
+            if block.linked_object != "none":
+                sorted_blocks.append(block)
+
+        block_tree = self.make_temp_tree(sorted_blocks)
+
+        #print block_tree.nodes
         for ee in self.ee_list:
             if pickup == -1:
                 pickup = 0
                 for gripper in ee.gripper_positions:
                     if gripper.block.color == "none": pickup += 1
 
-            # Sort by order of largest z then smallest x, also remove any none blocks.
-            # None blocks can be globally changed but we need them for simulation.
-            print block_tree.nodes
-            sorted_blocks = sorted(block_tree.nodes, key=lambda node:(-node.point[2],node.point[0]))
+            # Loop through this until our gripper is full.
+            while ee.holding < pickup and len(block_tree.nodes) != 0:
+                # Sort by order of largest z then smallest x, also remove any none blocks.
+                # None blocks can be globally changed but we need them for simulation.
+                sorted_blocks = sorted(block_tree.nodes, key=lambda node:(-node.point[2],node.point[0]))
 
-            # Find location to move gripper 0 to. Then add that block to the gripper.
-            target_waypoint = sorted_blocks[0].point
-            base_gripper = ee.gripper_positions[0]
-            base_gripper.block = Block(sorted_blocks[0].linked_object)
-            grippers_to_actuate = [0]
-            print "Gripper:",base_gripper,"to:",sorted_blocks[0]
+                # Find the base gripper.
+                for gripper in ee.gripper_positions:
+                    if gripper.block.color == "none":
+                        base_gripper = gripper
+                        grippers_to_actuate = [ee.gripper_positions.index(gripper)]
+                        break
 
-            block_tree = self.make_temp_tree(sorted_blocks[1:])
+                # Find location to move the base gripper to. Then add that block to the gripper.
+                target_waypoint = sorted_blocks[0].point
+                ee.pickup(Block(sorted_blocks[0].linked_object),base_gripper)
 
-            simulation_blocks[simulation_blocks.index([sorted_blocks[0].point.tolist(),sorted_blocks[0].linked_object])][1] = "none"
+                #print "Gripper:",base_gripper,"to:",sorted_blocks[0]
+                #print "Grippers to Actuate:",grippers_to_actuate
 
-            # Loop through the remaining grippers and check if they can pick up and blocks.
-            block_tolerance = .01 # m
-            for i in range(1,pickup):
-                # Get the relative y position and check if there is a block within tolerance of that point.
-                rel_gripper_position = abs(ee.gripper_positions[i].get_tf(self.tf_listener,from_frame=base_gripper.frame_id)[0][1])
-                expected_location = target_waypoint+np.array([rel_gripper_position,0,0])
+                block_tree = self.make_temp_tree(sorted_blocks[1:])
 
-                closest_block = block_tree.search(expected_location)
+                #print simulation_blocks
+                simulation_blocks[simulation_blocks.index([sorted_blocks[0].point.tolist(),sorted_blocks[0].linked_object])][1] = "none"
 
-                if closest_block[0] < block_tolerance:
+                # Loop through the remaining grippers and check if they can pick up and blocks.
+                block_tolerance = .01 # m
+                for i in range(grippers_to_actuate[0]+1,pickup):
+                    # Get the relative y position and check if there is a block within tolerance of that point.
+                    rel_gripper_position = abs(ee.gripper_positions[i].get_tf(self.tf_listener,from_frame=base_gripper.frame_id)[0][1])
+                    expected_location = target_waypoint+np.array([rel_gripper_position,0,0])
 
-                    print "Block found! :",closest_block
+                    closest_block = block_tree.search(expected_location)
 
-                    # Add that block to the gripper, assume we will pick it up soon. 
-                    ee.gripper_positions[i].block = Block(closest_block[1].linked_object)
-                    grippers_to_actuate.append(i)
-                    
-                    simulation_blocks[simulation_blocks.index([closest_block[1].point.tolist(),closest_block[1].linked_object])][1] = "none"
+                    if closest_block is None: break
+                    if closest_block[0] < block_tolerance:
+                        #print "Block found! :",closest_block
 
-                    # Now that we have saved it to the gripper, remove it and search for the next gripper block.
-                    print closest_block[1]
-                    block_tree.nodes.remove(closest_block[1])
-                    block_tree = self.make_temp_tree(block_tree.nodes)
-                else:
-                    # If theres no block adjacent to the previous gripper, then we dont want to continue
-                    break
-            waypoints_list.append([base_gripper.frame_id,target_waypoint,grippers_to_actuate])
+                        # Add that block to the gripper, assume we will pick it up soon. 
+                        ee.pickup(Block(closest_block[1].linked_object),ee.gripper_positions[i])
+                        grippers_to_actuate.append(i)
+                        
+
+                        simulation_blocks[simulation_blocks.index([closest_block[1].point.tolist(),closest_block[1].linked_object])][1] = "none"
+
+                        # Now that we have saved it to the gripper, remove it and search for the next gripper block.
+                        block_tree.nodes.remove(closest_block[1])
+                        block_tree = self.make_temp_tree(block_tree.nodes)
+                    else:
+                        # If theres no block adjacent to the previous gripper, then we dont want to continue
+                        break
+                waypoints_list.append([base_gripper.frame_id,target_waypoint,grippers_to_actuate])
 
             # We have added all the contiuous blocks starting from the top left, now if there is still space left in the gripper
             # see if we can fit any more blocks onto the gripper.
