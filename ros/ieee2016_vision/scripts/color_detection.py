@@ -16,6 +16,7 @@ class Calibration():
 	script.
 	'''
 	def __init__(self):
+		self.color = {}
 		self.load_calibration()
 
 	def save_calibration(self):
@@ -23,19 +24,22 @@ class Calibration():
 		Saves the current calibrations to the JSON file
 		'color_calibrations.json' in the same directory as this script.
 		'''
-		pass
+		with open('color_calibrations.json', 'w') as file:
+			json.dump(self.calibrations, file)
 
 	def load_calibration(self):
 		'''
 		Loads the calibrations from the JSON file 'color_calibrations.json' in
 		the same directory as this script and stores them in this class object.
 		'''
-		# These are the upper and lower boundaries for each color
-		# These WILL be replaced by an automatically generated calibration file
-		self.red = (np.array([0, 100, 100]), np.array([20, 255, 255]))
-		self.green = (np.array([50, 42, 42]), np.array([80, 255, 255]))
-		self.blue = (np.array([80, 100, 100]), np.array([150, 255, 255]))
-		self.yellow = (np.array([20, 110, 110]), np.array([50, 255, 255]))
+		# Imports the dictionary and determines what colors are in it
+		with open('color_calibrations.json', 'r') as file:
+			self.calibrations = json.load(file)
+		self.available_colors = self.calibrations.keys()
+
+		# Converts the values in the dictionary to numpy arrays for cv2
+		for i in range(len(self.available_colors)):
+			self.color[self.available_colors[i]] = ((np.array(self.calibrations[self.available_colors[i]][0])), (np.array(self.calibrations[self.available_colors[i]][1])))
 
 
 class Image():
@@ -104,8 +108,7 @@ class ObjectDetection():
 	'''
 	def __init__(self, camera):
 		# Baseline operating parameters
-		self.image = Image(camera)
-		self.image.operating_image_width = 320
+		self.image = Image(camera, 320)
 		self.box = None
 		self.box_center = None
 
@@ -132,7 +135,7 @@ class ObjectDetection():
 				largest_area = area
 				largest_contour_index = i
 
-		if (largest_contour_index):
+		if (largest_contour_index > -1):
 			rect = cv2.minAreaRect(contours[largest_contour_index])
 			self.box = cv2.cv.BoxPoints(rect)
 		else:
@@ -204,7 +207,6 @@ class ColorBox():
 	def __init__(self, camera):
 			self.detection = ObjectDetection(camera)
 			self.point = PointIntersector()
-			self.colors = ("red", "green", "blue", "yellow")
 
 	def get_map_location(self, color):
 		'''
@@ -250,7 +252,7 @@ if __name__ == "__main__":
 
 	while (True):
 		# The actual processing of the image
-		detection.average_box(detection.select_largest_object, calibration.yellow, 8)
+		detection.average_box(detection.select_largest_object, calibration.color["blue"], 8)
 		detection.get_box_center()
 
 		# Pulling values used to render the debugging image
