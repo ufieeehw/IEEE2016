@@ -52,6 +52,7 @@ class Camera():
 
     def deactivate(self):
         ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data="STOP"))
+        
         self.active = False
 
     def get_tf(self, mode="pose", target_frame="base_link", time=None):
@@ -137,7 +138,7 @@ class CameraManager():
 
         # ROS inits
         self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size=1)
-        #self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size=1)
+        self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size=1)
         rospy.init_node("camera_manager")
         br = CvBridge()
         rospy.Service('/camera/camera_set', CameraSet, self.set_camera)  
@@ -147,36 +148,47 @@ class CameraManager():
         self.cam_1.set(3, rospy.get_param("~cam_1_width")) #CV_CAP_PROP_FRAME_WIDTH
         self.cam_1.set(4, rospy.get_param("~cam_1_heigth")) #CV_CAP_PROP_FRAME_HEIGHT
 
-        #self.cam_2 = cv2.VideoCapture(rospy.get_param("~cam_2_index"))
-        #self.cam_2.set(3, rospy.get_param("~cam_2_width")) #CV_CAP_PROP_FRAME_WIDTH
-        #self.cam_2.set(4, rospy.get_param("~cam_2_heigth")) #CV_CAP_PROP_FRAME_HEIGHT
+        self.cam_2 = cv2.VideoCapture(rospy.get_param("~cam_2_index"))
+        self.cam_2.set(3, rospy.get_param("~cam_2_width")) #CV_CAP_PROP_FRAME_WIDTH
+        self.cam_2.set(4, rospy.get_param("~cam_2_heigth")) #CV_CAP_PROP_FRAME_HEIGHT
 
         self.cam = None
         self.pub = None
     
         print "> Initialization Complete."
         rate = rospy.Rate(10) #hz
-        run_rate = rospy.Rate(30) #hz
+        run_rate = rospy.Rate(25) #hz
         while not rospy.is_shutdown():
-            if self.cam and self.pub: 
-                # Aint no rest for the wicked
-                self.pub.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
-                run_rate.sleep() # Okay some rest, just to not overload CPU
-            else:
+            try:
+                if self.cam and self.pub: 
+                    # Aint no rest for the wicked
+                    print "go"
+                    ret,frame = self.cam.read()
+                    if ret:
+                        self.pub.publish(br.cv2_to_imgmsg(frame, "bgr8"))
+                    run_rate.sleep() # Okay some rest, just to not overload CPU
+                else:
+                    rate.sleep()
+            except:
+                print "> Error opening Camera:", self.cam
                 rate.sleep()
-
     def set_camera(self, srv):
         cam_name = srv.cam_name.data
         if cam_name == "cam_1":
             print "> Publishing Camera 1."
+            if self.cam: self.cam.release()
             self.cam = self.cam_1
             self.pub = self.cam_1_pub
         elif cam_name == "cam_2":
             print "> Publishing Camera 2."
+            self.cam.release()
             self.cam = self.cam_2
             self.pub = self.cam_2_pub
         elif cam_name == "STOP":
             print "> Stopping Publishing."
+            
+            self.cam.release()
+            
             self.cam = None
             self.pub = None
             return CameraInfo()
