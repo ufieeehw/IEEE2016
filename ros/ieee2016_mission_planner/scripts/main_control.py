@@ -9,7 +9,7 @@ import tf
 
 roslib.load_manifest('ieee2016_vision')
 from camera_manager import Camera
-from block_manager import EndEffector, BlockServer, ProcessBlocks
+from block_manager import EndEffector, BlockServer, WaypointGenerator
 from waypoint_utils import load_waypoints, update_waypoints
 from qr_detector import DetectQRCodeTemplateMethod
 
@@ -40,9 +40,12 @@ class temp_ProcessTrainBoxes():
         for point,color in zip(raw_points,colors):
             self.train_points.append([color,point])
 
-        print "> Saving Train Waypoints"
+        print "> Linking Train Waypoints"
         self.publish_points()
-        update_waypoints(['box_1','box_2','box_3','box_4'],colors)
+        #update_waypoints(['box_1','box_2','box_3','box_4'],colors)
+
+        train_colors = {'box_1':colors[0],'box_2':colors[1],'box_3':colors[2],'box_4':colors[3]}
+        return train_colors
 
     def publish_points(self):
         points = []
@@ -114,9 +117,9 @@ class temp_GenerateBlockPoints():
         random.shuffle(colors)
 
         for i in range(self.initial_blocks/2):
-            this_x = base_x + self.dz*i
-            self.a_tree.insert_unique([this_x,self.y,base_z],colors[i])
-            self.a_tree.insert_unique([this_x,self.y,base_z+self.dz],colors[i+self.initial_blocks/2])
+            this_x = base_x + self.dx*i
+            self.c_tree.insert_unique([this_x,self.y,base_z],colors[i])
+            self.c_tree.insert_unique([this_x,self.y,base_z+self.dz],colors[i+self.initial_blocks/2])
         
         self.publish_points(self.c_tree,self.point_cloud_pub)
         return self.c_tree
@@ -166,22 +169,26 @@ class temp_GenerateBlockPoints():
         for i in range(8):
             this_x = base_x + self.dx*i
             self.b_tree_diag.insert_unique([this_x,self.y,base_z+self.dz],self.b_blocks[i])
+            self.b_blocks[i] = [[this_x,self.y,base_z+self.dz],self.b_blocks[i]]
             #print ('%7s')%self.b_blocks[i],
         #print
         for i in range(8,16):
             this_x = base_x + self.dx*(i-8)
             self.b_tree_diag.insert_unique([this_x,self.y,base_z],self.b_blocks[i])
+            self.b_blocks[i] = [[this_x,self.y,base_z+self.dz],self.b_blocks[i]]
             #print ('%7s')%self.b_blocks[i],
         #print
         #print
         for i in range(16,24):
             this_x = base_x + self.dx*(i-16)
             self.b_tree_diag.insert_unique([this_x,self.y+self.dy,base_z+self.dz],self.b_blocks[i])
+            self.b_blocks[i] = [[this_x,self.y,base_z+self.dz],self.b_blocks[i]]
             #print ('%7s')%self.b_blocks[i],
         #print
         for i in range(24,32):
             this_x = base_x + self.dx*(i-24)
             self.b_tree_diag.insert_unique([this_x,self.y+self.dy,base_z],self.b_blocks[i])
+            self.b_blocks[i] = [[this_x,self.y,base_z+self.dz],self.b_blocks[i]]
             #print ('%7s')%self.b_blocks[i],
         #print
 
@@ -193,20 +200,21 @@ class temp_GenerateBlockPoints():
         base_x = .90
         base_z = .25
 
+
         # Populates tree with the frontmost blocks
         for i in range(8):
             this_x = base_x + self.dx*i
-            if self.b_blocks[i] == "none":
-                self.b_tree.insert_unique([this_x, self.y+self.dy, base_z+self.dz],self.b_blocks[i+16])
+            if self.b_blocks[i][1] == "none":
+                self.b_tree.insert_unique([this_x, self.y+self.dy, base_z+self.dz],self.b_blocks[i+16][1])
             else:
-                self.b_tree.insert_unique([this_x, self.y, base_z+self.dz],self.b_blocks[i])
+                self.b_tree.insert_unique([this_x, self.y, base_z+self.dz],self.b_blocks[i][1])
 
         for i in range(8,16):
             this_x = base_x + self.dx*(i-8)
-            if self.b_blocks[i] == "none":
-                self.b_tree.insert_unique([this_x, self.y+self.dy, base_z],self.b_blocks[i+16])
+            if self.b_blocks[i][1] == "none":
+                self.b_tree.insert_unique([this_x, self.y+self.dy, base_z],self.b_blocks[i+16][1])
             else:
-                self.b_tree.insert_unique([this_x, self.y, base_z],self.b_blocks[i])
+                self.b_tree.insert_unique([this_x, self.y, base_z],self.b_blocks[i][1])
 
         #print self.b_tree.nodes
         self.publish_points(self.b_tree,self.point_cloud_pub)
@@ -285,6 +293,7 @@ class ShiaStateMachine():
         self.running = False
         self.waypoints = load_waypoints()
 
+        print "> ========= Creating Limbs ========="
         # Defining Shia's limbs. 
         # 1 is on the right, 2 is on the left
         self.ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=2)
@@ -293,16 +302,17 @@ class ShiaStateMachine():
         self.cam1 = Camera(cam_number=1)
         self.cam2 = Camera(cam_number=2)
 
+        print "> ========= Creating Detection Objects ========="
         # Objects for detecting and returning location of QR codes. Parameters are the set distances from the codes (cm).
         self.qr_detector = DetectQRCodeTemplateMethod([57])
-        self.block_processor = ProcessBlocks()
+        self.waypoint_generator = WaypointGenerator(self.ee1, self.ee2)
 
         # Misc Objects
         self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
         self.point_cloud_generator = temp_GenerateBlockPoints(16)
         self.point_cloud_generator.generate_b_blocks()
-
-        print "> State Machine Init Complete."
+        print
+        print "> ========= State Machine Init Complete ========="
         print "> Waiting for map selection and start command."
 
         rospy.spin()
@@ -332,9 +342,9 @@ class ShiaStateMachine():
                     3. Move to location to process B blocks.
                 '''
                 print "=== STATE 1 ==="
-                self.ros_manager.set_waypoint(self.waypoints['through_box'])
-                self.train_box_processor.process_train_blocks()
-                self.ros_manager.set_waypoint(self.waypoints['process_b_1'])
+                self.ros_manager.set_nav_waypoint(self.waypoints['through_box'])
+                self.train_box_link = self.train_box_processor.process_train_blocks()
+                self.ros_manager.set_nav_waypoint(self.waypoints['process_b_1'])
 
                 self.current_state += 1
 
@@ -344,31 +354,57 @@ class ShiaStateMachine():
                     1. Begin processing B blocks.
                     2. Move to the next B blocks processing location and continue processing.
                     3. Continue going to B block waypoints until all blocks are processed.
+                    4. Generate Arm Waypoints
                 '''
                 print "=== STATE 2 ==="
-
                 b_tree = self.point_cloud_generator.generate_b_camera_view()
-                #ProcessBlocks(b_tree)
-                #self.ros_manager.set_waypoint(self.waypoints['process_b_2'])
+                b_blocks = self.point_cloud_generator.b_blocks.tolist()
+
+                b_tree, arm_waypoints, b_blocks = self.waypoint_generator.generate_arm_waypoints(b_tree, -1, b_blocks)
+
+                self.ros_manager.set_nav_waypoint(self.waypoints['process_b_2'])
 
                 self.current_state += 1
 
             elif self.current_state == 3:
                 '''
                 The goals of this state are:
-                    1. Generate arm waypoint based on block locations.
-                    2. Move to pick up first set of blocks.
-                    3. Move back and pick up second set of blocks.
+                    1. Move to pick up blocks with first end effector
+                    2. Do this again for the second end effector
                 '''
                 print "=== STATE 3 ==="
-                self.point_cloud_generator.remove_b_blocks([0,1,2,3])
 
+                for gripper,waypoint,grippers_to_acutate in arm_waypoints:
+                    # We don't want to move and rotate here - so just rotate and get lined up .5m from the wall.
+                    # Should move this to be part of the controller, but for now it can just go here.
+                    rotate_waypoint = np.copy(waypoint)
+                    rotate_waypoint[1] = 1.5 #m
+                    print "Lining Up"
+                    self.ros_manager.set_arm_waypoint(gripper,rotate_waypoint)
+
+                    # Now move in close to the wall. We move so that the edge of the robot is some distance from the wall.
+                    # .1524m is 6 inches, or half the robot size
+                    distance_off_wall = .002032 #m
+                    print "Moving Close"
+                    self.ros_manager.set_arm_waypoint(gripper,waypoint - np.array([0,.1524+distance_off_wall,0]))
+
+                    # Pick up the blocks IRL somehow
+                    time.sleep(1)
+
+                    # We need to back up slighly in order to rotate
+                    backup_movement = self.ros_manager.pose - np.array([0,.5,0])
+                    self.ros_manager.set_nav_waypoint(backup_movement)
+
+                # Regenerate point cloud - for simulation only
+                self.point_cloud_generator.publish_points(b_tree,self.point_cloud_generator.point_cloud_pub)
+                #self.point_cloud_generator.b_blocks = np.array(b_blocks, dtype=object)
+                #self.point_cloud_generator.generate_b_camera_view()
                 break
 
             elif self.current_state == 4:
                 '''
                 The goals of this state are:
-                    1. Move to train box_1 (unless we aren't hold that color in the first end effector.
+                    1. Move to train box_1 (unless we aren't holding that color in the first end effector).
                     2. Release that color on the first end effector.
                     3. Move to next box with a color that we have. Repeat until at the last box.
                     5. Turn around and repeat with the other end effector - starting from box 4.
@@ -390,29 +426,58 @@ class ShiaStateMachine():
 
             # elif self.current_state == 5:
             #     self.dectect_box_colors()
-            # elif self.current_state == 6:
-            #     self.unload_blocks_by_color()
-            # elif self.current_state == 7:
-            #     self.return_to_block()
+            elif self.current_state == 6:
+                '''
+                Temp state to test waypoint stuff
+                Generate arm waypoints for both arms
+                '''
+                print "=== TEMP STATE 1 ===" 
+                b_tree = self.point_cloud_generator.generate_b_camera_view()
+                b_blocks = self.point_cloud_generator.b_blocks.tolist()
 
-            if self.current_state > 5: self.current_state = 0
+                b_tree, arm_waypoints, b_blocks = self.waypoint_generator.generate_arm_waypoints(b_tree, -1, b_blocks)
+            
+                #time.sleep(3)
+
+                self.current_state+=1
+
+            elif self.current_state == 7:
+                '''
+                Temp state to test waypoint stuff
+                Go to generated waypoints with some stuff in between.
+                '''
+                print "=== TEMP STATE 2 ===" 
+
+
+            if self.current_state > 50: self.current_state = 0
             rate.sleep()
 
 class ros_manager():
     def __init__(self,s):
         self.state_machine = s
         self.map_version_set = False
+        # Initally zero, updated by particle filter later
+        self.pose = np.array([0,0,0])
 
         # ROS inits
-        self.nav_waypoint_pub = rospy.Publisher("/robot/waypoint", PoseStamped, queue_size=1)
+        self.nav_waypoint_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=1)
         self.state_pub = rospy.Publisher("/robot/current_state", Int8, queue_size=1)
         self.nav_start_pub = rospy.Publisher("/robot/start_navigation", Int8, queue_size=1)
+
         self.nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
-    
+        self.arm_waypoint = rospy.ServiceProxy('/robot/arm_waypoint', ArmWaypoint)
+
+        rospy.Subscriber("/robot/pf_pose_est", PoseStamped, self.got_pose, queue_size=1)
+
         rospy.init_node('main_control')
         
         rospy.Subscriber('/settings/start_command',Bool,self.recieve_start_command)
         rospy.Subscriber('/settings/map_version',Int8,self.determine_map_version)
+
+    def got_pose(self,msg):
+        yaw = tf.transformations.euler_from_quaternion([msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z,msg.pose.orientation.w])[2]
+        self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
+
 
     def recieve_start_command(self,msg):
         if msg.data and not self.state_machine.running and self.map_version_set:
@@ -420,9 +485,11 @@ class ros_manager():
 
             # 1 is the map configuration where we start on the right, 2 is on the left.
             if self.state_machine.map_version == 1:
+                self.pose = np.array([0,0,0])
                 self.nav_start_pub.publish(Int8(data=1))
                 self.state_machine.begin_1()
             elif self.state_machine.map_version == 2:
+                self.pose = np.array([.2,.2,1.57])
                 self.nav_start_pub.publish(Int8(data=2))
                 self.state_machine.begin_2()
 
@@ -432,7 +499,7 @@ class ros_manager():
 
         print "> Map Version:",self.state_machine.map_version
 
-    def set_waypoint(self,waypoint):
+    def set_nav_waypoint(self,waypoint):
         q = tf.transformations.quaternion_from_euler(0, 0, waypoint[2])
         p_s = PoseStamped(
                 header=Header(
@@ -454,9 +521,35 @@ class ros_manager():
                 )
             )
         self.nav_waypoint_pub.publish(p_s)
-        print "> Waypoint published:",waypoint
+        print "> Nav Waypoint published:",waypoint
         print "> Moving..."
         success = self.nav_waypoint(p_s)
+        print "> Movement Complete!"
+
+    def set_arm_waypoint(self,gripper,waypoint):
+        q = tf.transformations.quaternion_from_euler(0, 0, 1.5707)
+        p_s = PoseStamped(
+                header=Header(
+                    stamp=rospy.Time.now(),
+                    frame_id="map"
+                ),
+                pose=Pose(
+                    position=Point(
+                        x=waypoint[0],
+                        y=waypoint[1],
+                        z=waypoint[2]
+                    ),
+                    orientation=Quaternion(
+                        x=q[0],
+                        y=q[1],
+                        z=q[2],
+                        w=q[3],
+                    )
+                )
+            )
+        print "> Arm Waypoint published:",waypoint
+        print "> Moving..."
+        success = self.arm_waypoint(gripper,p_s)
         print "> Movement Complete!"
 
     def publish_current_state(self,state):
