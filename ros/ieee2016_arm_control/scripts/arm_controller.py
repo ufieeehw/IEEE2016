@@ -39,8 +39,8 @@ def make_2D_rotation_mat(angle):
 
 class ArmController():
     def __init__(self):
-        self.arm_waypoint = rospy.Publisher('/robot/arm/waypoint', PoseStamped, queue_size=2)
-        self.nav_goal_pub = rospy.Publisher("/robot/waypoint", PoseStamped, queue_size=2) #Just for visualization
+        self.arm_waypoint = rospy.Publisher('/robot/arm_waypoint', PoseStamped, queue_size=2)
+        self.nav_goal_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=2) #Just for visualization
         self.elevator = rospy.Publisher("/robot/arms/elevator", Float64, queue_size=2)
         self.rail = rospy.Publisher("/robot/arms/rail", Float64, queue_size=2)
 
@@ -48,7 +48,7 @@ class ArmController():
         
         # For this we will use a service. When the arm moves to the desired location,
         # the service will return True to the person who called it
-        rospy.Service('/robot/arms/set_waypoint', ArmWaypoint, self.move_arm)
+        rospy.Service('/robot/arm_waypoint', ArmWaypoint, self.move_arm)
 
         # For actually moving to the desired location.
         self.goto_nav_goal = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
@@ -92,7 +92,7 @@ class ArmController():
                         position=Point(
                                 x=self.nav_goal[0],
                                 y=self.nav_goal[1],
-                                z=0
+                                z=.129
                             ),
                         orientation=Quaternion(
                                 x=q[0],
@@ -118,7 +118,7 @@ class ArmController():
         des_height -= trans[2]
 
         min_height = 0 #m
-        max_height = .127 #m
+        max_height = .3 #m
         print "Sending",des_height
         if min_height <= des_height <= max_height:
             self.elevator.publish(Float64(data=des_height))

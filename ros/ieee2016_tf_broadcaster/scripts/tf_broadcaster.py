@@ -38,32 +38,32 @@ class TFPublisher():
 
     def static_tf(self):
         # End Effector 1 -> Each Gripper, G0 is the far left
-        self.tf_broad.sendTransform((.05,-.03,0), 
+        self.tf_broad.sendTransform((.05,-.0635,0), 
                         tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "1-G0", "EE1")
-        self.tf_broad.sendTransform((.05,-.01,0), 
-                        tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "1-G1", "EE1")
-        self.tf_broad.sendTransform((.05,.01,0), 
+                        rospy.Time.now(), "1-G3", "EE1")
+        self.tf_broad.sendTransform((.05,0,0), 
                         tf.transformations.quaternion_from_euler(0,0,0),
                         rospy.Time.now(), "1-G2", "EE1")
-        self.tf_broad.sendTransform((.05,.03,0), 
+        self.tf_broad.sendTransform((.05,.0635,0), 
                         tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "1-G3", "EE1") 
+                        rospy.Time.now(), "1-G1", "EE1")
+        self.tf_broad.sendTransform((.05,2*.0635,0), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
+                        rospy.Time.now(), "1-G0", "EE1") 
 
         # End Effector 2 -> Each Gripper, G0 is the far left   
-        self.tf_broad.sendTransform((.05,-.03,0), 
-                        tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "2-G0", "EE2")
-        self.tf_broad.sendTransform((.05,-.01,0), 
-                        tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "2-G1", "EE2")
-        self.tf_broad.sendTransform((.05,.01,0), 
-                        tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "2-G2", "EE2")
-        self.tf_broad.sendTransform((.05,.03,0), 
+        self.tf_broad.sendTransform((.05,-.0635,0), 
                         tf.transformations.quaternion_from_euler(0,0,0),
                         rospy.Time.now(), "2-G3", "EE2")
+        self.tf_broad.sendTransform((.05,0,0), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
+                        rospy.Time.now(), "2-G2", "EE2")
+        self.tf_broad.sendTransform((.05,.0635,0), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
+                        rospy.Time.now(), "2-G1", "EE2")
+        self.tf_broad.sendTransform((.05,2*.0635,0), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
+                        rospy.Time.now(), "2-G0", "EE2")
 
         # base_link -> Each LIDAR
         self.tf_broad.sendTransform((0, .125368, -.0775),  
