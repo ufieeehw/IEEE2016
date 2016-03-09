@@ -181,12 +181,10 @@ class CameraManager():
         cam_name = srv.cam_name.data
         if cam_name == "cam_1":
             print "> Publishing Camera 1."
-            if self.cam: self.cam.release()
             self.cam = self.cam_1
             self.pub = self.cam_1_pub
         elif cam_name == "cam_2":
             print "> Publishing Camera 2."
-            self.cam.release()
             self.cam = self.cam_2
             self.pub = self.cam_2_pub
         elif cam_name == "STOP":
