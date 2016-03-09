@@ -60,6 +60,10 @@ class GPUAccMap():
             np.arange(self.index_count/2 - self.deg_index, self.index_count/2 + self.deg_index, step=self.step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(0, self.deg_index, step=self.step))
+        self.indicies_to_compare = np.append( self.indicies_to_compare,            
+            np.arange(self.index_count - self.deg_index, self.index_count, step=self.step))
 
         # To generate weights, we need those indices to be pre-converted to radian angle measures 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
@@ -103,7 +107,12 @@ class GPUAccMap():
         if "left" in lidars:
             self.indicies_to_compare = np.append( self.indicies_to_compare,            
                 np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step) ).astype(np.int)
-
+        if "back" in lidars:
+            self.indicies_to_compare = np.append( self.indicies_to_compare,            
+                np.arange(0, self.deg_index, step=self.step))
+            self.indicies_to_compare = np.append( self.indicies_to_compare,            
+                np.arange(self.index_count - self.deg_index, self.index_count, step=self.step))
+            
         # Update other necessary parameters 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
         self.angles_to_compare_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.angles_to_compare)
