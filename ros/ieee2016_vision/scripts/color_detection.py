@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from point_intersector import PointIntersector
 import rospy
+from waypoint_utils import load_waypoints
 
 
 class Calibration():
@@ -49,11 +50,16 @@ class Image():
 	green, blue, and yellow.
 	'''
 	def __init__(self, camera, calibration, width = 640):
-		# Baseline operating parameters
 		self.camera = camera
 		self.calibration = calibration
 		self.frame = self.camera.image
-		self.operating_image_width = width
+
+		# Store original and operating image dimensions
+		self.original_dimensions = (self.frame.shape[1], self.frame.shape[0])
+		aspect_ratio = float(self.original_dimensions[0]) / self.original_dimensions[1]
+		self.operating_dimensions = (width, int(width / aspect_ratio))
+		self.scaling_ratio = float(self.original_dimensions[0]) / self.operating_dimensions[0]
+
 		self.hold_redux_frame = False
 
 	def resize(self):
@@ -62,10 +68,17 @@ class Image():
 		proportional height.
 		'''
 		self.frame = self.camera.image
-		height, width = self.frame.shape[0], self.frame.shape[1]
-		aspect_ratio = float(width) / height
-		new_dimensions = (self.operating_image_width, int(self.operating_image_width / aspect_ratio))
-		self.frame = cv2.resize(self.frame, new_dimensions, interpolation = cv2.INTER_AREA)
+		self.frame = cv2.resize(self.frame, self.operating_dimensions, interpolation = cv2.INTER_AREA)
+
+	def scale_point(self, point):
+		'''
+		Scales a point from an image of lower resolution to the camera's true
+		image resolution.
+		'''
+		for i in range(2):
+			point[i] = point[i] * self.scaling_ratio
+
+		return point
 
 	def reduce_colors(self, image_color_depth):
 		'''
@@ -116,11 +129,11 @@ class ObjectDetection():
 	Generates usable data about the location of objects within the frame.
 	Colors id's are as follows: red, green, blue, and yellow.
 	'''
-	def __init__(self, camera, calibration):
-		# Baseline operating parameters
-		self.image = Image(camera, calibration, 320)
-		self.box = {}
-		self.box_center = {}
+	def __init__(self, camera, calibration, image):
+		self.image = image
+
+		self.boxes = {}
+		self.box_centers = {}
 
 	def select_largest_object(self, colors):
 		'''
@@ -151,9 +164,9 @@ class ObjectDetection():
 
 			if (largest_contour != None):
 				rect = cv2.minAreaRect(largest_contour)
-				self.box[color] = cv2.cv.BoxPoints(rect)
+				self.boxes[color] = cv2.cv.BoxPoints(rect)
 			else:
-				self.box[color] = None
+				self.boxes[color] = None
 
 		# Release the reduced color frame that is being held
 		self.image.hold_redux_frame = False
@@ -179,14 +192,14 @@ class ObjectDetection():
 
 			for color in colors:
 				# Add up all of the box points' (x, y) values
-				if (self.box[color]):
+				if (self.boxes[color]):
 					for point in range(4):
 						for value in range(2):
-							box_avg[color][point][value] = box_avg[color][point][value] + self.box[color][point][value]
+							box_avg[color][point][value] = box_avg[color][point][value] + self.boxes[color][point][value]
 
 				# Aborts the averaging if a set number of measurements return None
 				elif (retry[color] == max_retry):
-					self.box[color] = None
+					self.boxes[color] = None
 					break
 
 				# Attempts to retry failed measurements
@@ -196,11 +209,11 @@ class ObjectDetection():
 
 		for color in colors:
 			# Divides the sums of the points' (x, y) values by the amount of values
-			if (self.box[color]):
+			if (self.boxes[color]):
 				for point in range(4):
 					for value in range(2):
 						box_avg[color][point][value] = box_avg[color][point][value] / amount
-				self.box[color] = box_avg[color]
+				self.boxes[color] = box_avg[color]
 
 	def get_box_center(self):
 		'''
@@ -210,57 +223,127 @@ class ObjectDetection():
 		'''
 		box_avg = {}
 
-		for color in self.box.keys():
+		for color in self.boxes.keys():
 			box_avg[color] = [0, 0]
 
-			if (self.box[color]):
+			if (self.boxes[color]):
 				for point in range(4):
 					for value in range(2):
-						box_avg[color][value] = box_avg[color][value] + self.box[color][point][value]
+						box_avg[color][value] = box_avg[color][value] + self.boxes[color][point][value]
 				for value in range(2):
-					box_avg[color][value] = (int)(box_avg[color][value] / len(self.box[color]))
-				self.box_center[color] = tuple(box_avg[color])
+					box_avg[color][value] = (int)(box_avg[color][value] / len(self.boxes[color]))
+				self.box_centers[color] = tuple(box_avg[color])
 			else:
-				self.box_center[color] = None
+				self.box_centers[color] = None
 
 
-def train_box_order(camera, colors, averaging):
+class TrainBoxes():
 	'''
-	Used to perform the locations and order of the colored train boxes at the
-	beginning of a run.
+	Used to locate and determine the order of the colored train boxes at
+	the beginning of a run. Makes use of existing waypoints in order to
+	infer the location of any box that was not properly detected.
 	'''
-	box_centers = []
-	order = []
+	def __init__(self, camera):
+		self.camera = camera
+		self.calibration = Calibration()
+		self.image = Image(camera, calibration, 320)
+		self.detection = ObjectDetection(self.camera, self.calibration)
+		self.waypoints = load_waypoints()
+		self.intersect = PointIntersector()
 
-	camera.activate()
-	calibration = Calibration()
-	detection = ObjectDetection(camera, calibration)
+	def get_box_location(self, averaging):
+		'''
+		Determines the locations of the boxes in Shia's coordinate system based
+		on their location within the given camera frame.
+		'''
+		self.box_locations = {}
+		self.not_detected = []
 
-	# Finds the average center of the boxes around the largest object
-	detection.average_box(detection.select_largest_object, colors , averaging)
-	detection.get_box_center()
+		self.detection.average_box(self.detection.select_largest_object, self.colors , averaging)
+		self.detection.get_box_center()
+		for color in self.colors:
 
-	for color in colors:
-		# Stores the center's x positions with reference to color and in a list
-		if (detection.box_center[color]):
-			box_centers.append(detection.box_center[color][0])
+			# Uses intersect_point to determine the 3D location of each detected box center
+			if (self.detection.box_centers[color]):
+				self.box_locations[color] = self.intersect.intersect_point(self.camera, self.image.scale_point(self.detection.box_centers[color]))
 
-		# Prints an error and returns None if unsuccessful for a color
-		else:
-			print("ERROR: color_detection could not detect the center of the %s box - aborting" % (color))
-			return None
+			# If detection was unsuccessful for a color, adds it to not_detected and prints an error
+			else:
+				self.not_detected.append(color)
+				print("WARNING: color_detection could not detect the center of the %s box" % (color))
 
-	# Arranges the list by value and applys the order to a list of colors
-	box_centers.sort()
-	for center in box_centers:
-		for color in colors:
-			if (detection.box_center[color][0] == center):
-				order.append(color)
+	def infer_box_location(self):
+		'''
+		Determines the location of a single box that was not properly detected
+		using the positions of the other boxes. Can only be used once all of
+		the other boxes have been assigned colors!
+		'''
+		if (len(self.not_detected) == 1):
+			for location in self.locations:
+				if (not location in self.matched_boxes.keys()):
+					self.matched_boxes[location] = self.not_detected.pop()
 
-	camera.deactivate()
+	def waypoint_approximation(self):
+		'''
+		Determines the waypoints that best match the 3D points obtained
+		through get_box_locations.
+		'''
+		for location in self.locations:
 
-	# Returns a list of colors from left to right in the frame
-	return order
+			# Ensures that two colors are not assigned to a box
+			if (not location in self.matched_boxes.keys()):
+
+				# An initialization value larger than any possible distance on the field
+				smallest_distance = 42069133742
+				closest_color = None
+
+				# Assigns the color closest to the location to that location
+				for color in self.colors:
+					distance = abs(self.box_locations[color][1] - self.waypoints[color][1])
+					if (distance < smallest_distance):
+						smallest_distance = distance
+						closest_color = color
+				self.matched_boxes[location] = color
+
+			# Catch all for a situation in which no color is closest to the location
+			else:
+				self.matched_boxes[location] = None
+
+		# Removes any colors that were assigned to more than one location
+		cleaned_matching = {}
+		for key, value in self.matched_boxes.items():
+			if value not in cleaned_matching.values():
+				cleaned_matching[key] = value
+		self.matched_boxes = cleaned_matching
+
+	def get_box_order(self, colors, locations, averaging):
+		'''
+		Returns the formated order of the boxes. They will be in a dictionary
+		with the keys being waypoint names and the values being colors.
+		'''
+		# The colors of boxes to locate
+		self.colors = colors
+
+		# The waypoints of the boxes
+		self.locations = locations
+
+		# Amount of frames to average - increases reliability, recommended minimum of 8
+		self.averaging = averaging
+
+		# The table to be returned keys are waypoint names and values are colors
+		self.matched_boxes = {}
+
+		self.get_box_location(averaging)
+		self.waypoint_approximation()
+		self.infer_box_location()
+
+		# Sets all of the boxes that were not detected to None
+		for location in self.locations:
+			if (not location in self.matched_boxes.keys()):
+				self.matched_boxes[location] = None
+
+		return(self.matched_boxes)
+
 
 def debug_selection(camera, colors, averaging):
 	'''
@@ -280,7 +363,7 @@ def debug_selection(camera, colors, averaging):
 		# Pulling values used to render the debugging image
 		image.resize()
 		frame = image.frame
-		box = detection.box
+		box = detection.boxes
 		box_center = detection.box_center
 
 		for color in colors:
@@ -304,6 +387,7 @@ def debug_selection(camera, colors, averaging):
 if __name__ == "__main__":
 	rospy.init_node("color_dection")
 	camera = Camera(1)
-	# print(train_box_order(camera, ["red", "blue", "yellow"], 8))
-	debug_selection(camera, ["blue"], 10)
+	# debug_selection(camera, ["blue"], 2)
+	train = TrainBoxes(camera)
+	train.get_box_order(["red", "green", "blue", "yellow"], ["box_1", "box_2", "box_3", "box_4"], 8)
 	exit()
