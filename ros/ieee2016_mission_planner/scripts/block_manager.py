@@ -39,7 +39,7 @@ class Gripper():
         self.block = block
 
     def  __repr__(self):
-        return self.frame_id
+        return str(self.frame_id + ":" + self.block.color)
 
     def get_tf(self,tf_listener,from_frame):
         '''
@@ -80,19 +80,23 @@ class EndEffector():
         self.gripper_positions[g].block = block
         self.holding += 1
 
-    def drop(self, gripper):
+    def drop(self, grippers):
         # Adds the block to gripper specified
-        g = self.gripper_positions.index(gripper)
-        self.gripper_positions[g].block = Block("none")
-        self.holding -= 1
+        #if len(grippers) == 1: grippers = [grippers]
+        print grippers
+        for gripper in grippers:
+            print gripper
+            g = self.gripper_positions.index(gripper)
+            self.gripper_positions[g].block = Block("none")
+            self.holding -= 1
 
     def which_gripper(self,color):
         # Returns the gripper numbers of the grippers containing the blocks with specified color
-        gripper_numbers = []
-        for i,b in enumerate(self.gripper_positions):
-            if b.color == color: gripper_positions.append(i)
+        grippers_to_drop = []
+        for g in self.gripper_positions:
+            if g.block.color == color: grippers_to_drop.append(g)
 
-        return gripper_numbers
+        return grippers_to_drop
 
     def __repr__(self):
         # How the object prints
@@ -361,6 +365,8 @@ class WaypointGenerator():
 
         self.ee_list = ee
 
+        self.picked_up = 0
+
         self.tf_listener = tf.TransformListener()
         print "> Waypoint Generator Online."
 
@@ -394,6 +400,7 @@ class WaypointGenerator():
 
             # Loop through this until our gripper is full.
             while ee.holding < pickup and len(block_tree.nodes) != 0:
+
                 # Sort by order of largest z then smallest x, also remove any none blocks.
                 # None blocks can be globally changed but we need them for simulation.
                 sorted_blocks = sorted(block_tree.nodes, key=lambda node:(-node.point[2],node.point[0]))
@@ -408,6 +415,7 @@ class WaypointGenerator():
                 # Find location to move the base gripper to. Then add that block to the gripper.
                 target_waypoint = sorted_blocks[0].point
                 ee.pickup(Block(sorted_blocks[0].linked_object),base_gripper)
+                self.picked_up += 1
 
                 #print "Gripper:",base_gripper,"to:",sorted_blocks[0]
                 #print "Grippers to Actuate:",grippers_to_actuate
@@ -433,7 +441,7 @@ class WaypointGenerator():
                         # Add that block to the gripper, assume we will pick it up soon. 
                         ee.pickup(Block(closest_block[1].linked_object),ee.gripper_positions[i])
                         grippers_to_actuate.append(i)
-                        
+                        self.picked_up += 1
 
                         simulation_blocks[simulation_blocks.index([closest_block[1].point.tolist(),closest_block[1].linked_object])][1] = "none"
 
@@ -455,9 +463,6 @@ class WaypointGenerator():
         # Returning the new tree, the waypoints for the gripper, and the temp simulation block list
         return block_tree, waypoints_list, simulation_blocks
 
-
-
-    
     def make_temp_tree(self, new_list):
         '''
         Generates a new tree with the new list. List elements should be Node objects.

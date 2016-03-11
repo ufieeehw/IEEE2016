@@ -45,7 +45,7 @@ class temp_ProcessTrainBoxes():
         self.publish_points()
         #update_waypoints(['box_1','box_2','box_3','box_4'],colors)
 
-        train_colors = {'box_1':colors[3],'box_2':colors[2],'box_3':colors[1],'box_4':colors[0]}
+        train_colors = {'box_4':colors[3],'box_3':colors[2],'box_2':colors[1],'box_1':colors[0]}
         return train_colors
 
     def publish_points(self):
@@ -345,20 +345,21 @@ class ShiaStateMachine():
                 print "=== STATE 1 ==="
                 self.ros_manager.set_nav_waypoint(self.waypoints['through_box'])
                 train_box_colors = self.train_box_processor.process_train_blocks()
+                time.sleep(1)
                 print train_box_colors
-                self.ros_manager.set_nav_waypoint(self.waypoints['process_b_1'])
 
-                self.current_state = 4
+                self.current_state += 1
 
             elif self.current_state == 2:
                 '''
                 The goals of this state are:
-                    1. Begin processing B blocks.
+                    1. Nove to and begin processing B blocks.
                     2. Move to the next B blocks processing location and continue processing.
                     3. Continue going to B block waypoints until all blocks are processed.
                     4. Generate Arm Waypoints
                 '''
                 print "=== STATE 2 ==="
+                self.ros_manager.set_nav_waypoint(self.waypoints['process_b_1'])
                 b_tree = self.point_cloud_generator.generate_b_camera_view()
                 b_blocks = self.point_cloud_generator.b_blocks.tolist()
                 b_tree, arm_waypoints, b_blocks = self.waypoint_generator.generate_arm_waypoints(b_tree, -1, b_blocks)
@@ -374,7 +375,7 @@ class ShiaStateMachine():
                     2. Do this again for the second end effector
                 '''
                 print "=== STATE 3 ==="
-                print "> Executing waypoints"
+                print "> Executing waypoints."
 
                 # Used to determine if we need to rotate or naw.
                 last_ee = 0
@@ -412,66 +413,105 @@ class ShiaStateMachine():
                 self.point_cloud_generator.publish_points(b_tree,self.point_cloud_generator.point_cloud_pub)
                 #self.point_cloud_generator.b_blocks = np.array(b_blocks, dtype=object)
                 #self.point_cloud_generator.generate_b_camera_view()
-                for gripper_1,gripper_2 in zip(self.ee1.gripper_positions,self.ee2.gripper_positions):
-                    self.ee1.drop(gripper_1)
-                    self.ee2.drop(gripper_2)
 
-                if len(b_tree.nodes) == 0:
-                    self.current_state+=1
-                else:
-                    self.current_state-=1
+                self.current_state += 1
 
             elif self.current_state == 4:
                 '''
                 The goals of this state are:
-                    1. Move to train box_1 (unless we aren't holding that color in the first end effector).
+                    1. Move to train box_4.
                     2. Release that color on the first end effector.
                     3. Move to next box with a color that we have. Repeat until at the last box.
-                    5. Turn around and repeat with the other end effector - starting from box 4.
+                    4. Turn around and repeat with the other end effector - starting from box 1.
+                    5. If there are still blocks we haven't gotten, move back to reprocess B blocks.
                 '''
                 print "=== STATE 4 ==="
-                self.ros_manager.set_nav_waypoint(self.waypoints['process_b_2'])                
-                break
+                # We are going to iterate over 2 directions and to the 4 boxes. The first direction drops off ee1 and the second drops off ee2.
+                # Right now we have to stop at each box, it would be good if we didnt have to.
+                print "Blocks:",self.ee1
+                print "Blocks:",self.ee2
+                for direction,ee in enumerate([self.ee1,self.ee2]):
+                    # First make sure the gripper has blocks in it.
+                    if ee.holding == 0:
+                        continue
+                    # When direction is 0, we will be pointing one way, when it is 1, we will rotate to face the other way.
+                    rotational_offset = direction*np.pi
+                    print rotational_offset
+                    box_number = 1
+                    while box_number <= 4:
+                        # Run through before we move and make sure the next box is the color of a block we are holding
+                        holding_color = False
+                        while not holding_color:
+                            if direction == 0:
+                                box = 'box_'+str(5-box_number)
+                            else:
+                                box = 'box_'+str(box_number)
+
+                            grippers_to_drop = ee.which_gripper(train_box_colors[box])
+                            if len(grippers_to_drop) is not 0:
+                                # If there are blocks that match the color of the box, we can break from this loop and go to that box.
+                                holding_color = True
+                                break
+                            print "No %s blocks detected - skipping that box."%(train_box_colors[box])
+                            box_number += 1
+
+                        print "This color:",train_box_colors[box],box
+                        # Where should we go and what direction should we point
+                        curr_waypoint = np.copy(self.waypoints[box])
+                        curr_waypoint[2] += rotational_offset
+
+                        # Move and then when we get there drop off the associated color blocks
+                        self.ros_manager.set_nav_waypoint(curr_waypoint)
+                        
+                        print "Dropping blocks grippers:",grippers_to_drop
+                        ee.drop(grippers_to_drop)
+                        time.sleep(1)
+                        if ee.holding == 0:
+                            print "Empty gripper!"
+                            break
+                        box_number += 1
+
+                if self.waypoint_generator.picked_up == 20:
+                    self.waypoint_generator.picked_up = 0
+                    self.current_state+=1
+                else:
+                    # Go back and reprocess B blocks
+                    self.current_state = 2
 
             elif self.current_state == 5:
                 '''
                 The goals of this state are:
-                    1. Move back to processing B blocks.
-                    2. Find out if there are any half blocks we have to deal with.
-                    3. Generate next arm waypoint (with half blocks considered).
-                    4. Repeat for other end effector.
-
-                After this state return to state 4 and repeat until there are no more blocks.
+                    1. Move to and detect A blocks.
+                    2. Generate arm waypoints.
                 '''
                 print "=== STATE 5 ==="
-
-
-            # elif self.current_state == 5:
-            #     self.dectect_box_colors()
+                
             elif self.current_state == 6:
                 '''
-                Temp state to test waypoint stuff
-                Generate arm waypoints for both arms
+                The goals of this state are:
+                    1. Pick up blue blocks with EE1.
+                    2. Pick up blue blocks with EE2.
                 '''
-                print "=== TEMP STATE 1 ===" 
-                b_tree = self.point_cloud_generator.generate_b_camera_view()
-                b_blocks = self.point_cloud_generator.b_blocks.tolist()
-                print b_tree
-                b_tree, arm_waypoints, b_blocks = self.waypoint_generator.generate_arm_waypoints(b_tree, -1, b_blocks)
-            
-                #time.sleep(3)
-
-                self.current_state+=1
+                print "=== STATE 6 ==="
 
             elif self.current_state == 7:
                 '''
-                Temp state to test waypoint stuff
-                Go to generated waypoints with some stuff in between.
+                The goals of this state are:
+                    1. Move to boat location.
+                    2. Drop all blocks in EE1.
+                    3. Rotate 180 degrees and drop off blocks in EE2.
+                    4. Possibly go back to state 5.
                 '''
-                print "=== TEMP STATE 2 ===" 
+                print "=== STATE 7 ==="
+                
+                
+                    
 
 
-            if self.current_state > 50: self.current_state = 0
+            else:
+                break
+
+            #if self.current_state > 50: self.current_state = 0
             rate.sleep()
 
 class ros_manager():
