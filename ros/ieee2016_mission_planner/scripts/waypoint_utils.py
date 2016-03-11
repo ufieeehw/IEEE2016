@@ -30,6 +30,7 @@ def update_waypoints(old_names,new_names):
 def save_waypoint(name, x, y, theta):
 		# Take a name and a coordinate [x y yaw] (with no []) and write them to waypoints file, updating if there are repeats.
 	existing_waypoints = load_waypoints()
+	coor = [x,y,theta]
 	new_waypoint = {name:coor}
 
 	existing_waypoints.update(new_waypoint)
