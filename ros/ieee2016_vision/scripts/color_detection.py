@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from point_intersector import PointIntersector
 import rospy
+from waypoint_utils import load_waypoints
 
 
 class Calibration():
@@ -16,7 +17,7 @@ class Calibration():
 	script.
 	'''
 	def __init__(self):
-		self.color = {}
+		self.colors = {}
 		self.load_calibration()
 
 	def save_calibration(self):
@@ -38,8 +39,8 @@ class Calibration():
 		self.available_colors = self.calibrations.keys()
 
 		# Converts the values in the dictionary to numpy arrays for cv2
-		for i in range(len(self.available_colors)):
-			self.color[self.available_colors[i]] = ((np.array(self.calibrations[self.available_colors[i]][0])), (np.array(self.calibrations[self.available_colors[i]][1])))
+		for color in self.available_colors:
+			self.colors[color] = ((np.array(self.calibrations[color][0])), (np.array(self.calibrations[color][1])))
 
 
 class Image():
@@ -48,11 +49,18 @@ class Image():
 	the selection of a color to proceed. Colors id's are as follows: red,
 	green, blue, and yellow.
 	'''
-	def __init__(self, camera, width = 640):
-		# Baseline operating parameters
+	def __init__(self, camera, calibration, width = 640):
 		self.camera = camera
+		self.calibration = calibration
 		self.frame = self.camera.image
-		self.operating_image_width = width
+
+		# Store original and operating image dimensions
+		self.original_dimensions = (self.frame.shape[1], self.frame.shape[0])
+		aspect_ratio = float(self.original_dimensions[0]) / self.original_dimensions[1]
+		self.operating_dimensions = (width, int(width / aspect_ratio))
+		self.scaling_ratio = float(self.original_dimensions[0]) / self.operating_dimensions[0]
+
+		self.hold_redux_frame = False
 
 	def resize(self):
 		'''
@@ -60,33 +68,48 @@ class Image():
 		proportional height.
 		'''
 		self.frame = self.camera.image
-		height, width = self.frame.shape[0], self.frame.shape[1]
-		aspect_ratio = float(width) / height
-		new_dimensions = (self.operating_image_width, int(self.operating_image_width / aspect_ratio))
-		self.frame = cv2.resize(self.frame, new_dimensions, interpolation = cv2.INTER_AREA)
+		self.frame = cv2.resize(self.frame, self.operating_dimensions, interpolation = cv2.INTER_AREA)
+
+	def scale_point(self, point):
+		'''
+		Scales a point from an image of lower resolution to the camera's true
+		image resolution.
+		'''
+		for i in range(2):
+			point[i] = point[i] * self.scaling_ratio
+
+		return point
 
 	def reduce_colors(self, image_color_depth):
 		'''
 		Reduces the range of colors present in a frame of the video feed based on
 		the set color depth.
 		'''
-		self.resize()
+		# Can be set to reuse the reduced color frame to reduce processing cost
+		if (self.hold_redux_frame):
+			self.frame = self.redux_frame
 
-		# Converts the frame to a format that is usable with K-Means clustering
-		working_frame = self.frame.reshape((-1, 3))
-		working_frame = np.float32(working_frame)
+		else:
+			self.resize()
 
-		# Use K-Means clustering to identify the 16 most predominant colors
-		criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-		ret, label, center = cv2.kmeans(working_frame, image_color_depth, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+			# Converts the frame to a format that is usable with K-Means clustering
+			working_frame = self.frame.reshape((-1, 3))
+			working_frame = np.float32(working_frame)
 
-		# Reduces the colors in the original image based on the clustering results
-		center = np.uint8(center)
-		working_frame = center[label.flatten()]
-		working_frame = working_frame.reshape((self.frame.shape))
+			# Use K-Means clustering to identify the 16 most predominant colors
+			criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+			ret, label, center = cv2.kmeans(working_frame, image_color_depth, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
 
-	 	# Blurs the remaining colors to reduce noise
-	 	self.frame = cv2.GaussianBlur(working_frame, (5, 5), 0)
+			# Reduces the colors in the original image based on the clustering results
+			center = np.uint8(center)
+			working_frame = center[label.flatten()]
+			working_frame = working_frame.reshape((self.frame.shape))
+
+		 	# Blurs the remaining colors to reduce noise
+		 	self.frame = cv2.GaussianBlur(working_frame, (5, 5), 0)
+
+		 	# Stores the frame for later holding
+		 	self.redux_frame = self.frame
 
 	def extract_color(self, color):
 		'''
@@ -97,7 +120,7 @@ class Image():
 
 		# Creates a mask for the selected hue range and overlays them onto the frame
 		working_frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
-		mask = cv2.inRange(working_frame, color[0], color[1])
+		mask = cv2.inRange(working_frame, self.calibration.colors[color][0], self.calibration.colors[color][1])
 		self.frame = cv2.bitwise_and(working_frame, working_frame, mask = mask)
 
 
@@ -106,42 +129,49 @@ class ObjectDetection():
 	Generates usable data about the location of objects within the frame.
 	Colors id's are as follows: red, green, blue, and yellow.
 	'''
-	def __init__(self, camera):
-		# Baseline operating parameters
-		self.image = Image(camera, 320)
-		self.box = None
-		self.box_center = None
+	def __init__(self, camera, calibration, image):
+		self.image = image
 
-	def select_largest_object(self, color):
+		self.boxes = {}
+		self.box_centers = {}
+
+	def select_largest_object(self, colors):
 		'''
 		Selects the largest object in a frame by finding all contours and
 		selecting the largest one.
 		'''
-		largest_area = None
-		largest_contour_index = None
-		self.image.extract_color(color)
+		for color in colors:
+			largest_area = None
+			largest_contour = None
 
-		# Generates a gray frame for the passed color id
-	 	working_frame = cv2.cvtColor(self.image.frame, cv2.COLOR_BGR2GRAY)
+			# Reuse the reduced color frame for all colors to reduce processing cost
+			self.image.extract_color(color)
+			self.image.hold_redux_frame = True
 
-		# Finds all contours within the frame
-		ret, thresh = cv2.threshold(working_frame, 50, 255, 0)
-		contours, hierarchy = cv2.findContours(thresh, 1, 2)
+			# Generates a gray frame for the passed color id
+	 		working_frame = cv2.cvtColor(self.image.frame, cv2.COLOR_BGR2GRAY)
 
-		# Selects the largest contour in the frame
-		for i in range(len(contours)):
-			area = cv2.contourArea(contours[i])
-			if (area > largest_area):
-				largest_area = area
-				largest_contour_index = i
+			# Finds all contours within the frame
+			ret, thresh = cv2.threshold(working_frame, 50, 255, 0)
+			contours, hierarchy = cv2.findContours(thresh, 1, 2)
 
-		if (largest_contour_index > -1):
-			rect = cv2.minAreaRect(contours[largest_contour_index])
-			self.box = cv2.cv.BoxPoints(rect)
-		else:
-			self.box = None
+			# Selects the largest contour in the frame
+			for contour in contours:
+				area = cv2.contourArea(contour)
+				if (area > largest_area):
+					largest_area = area
+					largest_contour = contour
 
-	def average_box(self, function, color, amount):
+			if (largest_contour != None):
+				rect = cv2.minAreaRect(largest_contour)
+				self.boxes[color] = cv2.cv.BoxPoints(rect)
+			else:
+				self.boxes[color] = None
+
+		# Release the reduced color frame that is being held
+		self.image.hold_redux_frame = False
+
+	def average_box(self, function, colors, amount):
 		'''
 		Defines a new set of box points that is the result of averaging
 		'amount' number of box points from the chosen method (this method
@@ -149,35 +179,41 @@ class ObjectDetection():
 		simply setting self.box to None.
 		'''
 		max_retry = amount / 4
-		retry = 1
-		box_avg = [[0, 0], [0, 0], [0, 0], [0, 0]]
+		retry = {}
+		box_avg = {}
 
-		for i in range(amount):
+		for color in colors:
+			retry[color] = 1
+			box_avg[color] = [[0, 0], [0, 0], [0, 0], [0, 0]]
+
+		for run in range(amount):
 			# Run the passed function (should be one from this class object)
-			function(color)
+			function(colors)
 
-			# Add up all of the box points' (x, y) values
-			if (self.box):
-				for j in range(4):
-					for k in range(2):
-						box_avg[j][k] = box_avg[j][k] + self.box[j][k]
+			for color in colors:
+				# Add up all of the box points' (x, y) values
+				if (self.boxes[color]):
+					for point in range(4):
+						for value in range(2):
+							box_avg[color][point][value] = box_avg[color][point][value] + self.boxes[color][point][value]
 
-			# Aborts the averaging if a set number of measurements return None
-			elif (retry == max_retry):
-				self.box = None
-				break
+				# Aborts the averaging if a set number of measurements return None
+				elif (retry[color] == max_retry):
+					self.boxes[color] = None
+					break
 
-			# Attempts to retry failed measurements
-			else:
-				retry += 1
-				i -= 1
+				# Attempts to retry failed measurements
+				else:
+					retry[color] += 1
+					run -= 1
 
-		# Divides the sums of the points' (x, y) values by the amount of values
-		if (self.box):
-			for j in range(4):
-				for k in range(2):
-					box_avg[j][k] = (box_avg[j][k] / amount)
-			self.box = box_avg
+		for color in colors:
+			# Divides the sums of the points' (x, y) values by the amount of values
+			if (self.boxes[color]):
+				for point in range(4):
+					for value in range(2):
+						box_avg[color][point][value] = box_avg[color][point][value] / amount
+				self.boxes[color] = box_avg[color]
 
 	def get_box_center(self):
 		'''
@@ -185,90 +221,160 @@ class ObjectDetection():
 		the (x, y) points of the corners. If there is no box, it sets self.box
 		to None.
 		'''
-		box_avg = [0, 0]
+		box_avg = {}
 
-		if (self.box):
-			for j in range(4):
-				for k in range(2):
-					box_avg[k] = box_avg[k] + self.box[j][k]
-			for k in range(2):
-				box_avg[k] = (int)(box_avg[k] / 4)
-			self.box_center = tuple(box_avg)
-		else:
-			self.box_center = None
+		for color in self.boxes.keys():
+			box_avg[color] = [0, 0]
+
+			if (self.boxes[color]):
+				for point in range(4):
+					for value in range(2):
+						box_avg[color][value] = box_avg[color][value] + self.boxes[color][point][value]
+				for value in range(2):
+					box_avg[color][value] = (int)(box_avg[color][value] / len(self.boxes[color]))
+				self.box_centers[color] = tuple(box_avg[color])
+			else:
+				self.box_centers[color] = None
 
 
-class ColorBox():
+class TrainBoxes():
 	'''
-	Used to perform the locations and order of the color drop boxes at the
-	beginning of a run. Calculates a 3D point on the map for each box as well
-	as attempting to double check the distance to it.
+	Used to locate and determine the order of the colored train boxes at
+	the beginning of a run. Makes use of existing waypoints in order to
+	infer the location of any box that was not properly detected.
 	'''
 	def __init__(self, camera):
-			self.detection = ObjectDetection(camera)
-			self.point = PointIntersector()
+		self.camera = camera
+		self.calibration = Calibration()
+		self.image = Image(camera, calibration, 320)
+		self.detection = ObjectDetection(self.camera, self.calibration)
+		self.waypoints = load_waypoints()
+		self.intersect = PointIntersector()
 
-	def get_map_location(self, color):
+	def get_box_location(self, averaging):
 		'''
-		Uses point_intersector to determine the position of a box on the
-		robot's map relative to it's position in the camera's plane.
+		Determines the locations of the boxes in Shia's coordinate system based
+		on their location within the given camera frame.
 		'''
-		pass
+		self.box_locations = {}
+		self.not_detected = []
 
-	def verify_distance(self, color):
-		'''
-		Calculates the distance to a box based on it's size in the frame. If it
-		is not within an acceptable range of the value obtained from
-		point_intersector, the two values are averaged.
-		'''
-		pass
+		self.detection.average_box(self.detection.select_largest_object, self.colors , averaging)
+		self.detection.get_box_center()
+		for color in self.colors:
 
-	def set_waypoint(self, color):
-		'''
-		Creates new waypoints for each of the boxes by color based on the
-		position values obtained by the object.
-		'''
-		pass
+			# Uses intersect_point to determine the 3D location of each detected box center
+			if (self.detection.box_centers[color]):
+				self.box_locations[color] = self.intersect.intersect_point(self.camera, self.image.scale_point(self.detection.box_centers[color]))
 
-	def repeat_for_colors(self, function):
+			# If detection was unsuccessful for a color, adds it to not_detected and prints an error
+			else:
+				self.not_detected.append(color)
+				print("WARNING: color_detection could not detect the center of the %s box" % (color))
+
+	def infer_box_location(self):
 		'''
-		Repeats the specified function for each of the colors set in the
-		initialization of the class object.
+		Determines the location of a single box that was not properly detected
+		using the positions of the other boxes. Can only be used once all of
+		the other boxes have been assigned colors!
 		'''
-		pass
+		if (len(self.not_detected) == 1):
+			for location in self.locations:
+				if (not location in self.matched_boxes.keys()):
+					self.matched_boxes[location] = self.not_detected.pop()
+
+	def waypoint_approximation(self):
+		'''
+		Determines the waypoints that best match the 3D points obtained
+		through get_box_locations.
+		'''
+		for location in self.locations:
+
+			# Ensures that two colors are not assigned to a box
+			if (not location in self.matched_boxes.keys()):
+
+				# An initialization value larger than any possible distance on the field
+				smallest_distance = 42069133742
+				closest_color = None
+
+				# Assigns the color closest to the location to that location
+				for color in self.colors:
+					distance = abs(self.box_locations[color][1] - self.waypoints[color][1])
+					if (distance < smallest_distance):
+						smallest_distance = distance
+						closest_color = color
+				self.matched_boxes[location] = color
+
+			# Catch all for a situation in which no color is closest to the location
+			else:
+				self.matched_boxes[location] = None
+
+		# Removes any colors that were assigned to more than one location
+		cleaned_matching = {}
+		for key, value in self.matched_boxes.items():
+			if value not in cleaned_matching.values():
+				cleaned_matching[key] = value
+		self.matched_boxes = cleaned_matching
+
+	def get_box_order(self, colors, locations, averaging):
+		'''
+		Returns the formated order of the boxes. They will be in a dictionary
+		with the keys being waypoint names and the values being colors.
+		'''
+		# The colors of boxes to locate
+		self.colors = colors
+
+		# The waypoints of the boxes
+		self.locations = locations
+
+		# Amount of frames to average - increases reliability, recommended minimum of 8
+		self.averaging = averaging
+
+		# The table to be returned keys are waypoint names and values are colors
+		self.matched_boxes = {}
+
+		self.get_box_location(averaging)
+		self.waypoint_approximation()
+		self.infer_box_location()
+
+		# Sets all of the boxes that were not detected to None
+		for location in self.locations:
+			if (not location in self.matched_boxes.keys()):
+				self.matched_boxes[location] = None
+
+		return(self.matched_boxes)
 
 
-if __name__ == "__main__":
+def debug_selection(camera, colors, averaging):
 	'''
-	Serves as a testing platform for the script, displaying the various stages
-	of each processed frame.
+	Used to debug the selection of objects based on hue and relative size in
+	the frame. Displays real-time selection output using cv2 for feedback.
 	'''
-	rospy.init_node("color_detection")
-	camera = Camera(1)
 	camera.activate()
-	image = Image(camera, 320)
-	detection = ObjectDetection(camera)
 	calibration = Calibration()
+	image = Image(camera, calibration, 320)
+	detection = ObjectDetection(camera, calibration)
 
 	while (True):
-		# The actual processing of the image
-		detection.average_box(detection.select_largest_object, calibration.color["blue"], 8)
+		# Finds the center of the box around the largest object
+		detection.average_box(detection.select_largest_object, colors, averaging)
 		detection.get_box_center()
 
 		# Pulling values used to render the debugging image
 		image.resize()
 		frame = image.frame
-		box = detection.box
+		box = detection.boxes
 		box_center = detection.box_center
 
-		# Draw a box around the selected object in the captured frame
-		if (box):
-			box = np.int0(box)
-			cv2.drawContours(frame, [box], 0, (0, 0, 255), 2)
+		for color in colors:
+			# Draw a box around the selected object in the captured frame
+			if (box[color]):
+				box_to_draw = np.int0(box[color])
+				cv2.drawContours(frame, [box_to_draw], 0, (0, 0, 255), 2)
 
-		# Draw the center point of the box in the captured frame
-		if (box_center):
-			cv2.circle(frame, box_center, 3, (0, 255, 0))
+			# Draw the center point of the box in the captured frame
+			if (box_center[color]):
+				cv2.circle(frame, box_center[color], 3, (0, 255, 0))
 
 		# Display the frame for debugging
 		cv2.imshow('Debugging', frame)
@@ -277,3 +383,11 @@ if __name__ == "__main__":
 			break
 
 	camera.deactivate()
+
+if __name__ == "__main__":
+	rospy.init_node("color_dection")
+	camera = Camera(1)
+	# debug_selection(camera, ["blue"], 2)
+	train = TrainBoxes(camera)
+	train.get_box_order(["red", "green", "blue", "yellow"], ["box_1", "box_2", "box_3", "box_4"], 8)
+	exit()
