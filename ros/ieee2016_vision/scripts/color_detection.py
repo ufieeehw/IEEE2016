@@ -1,6 +1,8 @@
 #!/usr/bin/python2
 
 import json
+import os
+import rospkg
 
 from camera_manager import Camera
 import cv2
@@ -17,7 +19,10 @@ class Calibration():
 	script.
 	'''
 	def __init__(self):
+		rospack = rospkg.RosPack()
+		self.calibration_file = os.path.join(rospack.get_path('ieee2016_vision'), 'scripts/color_calibrations.json')
 		self.colors = {}
+
 		self.load_calibration()
 
 	def save_calibration(self):
@@ -259,11 +264,14 @@ class TrainBoxes():
 		self.box_locations = {}
 		self.not_detected = []
 
+		self.camera.activate()
 		self.detection.average_box(self.detection.select_largest_object, self.colors , averaging)
 		self.detection.get_box_center()
+		self.camera.deactivate()
 		for color in self.colors:
 
-			# Uses intersect_point to determine the 3D location of each detected box center
+			# Uses intersect_point 		print self.calibration_file
+to determine the 3D location of each detected box center
 			if (self.detection.box_centers[color]):
 				self.box_locations[color] = self.intersect.intersect_point(self.camera, self.image.scale_point(self.detection.box_centers[color]))
 
@@ -353,7 +361,7 @@ def debug_selection(camera, colors, averaging):
 	camera.activate()
 	calibration = Calibration()
 	image = Image(camera, calibration, 320)
-	detection = ObjectDetection(camera, calibration)
+	detection = ObjectDetection(camera, calibration, image)
 
 	while (True):
 		# Finds the center of the box around the largest object
@@ -364,7 +372,7 @@ def debug_selection(camera, colors, averaging):
 		image.resize()
 		frame = image.frame
 		box = detection.boxes
-		box_center = detection.box_center
+		box_centers = detection.box_centers
 
 		for color in colors:
 			# Draw a box around the selected object in the captured frame
@@ -373,8 +381,8 @@ def debug_selection(camera, colors, averaging):
 				cv2.drawContours(frame, [box_to_draw], 0, (0, 0, 255), 2)
 
 			# Draw the center point of the box in the captured frame
-			if (box_center[color]):
-				cv2.circle(frame, box_center[color], 3, (0, 255, 0))
+			if (box_centers[color]):
+				cv2.circle(frame, box_centers[color], 3, (0, 255, 0))
 
 		# Display the frame for debugging
 		cv2.imshow('Debugging', frame)
@@ -387,7 +395,7 @@ def debug_selection(camera, colors, averaging):
 if __name__ == "__main__":
 	rospy.init_node("color_dection")
 	camera = Camera(1)
-	# debug_selection(camera, ["blue"], 2)
-	train = TrainBoxes(camera)
-	train.get_box_order(["red", "green", "blue", "yellow"], ["box_1", "box_2", "box_3", "box_4"], 8)
+	debug_selection(camera, ["green"], 8)
+	# train = TrainBoxes(camera)
+	# train.get_box_order(["red", "green", "blue", "yellow"], ["box_1", "box_2", "box_3", "box_4"], 8)
 	exit()
