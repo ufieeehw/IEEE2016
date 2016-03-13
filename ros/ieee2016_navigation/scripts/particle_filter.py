@@ -1,12 +1,13 @@
 #!/usr/bin/python
 import rospy
-from std_msgs.msg import Header, Int8
+from std_msgs.msg import Header, Float32
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped, Vector3
 from sensor_msgs.msg import LaserScan
 
 from ieee2016_msgs.srv import ResetOdom
 from ieee2016_msgs.srv import LidarSelector
+from ieee2016_msgs.msg import StartNavigation
 
 import tf
 
@@ -15,29 +16,59 @@ import math
 import time
 import random
 import os
+import struct
 
 import pyopencl as cl
 os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
+class LidarCorrector():
+    '''
+    Stores some information sent to the GPU to do some correction for bad data.
+    
+    We could potentially modify and use this in other places, but for right now it only is used for sending
+    parameters to the GPU.
+
+    Pass in the parameters of the fused scan, then add each lidar - indicating which direction it's pointing.
+    '''
+    def __init__(self):
+        self.lidar_list = []
+
+    def add_lidar(self, calibration_coeff, min_distance):
+        lidar = [float(calibration_coeff[0]),float(calibration_coeff[1]),
+                 float(calibration_coeff[2]),float(calibration_coeff[3]),float(min_distance)]
+
+        self.lidar_list.append(lidar)
+    
+    def pack(self):
+        packed = []
+        #s = struct.Struct('ii ffff f xxxx')
+        s = struct.Struct('ffff f xxxxxxxxxxxx')
+        for lidar in self.lidar_list:
+            packed.append(s.pack(*lidar))
+            print packed
+        packed = b''.join(packed)
+        #print binascii.hexlify(packed)
+        #print len(packed)
+        return packed
+
+
 class GPUAccMap():
-    def __init__(self, map_orientation):
-        # Each line segment in the form: ax1, ay1, ax2, ay2, bx1, by1, bx2, by2, ...
-        if map_orientation == 1:
-            self.map = np.array([])            
-        elif map_orientation == 2:
-            self.map = np.array([0, 0, 0, .784, 0, .784, .015, .784, .015, .784, .015, 1.158, 0, 1.158, .015, 1.158, 0, 1.158, 0, 2.153, .464, .784, .479, .784, .479, .784, .479, 1.158, .464, .784, .464, 1.158, .464, 1.158, .479, 1.158, 0, 0, .549, 0, .549, 0, .549, .317, .549, .317, .569, .317, .569, 0, .569, .317, .569, 0, .809, 0, .809, 0, .809, .317, .809, .317, .829, .317, .829, 0, .829, .317, .829, 0, 2.458, 0, 0, 2.153, 2.458, 2.153, 2.458, 0, 2.458, .907, 2.161, .907, 2.458, .907, 2.161, .907, 2.161, 1.178, 2.161, 1.178, 2.458, 1.178, 2.458, 1.178, 2.458, 1.181, 2.161, 1.181, 2.458, 1.181, 2.161, 1.181, 2.161, 1.452, 2.161, 1.452, 2.458, 1.452, 2.458, 1.452, 2.458, 1.482, 2.161, 1.482, 2.458, 1.482, 2.161, 1.482, 2.161, 1.753, 2.161, 1.753, 2.458, 1.753, 2.458, 1.753, 2.458, 1.783, 2.161, 1.783, 2.458, 1.783, 2.161, 1.783, 2.161, 2.054, 2.161, 2.054, 2.458, 2.054, 2.458, 2.054, 2.458, 2.153]).astype(np.float32)            
+    def __init__(self,map_version):
+        # Each line segment in the form: ax1, ay1, ax2, ay2, color_code, bx1, by1, bx2, by2, color_code, ...
+        # Color code: 1 for dark (black), 0 for anything else
+        self.map = np.array(map_version).astype(np.float32)
 
         # LaserScan parameters
         self.angle_increment = .007 #rads/index
         self.min_angle = -3.14159274101 #rads
         self.max_angle = 3.14159274101
         self.max_range = 5.0 #m
-        self.min_range = 0.0002
+        self.min_range = 0.1
 
         self.index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
 
         # Set up pyopencl
-        self.ctx = cl.Context([cl.get_platforms()[0].get_devices()[0]])
+        self.ctx = cl.Context([cl.get_platforms()[1].get_devices()[0]])
         self.queue = cl.CommandQueue(self.ctx)
         self.mf = cl.mem_flags
 
@@ -48,32 +79,59 @@ class GPUAccMap():
 
         # Only ranges at these indicies will be checked
         # Pick ranges around where the LIDAR scans actually are (-90,0,90) degrees
-        self.deg_index = int(math.radians(30)/self.angle_increment)
+        fov = math.radians(40)
+        self.deg_index = int(fov/self.angle_increment)
         self.indicies_to_compare = np.array([], np.int32)
+        self.angle_to_lidar = np.array([], np.uint32)
         self.step = 1
 
+        # Define the lidar Corrector, and init the lidars - order is important.
+        # The addition to the min_range is to account for the fact the lidars are offset from base_link
+        lidar = LidarCorrector()
+        lidar.add_lidar([.052133885,.0298194301,-.0783299411,.0249704984],self.min_range+.1)         # Back
+        lidar.add_lidar([-.0102461432,.0205318341,.0208797008,-.00183668788],self.min_range+.125)    # Left
+        lidar.add_lidar([.0451106369,-.1020802842,.1752494951,-.0700421761],self.min_range+.125)     # Front
+        lidar.add_lidar([.0118628147,.1439880093,-.1344849981,.0298791165],self.min_range+.1)        # Right
+        packed_lidar = lidar.pack()
+
         # The serivce to determine which LIDAR to navigate with
-        rospy.Service('/select_lidar', LidarSelector, self.change_indicies_to_compare)
+        # We also add the lidar placement numbers here. 0 is the rear lidar then go clockwise around so 3 is the right lidar
+        #s = rospy.Service('/robot/navigation/select_lidar', LidarSelector, self.change_indicies_to_compare)
+        # Right ----------------
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(self.index_count/4 - self.deg_index, self.index_count/4 + self.deg_index, step=self.step))
+        self.angle_to_lidar = np.append(self.angle_to_lidar, np.full(self.deg_index*2/self.step,3))
+        # Front ----------------
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(self.index_count/2 - self.deg_index, self.index_count/2 + self.deg_index, step=self.step))
+        self.angle_to_lidar = np.append(self.angle_to_lidar, np.full(self.deg_index*2/self.step,2))
+        # Left -----------------
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step))
+        self.angle_to_lidar = np.append(self.angle_to_lidar, np.full(self.deg_index*2/self.step,1))
+        # Back ----------------
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(0, self.deg_index, step=self.step))
         self.indicies_to_compare = np.append( self.indicies_to_compare,            
             np.arange(self.index_count - self.deg_index, self.index_count, step=self.step))
+        self.angle_to_lidar = np.append(self.angle_to_lidar, np.full(self.deg_index*2/self.step,0))
 
         # To generate weights, we need those indices to be pre-converted to radian angle measures 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
 
-        self.angles_to_compare_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.angles_to_compare)
+        # Set up opencl buffers (where to put data to transfer to the gpu and back)
         self.map_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.map)
+        self.lidar_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=packed_lidar)
+        self.angle_to_lidar_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.angle_to_lidar.astype(np.int32))
+        self.angles_to_compare_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.angles_to_compare)
 
+        print "Map Init complete."
     def generate_weights(self, particles, laser_scan):
         # Particles format: ax, ay, aheading, bx, by, bheading, ...
         
+        temp = np.zeros(self.angles_to_compare.size*particles.size/3).astype(np.float32)
+        temp_cl = cl.Buffer(self.ctx, self.mf.WRITE_ONLY, temp.nbytes)
+
         weights = np.zeros(particles.size/3).astype(np.float32)
         weights_cl = cl.Buffer(self.ctx, self.mf.WRITE_ONLY, weights.nbytes)
 
@@ -84,12 +142,20 @@ class GPUAccMap():
         # Actually send to graphics processor
         self.prg.trace(self.queue, (particles.size/3,), None,  particles_cl, 
                                                                 self.map_cl, 
-                                                 np.uint32(self.map.size/4), 
+                                                              self.lidar_cl,
+                                                     self.angle_to_lidar_cl,
+                                                 np.uint32(self.map.size/5), 
                                                   self.angles_to_compare_cl, 
                                      np.uint32(self.angles_to_compare.size),
                                                                laserscan_cl, 
                                                                  weights_cl).wait()
+
+
         cl.enqueue_copy(self.queue, weights, weights_cl).wait()
+        #cl.enqueue_copy(self.queue, temp, temp_cl).wait()
+
+        #print np.where(temp > .5)
+        
         return weights
 
     def change_indicies_to_compare(self,srv):
@@ -100,22 +166,27 @@ class GPUAccMap():
         self.indicies_to_compare = np.array([])
         if "right" in lidars:
             self.indicies_to_compare = np.append( self.indicies_to_compare,            
-                np.arange(self.index_count/4 - self.deg_index, self.index_count/4 + self.deg_index, step=self.step) ).astype(np.int)
+                np.arange(self.index_count/4 - self.deg_index, self.index_count/4 + self.deg_index, step=self.step) )
+            self.angle_to_lidar = np.append(self.angle_to_lidar, np.full(self.deg_index*2/self.step,3))
         if "front" in lidars:
             self.indicies_to_compare = np.append( self.indicies_to_compare,            
-                np.arange(self.index_count/2 - self.deg_index, self.index_count/2 + self.deg_index, step=self.step) ).astype(np.int)
+                np.arange(self.index_count/2 - self.deg_index, self.index_count/2 + self.deg_index, step=self.step) )
+            self.angle_to_lidar = np.append(self.angle_to_lidar, np.full(self.deg_index*2/self.step,2))
         if "left" in lidars:
             self.indicies_to_compare = np.append( self.indicies_to_compare,            
-                np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step) ).astype(np.int)
+                np.arange(3*self.index_count/4 - self.deg_index, 3*self.index_count/4 + self.deg_index, step=self.step) )
+            self.angle_to_lidar = np.append(self.angle_to_lidar, np.full(self.deg_index*2/self.step,1))
         if "back" in lidars:
             self.indicies_to_compare = np.append( self.indicies_to_compare,            
-                np.arange(0, self.deg_index, step=self.step))
+                np.arange(0, self.deg_index, step=self.step)).astype(np.int)
             self.indicies_to_compare = np.append( self.indicies_to_compare,            
                 np.arange(self.index_count - self.deg_index, self.index_count, step=self.step))
+            self.angle_to_lidar = np.append(self.angle_to_lidar, np.full(self.deg_index*2/self.step,0))
             
         # Update other necessary parameters 
         self.angles_to_compare = (self.indicies_to_compare*self.angle_increment + self.min_angle).astype(np.float32)
         self.angles_to_compare_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.angles_to_compare)
+        self.angle_to_lidar_cl = cl.Buffer(self.ctx, self.mf.READ_ONLY | self.mf.COPY_HOST_PTR, hostbuf=self.angle_to_lidar.astype(np.int32))
         print "Change",self.indicies_to_compare
         return True
 
@@ -138,7 +209,7 @@ class GPUAccFilter():
 
         self.m = m
         self.INIT_PARTICLES = 2048
-        self.MAX_PARTICLES = 2048
+        self.MAX_PARTICLES = 5096
 
         # We start at our esitmated starting position
         self.pose = np.array([center[0],center[1],sum(heading_range)/2.0], np.float32)
@@ -157,6 +228,7 @@ class GPUAccFilter():
         self.laser_scan = np.array([])
 
         # Begin running the filter
+        print "Running Filter."
         self.run_filter()
 
     def got_pose_estimate(self, msg):
@@ -189,59 +261,73 @@ class GPUAccFilter():
         self.particles = np.vstack((self.particles,np.vstack((x,y,heading)).T))
         self.publish_particle_array()
 
+    def gen_guass_particles(self, number_of_particles, center, sigma):
+        new_particles = np.random.normal(center,sigma,(number_of_particles,3))
+        # new_particles = np.vstack((new_particles,np.random.normal(center,sigma[1],(number_of_particles,3))))
+        # new_particles = np.vstack((new_particles,np.random.normal(center,sigma[2],(number_of_particles,3))))
+        self.publish_particle_array()
+        self.particles = new_particles
+
     def run_filter(self):
         '''
         This function deals with actually running the filter.
         '''
         print "running"
-        r = rospy.Rate(20) #hz
+        r = rospy.Rate(15) #hz
         start_time = time.time()
         while not rospy.is_shutdown():
             r.sleep()
 
             while len(self.laser_scan) == 0 and not rospy.is_shutdown():
                 print "Waiting for scan."
+                time.sleep(.5)
                 continue
 
             self.particles += self.pose_update
             
             # Reset the pose update so that the next run will contain the pose update from this point
             self.pose_update = np.array([0,0,0], np.float32)
+            
+            #try:
+            # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
+            weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
 
-            try:
-                # weights holds particles weights. The more accurate a measurement was, the close to 1 it will be.
-                weights_raw = self.m.generate_weights(self.particles,self.laser_scan)
+            if np.mean(weights_raw) == 0:
+                break
 
-                # Remove low weights from particle and weights list
-                weight_percentile = 92 #percent
-                weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
-                weights = weights_raw[weights_indicies_to_keep]
-                self.particles = self.particles[weights_indicies_to_keep]
+            # # Remove low weights from particle and weights list
+            weight_percentile = 99 #percent
+            weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
+            weights = np.repeat(weights_raw,3).reshape(len(weights_raw),3)
+            #weighted_particles = self.particles*weights/np.mean(weights_raw)
+            self.particles = self.particles[weights_indicies_to_keep]
 
-                #Just for debugging ==================================
-                print "WEIGHT PERCENTILE:", weight_percentile
-                print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
-                print "PARTICLE COUNT:", len(self.particles),"/",self.MAX_PARTICLES
+            #Just for debugging ==================================
+            # print "WEIGHT PERCENTILE:", weight_percentile
+            # print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
+            print "PARTICLE COUNT:", len(self.particles),"/",self.MAX_PARTICLES
 
-                # Calculate pose esitmation before generating new particles
-                new_x = np.mean(self.particles.T[0])
-                new_y = np.mean(self.particles.T[1])
-                new_head = np.mean(self.particles.T[2])
+            sigma = np.std(self.particles,axis=0) + np.array([.02,.02,.01])
 
-                # Update Pose
-                self.publish_pose([new_x,new_y,new_head])
+            # Calculate pose esitmation before generating new particles
+            new_pose = np.mean(self.particles, axis=0)
 
-                translation_vairance = .3  #m  #.1
-                rotational_vairance = .6 #rads #.5
+            # Update Pose
+            self.publish_pose(new_pose)
 
-                self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
-                                    self.pose_est[:2],
-                                    translation_vairance,
-                                    (self.pose_est[2]-rotational_vairance,self.pose_est[2]+rotational_vairance) )
-            except:
-                print "Error was found and excepted."
-            print 
-            running = False
+            translation_vairance = .3  #m  #.1
+            rotational_vairance = .6 #rads #.5
+            #self.gen_guass_particles(self.MAX_PARTICLES,new_pose,sigma)
+            self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
+                                new_pose[:2],
+                                translation_vairance,
+                                (new_pose[2]-rotational_vairance,new_pose[2]+rotational_vairance) )
+
+            #except Exception,e:
+            #     print "Error was found and excepted.",str(e)
+            #     break
+            # print 
+        running = False
 
     def publish_pose(self,particle_avg):
         # Update pose and TF
@@ -357,7 +443,7 @@ class GPUAccFilter():
 
         self.test_points_pub.publish(PoseArray(
             header=Header(
-                    stamp=rospy.Time.now(),
+                    stamp=rospy.Time.now(), 
                     frame_id="map",
                 ),
             poses=pose_arr,
@@ -366,20 +452,13 @@ class GPUAccFilter():
         #print "PUBLISHED PARTICLES"
 
 def start_navigation(msg):
-    m = GPUAccMap(msg.data)
-    if msg.data == 1:
-        print "> Starting navigation with map configuration:",msg.data
-        f = GPUAccFilter((.45,1.54), 1, (1.5707-.5,1.5707+.5), m)
-    elif msg.data == 2:
-        print "> Starting navigation with map configuration:",msg.data
-        f = GPUAccFilter((.2,.2), .4, (1.5707-.5,1.5707+.5), m)
+    m = GPUAccMap(msg.map)
+    f = GPUAccFilter((.5,2), .5, (.5,-.5), m)
     
 
 # Set up start command subscriber and wait until we get that signal
 rospy.init_node('particle_filter')
-rospy.Subscriber("/robot/start_navigation", Int8, start_navigation)
+rospy.Subscriber("/robot/start_navigation", StartNavigation, start_navigation)
 print "> Waiting for navigation start command..."
+
 rospy.spin()
-
-
-
