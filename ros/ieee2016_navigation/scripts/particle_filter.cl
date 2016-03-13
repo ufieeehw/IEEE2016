@@ -1,21 +1,21 @@
 typedef struct lidar
-    {   
-        float4  coeff;
-        float   min_distance;
+{   
+    float4  coeff;
+    float   min_distance;
 
-    } lidar;
+} lidar;
 
 float correct_distance(float dist, int offset, __global const lidar *l)
-    {
-        float error;
+{
+    float error;
 
-        error = (l+offset)->coeff.s0 + 
-                (l+offset)->coeff.s1 * dist +
-                (l+offset)->coeff.s2 * pow(dist,2)+
-                (l+offset)->coeff.s3 * pow(dist,3);
+    error = (l+offset)->coeff.s0 + 
+            (l+offset)->coeff.s1 * dist +
+            (l+offset)->coeff.s2 * pow(dist,2)+
+            (l+offset)->coeff.s3 * pow(dist,3);
 
-        return dist - error;
-    }
+    return dist - error;
+}
 
 __kernel void trace( __global const float *p,  
                      __global const float *walls,
@@ -26,7 +26,7 @@ __kernel void trace( __global const float *p,
                               const uint  angle_cnt,
                      __global const float *misfit_actual,
                      __global       float *weights) 
-    {
+{
 
     int i = get_global_id(0);
 
@@ -67,7 +67,6 @@ __kernel void trace( __global const float *p,
 
                 if(d >= 0 && t2 >= 0 && t2 <= 1){
                     // We intersected with a wall.
-                    
                     if (d < (l+angle_to_lidar[a])->min_distance){
                         // If we are too close to a wall, we need to move on to the next wall
                         float min_dist = INFINITY;
@@ -77,7 +76,6 @@ __kernel void trace( __global const float *p,
                     if(walls[5*w+4] == 1){
                         d = correct_distance(d, angle_to_lidar[a], l);
                     }
-
                     if(d < min_dist){
                         min_dist = d;
                     }
@@ -96,5 +94,4 @@ __kernel void trace( __global const float *p,
     }else{
         weights[i] = error/errors_measured;    
     }
-
 }
