@@ -51,6 +51,7 @@ add_message_files(
   FILES
   Mecanum.msg
   BlockStamped.msg
+  StartNavigation.msg
 )
 
 add_service_files(
@@ -62,6 +63,7 @@ add_service_files(
    ArmWaypoint.srv
    CameraSet.srv
    LidarSelector.srv
+   RequestMap.srv
 )
 
 ## Generate actions in the 'action' folder

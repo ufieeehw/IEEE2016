@@ -4,7 +4,9 @@ import roslib
 from std_msgs.msg import Bool, Int8, Header
 from sensor_msgs.msg import PointCloud, ChannelFloat32
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, Point32, PointStamped
-from ieee2016_msgs.srv import NavWaypoint, ArmWaypoint
+from ieee2016_msgs.srv import NavWaypoint, ArmWaypoint, RequestMap
+from ieee2016_msgs.msg import StartNavigation
+from rospy.numpy_msg import numpy_msg
 import tf
 
 roslib.load_manifest('ieee2016_vision')
@@ -503,9 +505,7 @@ class ShiaStateMachine():
                     4. Possibly go back to state 5.
                 '''
                 print "=== STATE 7 ==="
-                
-                
-                    
+       
 
 
             else:
@@ -524,7 +524,9 @@ class ros_manager():
         # ROS inits
         self.nav_waypoint_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=1)
         self.state_pub = rospy.Publisher("/robot/current_state", Int8, queue_size=1)
-        self.nav_start_pub = rospy.Publisher("/robot/start_navigation", Int8, queue_size=1)
+        self.nav_start_pub = rospy.Publisher("/robot/start_navigation", StartNavigation, queue_size=1)
+
+        request_map = rospy.Service('/robot/request_map', RequestMap, self.get_map)
 
         self.nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
         self.arm_waypoint = rospy.ServiceProxy('/robot/arm_waypoint', ArmWaypoint)
@@ -542,18 +544,27 @@ class ros_manager():
 
 
     def recieve_start_command(self,msg):
-        if msg.data and not self.state_machine.running and self.map_version_set:
-            print "> State Machine Starting..."
+        if msg.data and not self.state_machine.running:
+            if self.state_machine.map_version:
+                print "> State Machine Starting..."
+                nav_start = StartNavigation()
+                nav_start.map = self.get_map(None)[1]
 
-            # 1 is the map configuration where we start on the right, 2 is on the left.
-            if self.state_machine.map_version == 1:
-                self.pose = np.array([0,0,0])
-                self.nav_start_pub.publish(Int8(data=1))
-                self.state_machine.begin_1()
-            elif self.state_machine.map_version == 2:
-                self.pose = np.array([.2,.2,1.57])
-                self.nav_start_pub.publish(Int8(data=2))
-                self.state_machine.begin_2()
+                # 1 is the map configuration where we start on the right, 2 is on the left.
+                if self.state_machine.map_version == 1:
+                    self.pose = np.array([0,0,0])
+                    nav_start.init_pose = self.pose
+                    self.nav_start_pub.publish(nav_start)
+
+                    #self.state_machine.begin_1()
+                elif self.state_machine.map_version == 2:
+                    self.pose = np.array([.2,.2,1.57])
+                    nav_start.init_pose = self.pose
+                    self.nav_start_pub.publish(nav_start)
+
+                    #self.state_machine.begin_2()
+            else:
+                print "Error, no map version set."
 
     def determine_map_version(self,msg):
         self.state_machine.map_version = msg.data
@@ -616,6 +627,81 @@ class ros_manager():
 
     def publish_current_state(self,state):
         self.state_pub.publish(state)
+
+    def get_map(self,srv):
+        # map_2 = np.array([0, 0, 0, 2.174, # Left Wall
+        #                      0, 0, 2.438, 0, # Back Wall
+        #                      2.438, 0, 2.438, 2.174, # Right Wall
+        #                      0, 2.174, 2.438, 2.174, # Front Wall
+        #                      # Tunnel
+        #                      0, .76, .017, .76, # Rear wall of left side of tunnel 
+        #                      .017, .76, .017, 1.14, # Inside face of left side of tunnel
+        #                      0, 1.14, .017, 1.14, # Front wall of left side of tunnel
+        #                      0, 1.14, 0, 2.17, # Left map wall up to Block area 
+        #                      .440, .76, .456, .76, # Rear wall of right side of tunnel
+        #                      .456, .76, .456, 1.14, # Ouside face of right side of tunnel
+        #                      .440, .76, .440, 1.14, # Inside face of right side of tunnel
+        #                      .440, 1.14, .456, 1.14, # Front wall of right side of tunnel
+        #                      # Truck
+        #                      .508, 0, .508, .303, # Outside left side of truck wall
+        #                      .520, .303, .528, .303, # Front side of left truck wall
+        #                      .528, .303, .528, 0, # Inside left truck wall
+        #                      .710, 0, .710, .303, # Inside right truck wall
+        #                      .710, .303, .730, .303, # Fron side of right truck wall 
+        #                      .730, .303, .730, 0, # Outside right side of truck
+        #                      # Train
+        #                      2.158, .88, 2.438, .88, # Back side of box_4
+        #                      2.158, .88, 2.158, 1.16, # Left side of box_4
+        #                      2.158, 1.16, 2.438, 1.16, # Front side of box_4
+        #                      2.158, 1.185, 2.438, 1.185, # Back side of box_3
+        #                      2.158, 1.185, 2.158, 1.465, # Left side of box_3
+        #                      2.158, 1.465, 2.438, 1.465, # Front side of box_3
+        #                      2.158, 1.49, 2.438, 1.49, # Back side of box_2
+        #                      2.158, 1.49, 2.158, 1.77, # Left side of box_2
+        #                      2.158, 1.77, 2.438, 1.77, # Front side of box_2
+        #                      2.158, 1.795, 2.438, 1.795, # Back side of box_1
+        #                      2.158, 1.795, 2.158, 2.075, # Left side of box_1
+        #                      2.158, 2.075, 2.438, 2.075, # Front side of box_1
+        #                     ]).astype(np.float32) 
+        map_2 = np.array([   0, 0, 0, 2.174,             1, # Left Wall
+                             0, 0, 2.438, 0,             1, # Back Wall
+                             2.438, 0, 2.438, 2.174,     1, # Right Wall
+                             0, 2.174, 2.438, 2.174,     0, # Front Wall
+                             # Tunnel
+                             0, .76, .017, .76,          0, # Rear wall of left side of tunnel 
+                             .017, .76, .017, 1.14,      0, # Inside face of left side of tunnel
+                             0, 1.14, .017, 1.14,        0, # Front wall of left side of tunnel
+                             0, 1.14, 0, 2.17,           0, # Left map wall up to Block area 
+                             .440, .76, .456, .76,       0, # Rear wall of right side of tunnel
+                             .456, .76, .456, 1.14,      0, # Ouside face of right side of tunnel
+                             .440, .76, .440, 1.14,      0, # Inside face of right side of tunnel
+                             .440, 1.14, .456, 1.14,     0, # Front wall of right side of tunnel
+                             # Truck
+                             .508, 0, .508, .303,        1, # Outside left side of truck wall
+                             .520, .303, .528, .303,     1, # Front side of left truck wall
+                             .528, .303, .528, 0,        1, # Inside left truck wall
+                             .710, 0, .710, .303,        1, # Inside right truck wall
+                             .710, .303, .730, .303,     1, # Fron side of right truck wall 
+                             .730, .303, .730, 0,        1, # Outside right side of truck
+                             # Train
+                             2.158, .88, 2.438, .88,     0, # Back side of box_4
+                             2.158, .88, 2.158, 1.16,    0, # Left side of box_4
+                             2.158, 1.16, 2.438, 1.16,   0, # Front side of box_4
+                             2.158, 1.185, 2.438, 1.185, 0, # Back side of box_3
+                             2.158, 1.185, 2.158, 1.465, 0, # Left side of box_3
+                             2.158, 1.465, 2.438, 1.465, 0, # Front side of box_3
+                             2.158, 1.49, 2.438, 1.49,   0, # Back side of box_2
+                             2.158, 1.49, 2.158, 1.77,   0, # Left side of box_2
+                             2.158, 1.77, 2.438, 1.77,   0, # Front side of box_2
+                             2.158, 1.795, 2.438, 1.795, 0, # Back side of box_1
+                             2.158, 1.795, 2.158, 2.075, 0, # Left side of box_1
+                             2.158, 2.075, 2.438, 2.075, 0, # Front side of box_1
+                        ]).astype(np.float32) 
+
+        if self.state_machine.map_version == 1:
+            return self.state_machine.map_version,[0]
+        elif self.state_machine.map_version == 2:
+            return self.state_machine.map_version,map_2
 
 if __name__ == "__main__":
     os.system("clear")
