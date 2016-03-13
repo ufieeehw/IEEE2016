@@ -1,0 +1,1 @@
+from point_cloud_gen import generate_simulated_points
