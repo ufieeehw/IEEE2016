@@ -11,8 +11,8 @@ import message_filters
 
 class LaserFuser():
     def __init__(self):
-        self.scan_pub = rospy.Publisher('scan_fused', LaserScan, queue_size=3)
-        self.scan_pc_pub = rospy.Publisher('scan_fused_pc', PointCloud, queue_size=3)
+        self.scan_pub = rospy.Publisher('/robot/navigation/lidar/scan_fused', LaserScan, queue_size=3)
+        self.scan_pc_pub = rospy.Publisher('/robot/navigation/lidar/scan_fused_pc', PointCloud, queue_size=3)
         rospy.init_node('laser_fuser')
 
         # Start a TF listener and make sure it gets data before preceding
@@ -28,10 +28,10 @@ class LaserFuser():
         print " > TF Found! Starting Fuser."
 
         # Define our message filters - these will make sure the laserscans come in at the same time
-        left_sub = message_filters.Subscriber('scan_left',LaserScan)
-        front_sub = message_filters.Subscriber('scan_front',LaserScan) 
-        right_sub = message_filters.Subscriber('scan_right',LaserScan)
-        back_sub = message_filters.Subscriber('scan_back',LaserScan) 
+        left_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_left',LaserScan)
+        front_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_front',LaserScan) 
+        right_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_right',LaserScan)
+        back_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_back',LaserScan) 
         mf_ts = message_filters.ApproximateTimeSynchronizer([left_sub,front_sub,right_sub,back_sub], 10, .1)
         mf_ts.registerCallback(self.got_scans)
 
