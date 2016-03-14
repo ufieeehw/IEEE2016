@@ -187,7 +187,7 @@ class Controller(object):
             position_error = np.dot(position_error,rot_mat)
             print "ERR:",position_error,yaw_error
 
-            nav_tolerance = (.001,.001) #m, rads
+            nav_tolerance = (.005,.001) #m, rads
             command = [] # 'X' means move in x, 'Y' move in y, 'R' means rotate
 
             # Determine which commands to send based on how close we are to target
@@ -199,14 +199,14 @@ class Controller(object):
                 command.append('R')
 
             if self.starting_move_error is None: 
-                self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .03
+                self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .1
                 print "MV_ERR",self.starting_move_error
 
             linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc) * \
                                math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
             # Determines the linear speed necessary to maintain a consant backward acceleration
             linear_speed = min(
-                                .6*linear_speed_raw, max_linear_vel
+                                .3*linear_speed_raw, max_linear_vel
                             )
             # Determines the angular speed necessary to maintain a constant angular acceleration 
             #  opposite the direction of motion
@@ -228,13 +228,13 @@ class Controller(object):
                 target_vel[1] = desired_vel[1]
             if 'R' in command:
                 target_angvel = desired_angvel
-            if not command:
-                # Break when we are finished moving
-                break
 
             print "VEL:",target_vel,target_angvel
 
             self.send_twist(target_vel, target_angvel)
+            if not command:
+                # Break when we are finished moving
+                break
             r.sleep()
 
 

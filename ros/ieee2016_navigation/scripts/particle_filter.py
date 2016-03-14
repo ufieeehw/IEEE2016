@@ -2,7 +2,7 @@
 import rospy
 from std_msgs.msg import Header, Float32
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
-from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, PoseWithCovarianceStamped, Twist, TwistStamped, Vector3
+from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, PoseWithCovarianceStamped, PoseWithCovariance, Twist, TwistStamped, Vector3
 from sensor_msgs.msg import LaserScan
 
 from ieee2016_msgs.srv import ResetOdom
@@ -85,7 +85,7 @@ class GPUAccMap():
         self.angle_to_lidar = np.array([], np.uint32)
         self.step = 1
 
-        # Define the lidar Corrector, and init the lidars - order is important.
+        # Define the lidar Corrector, and init the lidars - order is important!
         # The addition to the min_range is to account for the fact the lidars are offset from base_link
         lidar = LidarCorrector()
         lidar.add_lidar([.052133885,.0298194301,-.0783299411,.0249704984],self.min_range+.1)         # Back
@@ -194,16 +194,12 @@ class GPUAccFilter():
     def __init__(self, center, radius, heading_range, m):
         # Pass the max number of particles, the center and radius of where inital particle generation will be (meters), and the range of heading values (min,max)
 
-        # These are to manually set a pose in rviz (does not work)
-        #ospy.wait_for_service('/robot/reset_odom')
-        #self.set_odometry_proxy = rospy.ServiceProxy('/robot/reset_odom', ResetOdom)
-        self.init_pose_sub = rospy.Subscriber('/robot/initialpose', PoseStamped, self.got_pose_estimate)
-
         self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
-        self.pose_est_pub = rospy.Publisher('/robot/pf_pose_est', PoseStamped, queue_size=2)
+        self.pose_est_pub = rospy.Publisher('/robot/navigation/pf_pose_vis', PoseStamped, queue_size=2)
+        self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/pf_pose', PoseWithCovarianceStamped, queue_size=10)
 
-        self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
-        self.laser_scan_sub = rospy.Subscriber('/lidar/scan_fused', LaserScan, self.got_laserscan)
+        self.odom_sub = rospy.Subscriber('/robot/navigation/odom', Odometry, self.got_odom)
+        self.laser_scan_sub = rospy.Subscriber('/robot/navigation/lidar/scan_fused', LaserScan, self.got_laserscan)
 
         self.br = tf.TransformBroadcaster()
 
@@ -263,8 +259,6 @@ class GPUAccFilter():
 
     def gen_guass_particles(self, number_of_particles, center, sigma):
         new_particles = np.random.normal(center,sigma,(number_of_particles,3))
-        # new_particles = np.vstack((new_particles,np.random.normal(center,sigma[1],(number_of_particles,3))))
-        # new_particles = np.vstack((new_particles,np.random.normal(center,sigma[2],(number_of_particles,3))))
         self.publish_particle_array()
         self.particles = new_particles
 
@@ -333,27 +327,31 @@ class GPUAccFilter():
         # Update pose and TF
         self.pose_est = np.array(particle_avg)
 
-        #print self.pose
+        #Generate pose
         q = tf.transformations.quaternion_from_euler(0, 0, self.pose_est[2])
+        header = Header(
+            stamp=rospy.Time.now(),
+            frame_id="map"
+        )
+        pose = Pose(
+            position=Point(
+                x=self.pose_est[0],
+                y=self.pose_est[1],
+                z=0
+            ),
+            orientation=Quaternion(
+                x=q[0],
+                y=q[1],
+                z=q[2],
+                w=q[3],
+            )
+        )
+
+        # Publish pose stamped
         self.pose_est_pub.publish(
             PoseStamped(
-                header=Header(
-                    stamp=rospy.Time.now(),
-                    frame_id="map"
-                ),
-                pose=Pose(
-                    position=Point(
-                        x=self.pose_est[0],
-                        y=self.pose_est[1],
-                        z=0
-                    ),
-                    orientation=Quaternion(
-                        x=q[0],
-                        y=q[1],
-                        z=q[2],
-                        w=q[3],
-                    )
-                )
+                header=header,
+                pose=pose
             )
         )
 
@@ -361,6 +359,22 @@ class GPUAccFilter():
                  rospy.Time.now(),
                  "base_link",
                  "map")
+
+        # Publish pose with covariance stamped.
+        p_c_s = PoseWithCovarianceStamped()
+        p_c = PoseWithCovariance()
+        covariance = np.array([0.1,   0,   0,   0,   0,   0,
+                                 0, 0.1,   0,   0,   0,   0,
+                                 0,   0, 0.1,   0,   0,   0,
+                                 0,   0,   0, 0.1,   0,   0,
+                                 0,   0,   0,   0, 0.1,   0,
+                                 0,   0,   0,   0,   0, 0.1])**2
+        p_c.pose = pose
+        p_c.covariance = covariance
+        p_c_s.header
+        p_c_s.pose = p_c
+        self.p_c_s_est_pub.publish(p_c_s)
+
 
     def got_twist(self,msg):
         # Just a temp method to test the filter
@@ -453,7 +467,8 @@ class GPUAccFilter():
 
 def start_navigation(msg):
     m = GPUAccMap(msg.map)
-    f = GPUAccFilter((.5,2), .5, (.5,-.5), m)
+    init_pose = msg.init_pose
+    f = GPUAccFilter(init_pose[:2], .5, (.5+init_pose[2],-.5+init_pose[2]), m)
     
 
 # Set up start command subscriber and wait until we get that signal
