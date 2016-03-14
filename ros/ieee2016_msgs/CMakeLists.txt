@@ -52,6 +52,8 @@ add_message_files(
   Mecanum.msg
   BlockStamped.msg
   StartNavigation.msg
+  UltraSonicStamped.msg
+  UltraSonicActivator.msg
 )
 
 add_service_files(
