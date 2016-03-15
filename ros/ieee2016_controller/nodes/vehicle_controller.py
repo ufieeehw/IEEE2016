@@ -9,7 +9,7 @@ from tf import transformations as tf_trans
 import rospy
 ## Ros msgs
 from std_msgs.msg import Header
-from geometry_msgs.msg import Pose, PoseStamped, Twist, TwistStamped, Vector3
+from geometry_msgs.msg import Pose, PoseStamped, Twist, TwistStamped, Vector3, PoseWithCovarianceStamped
 from ieee2016_msgs.msg import Mecanum
 from ieee2016_msgs.srv import StopController, NavWaypoint
 from nav_msgs.msg import Odometry
@@ -74,8 +74,8 @@ class Controller(object):
         self.starting_move_error = None
 
         # Current pose sub
-        self.pose_sub = rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose)
-        #self.odom_sub = rospy.Subscriber('/robot/odom', Odometry, self.got_odom)
+        #self.pose_sub = rospy.Subscriber('/robot/navigation/pf_pose', PoseWithCovarianceStamped, self.got_pose)
+        self.odom_sub = rospy.Subscriber('/odometery/filtered', Odometry, self.got_odom)
         #self.desired_pose_sub = rospy.Subscriber('/robot/waypoint', PoseStamped, self.got_desired_pose)
 
         rospy.Service('controller/stop', StopController, self.stop)
@@ -146,6 +146,7 @@ class Controller(object):
         self.yaw = tf_trans.euler_from_quaternion(xyzw_array(pose.orientation))[2]
 
     def got_pose(self, msg):
+        msg = msg.pose
         self.position = np.array([msg.pose.position.x, msg.pose.position.y])
         self.yaw = tf_trans.euler_from_quaternion(xyzw_array(msg.pose.orientation))[2]
 
@@ -172,7 +173,7 @@ class Controller(object):
         '''
         if (self.position is None) or (self.yaw is None) or (self.on is False): return
         
-        r = rospy.Rate(25) #hz
+        r = rospy.Rate(40) #hz
         # Loop until there is no command being sent out.
         command = ['_']
         while command or not rospy.is_shutdown():
@@ -202,16 +203,16 @@ class Controller(object):
                 self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .1
                 print "MV_ERR",self.starting_move_error
 
-            linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc) * \
-                               math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
+            linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc)# * \
+                               #math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
             # Determines the linear speed necessary to maintain a consant backward acceleration
             linear_speed = min(
-                                .3*linear_speed_raw, max_linear_vel
+                                .6*linear_speed_raw, max_linear_vel
                             )
             # Determines the angular speed necessary to maintain a constant angular acceleration 
             #  opposite the direction of motion
             angular_speed = min(
-                                .5*math.sqrt(abs(yaw_error) * max_angular_acc), 
+                                .6*math.sqrt(abs(yaw_error) * max_angular_acc), 
                                 max_angular_vel
                             )
 
