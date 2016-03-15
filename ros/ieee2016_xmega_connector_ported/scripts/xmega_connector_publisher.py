@@ -12,7 +12,7 @@ from std_msgs.msg import Header, Float64
 from xmega_connector.msg import XMEGAPacket
 from xmega_connector.srv import *
 from geometry_msgs.msg import TwistStamped, Twist, Vector3, PoseStamped, Pose, Point, Quaternion
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import MagneticField
 from tf import transformations
 
 rospy.init_node('xmega_connector')#, log_level=rospy.DEBUG)
@@ -211,41 +211,29 @@ rospy.Service('~get_motion', GetMotion, get_motion_service)
 
 heading_proxy = rospy.ServiceProxy('~get_heading', GetHeading)
 # odom_pub = rospy.Publisher('odom', PoseStamped)
-# imu_pub = rospy.Publisher('imu', Imu, queue_size=1)
+mag_pub = rospy.Publisher('mag', MagneticField, queue_size=1)
 
 while not rospy.is_shutdown():
     rospy.sleep(rospy.Duration(0.1))
     # odom = get_odometry_service(None)
     stamp = rospy.Time.now()
     
-    continue
     resp = heading_proxy()
     mx = resp.xData
     mz = resp.zData
     my = resp.yData
 
 
-    IMU_msg = Imu(
+    mag_msg = MagneticField(
         header=Header(
             stamp=rospy.Time.now(),
-            frame_id='/robot',
+            frame_id='/map',
         ),
-        orientation=Quaternion(x=mx, y=my, z=mz), 
-        orientation_covariance=
+        magnetic_field=Vector3(x=mx, y=my, z=mz), 
+        magnetic_field_covariance=
             [0.03**2, 0,       0,
              0,       0.03**2, 0,
              0,       0,       0.03**2,],
-        # angular_velocity=Vector3(*angular_vel), # This was a hack to display mag_orientation est
-        # angular_velocity=Vector3(*mag_orientation),
-        # angular_velocity_covariance=
-            # [0.03**2, 0,       0,
-             # 0,       0.03**2, 0,
-             # 0,       0,       0.03**2,],
-
-        # linear_acceleration=Vector3(*linear_acc),
-        # linear_acceleration_covariance=
-            # [0.03**2, 0,       0,
-             # 0,       0.03**2, 0,
-             # 0,       0,       0.03**2,],
     )
-    # imu_pub.publish(IMU_msg)
+    print mag_msg
+    mag_pub.publish(mag_msg)
