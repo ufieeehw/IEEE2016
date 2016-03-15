@@ -115,8 +115,14 @@ class TFPublisher():
                 tf.transformations.quaternion_from_euler(0,0,3.1416),
                 rospy.Time.now(), "EE2", "elevator")
 
+
+        # Temp
+        self.tf_broad.sendTransform((0,0,0), 
+                tf.transformations.quaternion_from_euler(0,0,0),
+                rospy.Time.now(), "base_link", "odom")
+
 if __name__ == "__main__":
     rospy.init_node('tf_broadcaster')
     # Maybe add a way to force a publish of TF
-    TFPublisher(50)
+    TFPublisher(30)
 
