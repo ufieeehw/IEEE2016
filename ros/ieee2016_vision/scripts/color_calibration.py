@@ -34,8 +34,10 @@ class Calibrations():
 		Saves the current calibrations to the JSON file
 		'color_calibrations.json' in the same directory as this script.
 		'''
+		data = {"hsv_ranges": self.hsv_ranges, "selection_boxes": self.selection_boxes, "overlap_prevention_rules": self.overlap_prevention_rules}
+
 		with open(self.calibration_file, 'w') as file:
-			json.dump(self.calibrations, file)
+			json.dump(data, file)
 
 	def load(self):
 		'''
@@ -43,7 +45,11 @@ class Calibrations():
 		the same directory as this script and stores them in this class object.
 		'''
 		with open(self.calibration_file, 'r') as file:
-			self.calibrations = json.load(file)
+			data = json.load(file)
+		self.hsv_ranges = data["hsv_ranges"]
+		self.selection_boxes = data["selection_boxes"]
+		self.overlap_prevention_rules = data["overlap_prevention_rules"]
+
 		self.update()
 
 	def update(self):
@@ -51,16 +57,20 @@ class Calibrations():
 		Updates the list of available colors and converts the new calibrations
 		from an array format to a numpy format that cv2 can use.
 		'''
-		self.available_colors = self.calibrations.keys()
+		self.available_colors = self.hsv_ranges.keys()
 		for color in self.available_colors:
-			self.colors[color] = ((np.array(self.calibrations[color][0])), (np.array(self.calibrations[color][1])))
+			self.colors[color] = ((np.array(self.hsv_ranges[color][0])), (np.array(self.hsv_ranges[color][1])))
 
 	def delete(self, color):
 		'''
 		Deletes a calibration from all of the object's dictionaries.
 		'''
-		if color in self.calibrations:
-			del self.calibrations[color]
+		if color in self.hsv_ranges:
+			del self.hsv_ranges[color]
+		if color in self.selection_boxes:
+			del self.selection_boxes[color]
+		if color in self.overlap_prevention_rules:
+			del self.overlap_prevention_rules[color]
 		if color in self.colors:
 			del self.colors[color]
 		if color in self.available_colors:

@@ -78,9 +78,11 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.calibration = calibration
 		self.display = ImageDisplay(self)
 
+		# Variables used only for running the backend code
 		self.colors = {}
 		self.new_msg_printed = False
 
+		# Variables that can be modified in the GUI
 		self.selection_color = ""
 		self.detection_color = ""
 		self.display_frame = "unfiltered"
@@ -113,15 +115,11 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.new_color_button.clicked.connect(self.create_new_calibration)
 		self.delete_color_button.clicked.connect(self.delete_calibration)
 
-		# Link the point control sliders with their roll boxes
-		self.connect(self.x_coordinate_setting, QtCore.SIGNAL(_fromUtf8("valueChanged(int)")), self.x_coordinate_slider.setValue)
-		self.connect(self.x_coordinate_slider, QtCore.SIGNAL(_fromUtf8("valueChanged(int)")), self.x_coordinate_setting.setValue)
-		self.connect(self.y_coordinate_setting, QtCore.SIGNAL(_fromUtf8("valueChanged(int)")), self.y_coordinate_slider.setValue)
-		self.connect(self.y_coordinate_slider, QtCore.SIGNAL(_fromUtf8("valueChanged(int)")), self.y_coordinate_setting.setValue)
-
 		# Manages the values for the X and Y coordinate sliders and the averaging slider
-  		self.x_coordinate_slider.valueChanged[int].connect(self.update_x_coordinate)
-		self.y_coordinate_slider.valueChanged[int].connect(self.update_y_coordinate)
+		self.x1_slider.valueChanged[int].connect(self.update_x1_coordinate)
+		self.y1_slider.valueChanged[int].connect(self.update_y1_coordinate)
+		self.x2_slider.valueChanged[int].connect(self.update_x2_coordinate)
+		self.y2_slider.valueChanged[int].connect(self.update_y2_coordinate)
 		self.averaging_setting.valueChanged[int].connect(self.update_averaging)
 
 		# Link the display type selectors to the display_frame variable
@@ -207,8 +205,9 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 
 	def update_selection_color(self):
 		'''
-		Updates the selection_color variable and manages the selection frame
-		display thread.
+		Updates the selection_color variable, manages the selection frame
+		display thread, and sets the slider and spin box values for the
+		set color.
 		'''
 		if (self.colors and not (self.selection_color_setting.currentIndex() < 0)):
 
@@ -224,6 +223,12 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 					self.selection_thread.start()
 			except:
 				pass
+
+			# Set the slider values to those stored for the selection color
+			self.x1_slider.setValue(calibration.selection_boxes[self.selection_color][0][0])
+			self.x2_slider.setValue(calibration.selection_boxes[self.selection_color][1][0])
+			self.y1_slider.setValue(calibration.selection_boxes[self.selection_color][0][1])
+			self.y2_slider.setValue(calibration.selection_boxes[self.selection_color][2][1])
 
 		# If no selection color is set, disable frame display
 		else:
@@ -320,7 +325,9 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			else:
 
 				# Initializes the new calibration an updates relevant lists
-				self.calibration.calibrations[name] = [[0, 0, 0], [0, 0, 0]]
+				self.calibration.hsv_ranges[name] = [[0, 0, 0], [0, 0, 0]]
+				self.calibration.selection_boxes[name] = [[0, 0], [0, 0], [0, 0], [0, 0]]
+				self.calibration.overlap_prevention_rules[name] = []
 				self.calibration.update()
 				self.update_color_list()
 
@@ -333,22 +340,53 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		available colors on the user interface.
 		'''
 		if not (self.selection_color == ""):
+
+			# Terminates the displaying of a color that is to be deleted
+ 			self.display.loop_selection = False
+ 			if (self.detection_color == self.selection_color):
+ 				self.display.loop_detection = False
+
+			# Deletes the color from the calibration object
 			self.calibration.delete(self.colors[self.selection_color_setting.currentIndex()])
 			self.update_color_list()
+
+ 			# Clears the image frame if no color is selected
+ 			if (self.selection_color == ""):
+ 				self.selection_frame.clear()
+ 			if (self.detection_color == ""):
+ 				self.detection_frame.clear()
+
+		# Prevents the deletion of a null selection
 		else:
 			print("ERROR: Cannot delete a nonexistant calibration")
 
-	def update_x_coordinate(self, value):
+	def update_x1_coordinate(self, value):
 		'''
-		INCOMPLETE: Sets the x coordinate value based on it's slider
+		Updates the X1 point of the selection box.
 		'''
-		self.x_coordinate = value
+		self.calibration.selection_boxes[self.selection_color][0][0] = value
+		self.calibration.selection_boxes[self.selection_color][3][0] = value
 
-	def update_y_coordinate(self, value):
+	def update_y1_coordinate(self, value):
 		'''
-		INCOMPLETE: Sets the y coordinate value based on it's slider
+		Updates the Y1 point of the selection box.
 		'''
-		self.y_coordinate = value
+		self.calibration.selection_boxes[self.selection_color][0][1] = value
+		self.calibration.selection_boxes[self.selection_color][1][1] = value
+
+	def update_x2_coordinate(self, value):
+		'''
+		Updates the X2 point of the selection box.
+		'''
+		self.calibration.selection_boxes[self.selection_color][1][0] = value
+		self.calibration.selection_boxes[self.selection_color][2][0] = value
+
+	def update_y2_coordinate(self, value):
+		'''
+		Updates the Y2 point of the selection box.
+		'''
+		self.calibration.selection_boxes[self.selection_color][2][1] = value
+		self.calibration.selection_boxes[self.selection_color][3][1] = value
 
 	def update_averaging(self, value):
 		'''
@@ -381,8 +419,8 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		box. Also used to reset the ranges if changes are undone by the user.
 		'''
 		if (self.detection_color):
-			minimum_values = self.calibration.calibrations[self.detection_color][0]
-			maximum_values = self.calibration.calibrations[self.detection_color][1]
+			minimum_values = self.calibration.hsv_ranges[self.detection_color][0]
+			maximum_values = self.calibration.hsv_ranges[self.detection_color][1]
 			self.minimum_hsv_text.setText("(%d, %d, %d)" % (minimum_values[0], minimum_values[1], minimum_values[2]))
 			self.maximum_hsv_text.setText("(%d, %d, %d)" % (maximum_values[0], maximum_values[1], maximum_values[2]))
 		else:
@@ -424,8 +462,8 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 				return None
 
 		# Saves the values to the calibration object
-		self.calibration.calibrations[self.detection_color][0] = minimum_values
-		self.calibration.calibrations[self.detection_color][1] = maximum_values
+		self.calibration.hsv_ranges[self.detection_color][0] = minimum_values
+		self.calibration.hsv_ranges[self.detection_color][1] = maximum_values
 
 		# Updates the available colors list and the numpy calibration values for cv2
 		self.calibration.update()
@@ -459,22 +497,43 @@ class ImageDisplay(QtCore.QObject):
 
 	def get_selection_frame(self):
 		'''
-		INCOMPLETE: Currently prints the resized frame from the image object.
+		Draws the stored bounding box for the set selection color on a raw
+		image frame. Emits a signal to update the detection frame in the GUI.
 		'''
-		# Separate image manipulation object for this frame
+		# Separate image manipulation and detection objects for this frame
 		image = Image(camera, calibration, 320)
+		detect = ObjectDetection(self.camera, calibration, image)
 
 		while (self.loop_selection == True):
-			image.resize()
-			image.reformat_to_rgb()
-			self.selection_frame = image.frame
-			self.selection_frame_updated.emit()
-			time.sleep(0.017)
+			color = self.gui.selection_color
+
+			if (color):
+				# Draw the selection bounding box and center point
+				image.resize()
+				detect.boxes[color] = calibration.selection_boxes[color]
+				detect.get_box_center()
+
+				# Draw the detection bounding box and center point if one exists
+				detect.draw_box([color], (255, 255, 255))
+				detect.draw_center_point([color], (255, 255, 255))
+
+				# Reformat the image to RGB, which is what QImage takes, and emit an update signal
+				image.reformat_to_rgb()
+				self.selection_frame = image.frame
+				self.selection_frame_updated.emit()
+
+				# Keep the refresh rate at or below 60 FPS
+				time.sleep(0.017)
+
+			# Clears the image if no color is selected
+			else:
+				gui.detection_frame.clear()
 
 	def get_detection_frame(self):
 		'''
 		Detects the set detection color and draws a bounding box and center
-		point for it on the requested frame type.
+		point for it on the requested frame type. Emits a signal to update the
+		detection frame in the GUI.
 		'''
 		# Separate image manipulation and detection objects for this frame
 		image = Image(camera, calibration, 320)
@@ -484,29 +543,34 @@ class ImageDisplay(QtCore.QObject):
 			color = self.gui.detection_color
 			averaging = self.gui.averaging
 
-			# Average detection of the selected color to obtain box and center points
-			detect.average_box(detect.select_largest_object, [color], averaging)
-			detect.get_box_center()
+			if (color):
+				# Average detection of the selected color to obtain box and center points
+				detect.average_box(detect.select_largest_object, [color], averaging)
+				detect.get_box_center()
 
-			# Pull the requested frame to display the image on
-			if (self.gui.display_frame == "unfiltered"):
-				image.resize()
-			elif (self.gui.display_frame == "reduced"):
-				image.reduce_colors(16)
-			elif (self.gui.display_frame == "extracted"):
-				image.extract_color(self.gui.detection_color)
+				# Pull the requested frame to display the image on
+				if (self.gui.display_frame == "unfiltered"):
+					image.resize()
+				elif (self.gui.display_frame == "reduced"):
+					image.reduce_colors(16)
+				elif (self.gui.display_frame == "extracted"):
+					image.extract_color(self.gui.detection_color)
 
-			# Draw the detection bounding box and center point if one exists
-			detect.draw_box([color], (255, 255, 255))
-			detect.draw_center_point([color], (255, 255, 255))
+				# Draw the detection bounding box and center point if one exists
+				detect.draw_box([color], (255, 255, 255))
+				detect.draw_center_point([color], (255, 255, 255))
 
-			# Reformat the image to RGB, which is what QImage takes, and emit an update signal
-			image.reformat_to_rgb()
-			self.detection_frame = image.frame
-			self.detection_frame_updated.emit()
+				# Reformat the image to RGB, which is what QImage takes, and emit an update signal
+				image.reformat_to_rgb()
+				self.detection_frame = image.frame
+				self.detection_frame_updated.emit()
 
-			# Keep the refresh rate at or below 60 FPS
-			time.sleep(0.017)
+				# Keep the refresh rate at or below 60 FPS
+				time.sleep(0.02)
+
+			# Clears the image if no color is selected
+			else:
+				gui.detection_frame.clear()
 
 
 if __name__ == '__main__':

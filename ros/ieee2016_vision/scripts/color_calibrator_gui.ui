@@ -25,6 +25,25 @@
            <string>Color Selection</string>
           </property>
           <layout class="QGridLayout" name="gridLayout">
+           <item row="1" column="1">
+            <widget class="QLabel" name="selection_frame">
+             <property name="minimumSize">
+              <size>
+               <width>320</width>
+               <height>180</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>320</width>
+               <height>180</height>
+              </size>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
            <item row="1" column="2">
             <spacer name="horizontal_spacer_2">
              <property name="orientation">
@@ -89,25 +108,6 @@
              </property>
             </spacer>
            </item>
-           <item row="1" column="1">
-            <widget class="QLabel" name="selection_frame">
-             <property name="minimumSize">
-              <size>
-               <width>320</width>
-               <height>180</height>
-              </size>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>320</width>
-               <height>180</height>
-              </size>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
           </layout>
          </widget>
         </item>
@@ -157,116 +157,121 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_5">
            <item>
-            <layout class="QHBoxLayout" name="horizontal_layout_4">
-             <item>
-              <spacer name="horizontal_spacer_3">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-             <item>
-              <widget class="QRadioButton" name="point_1_button">
-               <property name="text">
-                <string>Point 1</string>
-               </property>
-               <property name="checked">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontal_spacer_4">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-             <item>
-              <widget class="QRadioButton" name="point_2_button">
-               <property name="text">
-                <string>Point 2</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontal_spacer_5">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>40</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QGridLayout" name="grid_layout_1">
-             <item row="0" column="1">
-              <widget class="QSlider" name="x_coordinate_slider">
-               <property name="maximum">
-                <number>319</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="2">
-              <widget class="QSpinBox" name="x_coordinate_setting">
-               <property name="maximum">
-                <number>319</number>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="2">
-              <widget class="QSpinBox" name="y_coordinate_setting">
-               <property name="maximum">
-                <number>179</number>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QSlider" name="y_coordinate_slider">
-               <property name="maximum">
-                <number>179</number>
-               </property>
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="0">
-              <widget class="QLabel" name="x_coordinate_label">
-               <property name="text">
-                <string>X Coordinate:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="0">
-              <widget class="QLabel" name="y_coordinate_label">
-               <property name="text">
-                <string>Y Coordinate:</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <widget class="QTabWidget" name="point_selector">
+             <property name="currentIndex">
+              <number>0</number>
+             </property>
+             <widget class="QWidget" name="tab_1">
+              <attribute name="title">
+               <string>Point 1</string>
+              </attribute>
+              <layout class="QGridLayout" name="gridLayout_6">
+               <item row="0" column="1">
+                <widget class="QSlider" name="x1_slider">
+                 <property name="maximum">
+                  <number>319</number>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="x1_label">
+                 <property name="text">
+                  <string>X Coordinate:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QSlider" name="y1_slider">
+                 <property name="maximum">
+                  <number>179</number>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="y1_label">
+                 <property name="text">
+                  <string>Y Coordinate:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QSpinBox" name="x1_setting">
+                 <property name="maximum">
+                  <number>319</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="2">
+                <widget class="QSpinBox" name="y1_setting">
+                 <property name="maximum">
+                  <number>179</number>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+             <widget class="QWidget" name="tab_1">
+              <attribute name="title">
+               <string>Point 2</string>
+              </attribute>
+              <layout class="QGridLayout" name="gridLayout_5">
+               <item row="3" column="0">
+                <widget class="QLabel" name="y2_label">
+                 <property name="text">
+                  <string>Y Coordinate:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="x2_label">
+                 <property name="text">
+                  <string>X Coordinate:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QSlider" name="x2_slider">
+                 <property name="maximum">
+                  <number>319</number>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QSlider" name="y2_slider">
+                 <property name="maximum">
+                  <number>179</number>
+                 </property>
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="2">
+                <widget class="QSpinBox" name="x2_setting">
+                 <property name="maximum">
+                  <number>319</number>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="2">
+                <widget class="QSpinBox" name="y2_setting">
+                 <property name="maximum">
+                  <number>179</number>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </widget>
            </item>
           </layout>
          </widget>
@@ -636,5 +641,134 @@
   </action>
  </widget>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>x1_slider</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>x1_setting</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>407</x>
+     <y>475</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>429</x>
+     <y>475</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>y1_slider</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>y1_setting</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>406</x>
+     <y>516</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>420</x>
+     <y>513</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>x1_setting</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>x1_slider</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>438</x>
+     <y>484</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>396</x>
+     <y>480</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>y1_setting</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>y1_slider</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>452</x>
+     <y>516</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>391</x>
+     <y>519</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>x2_slider</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>x2_setting</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>402</x>
+     <y>477</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>421</x>
+     <y>475</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>y2_slider</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>y2_setting</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>400</x>
+     <y>507</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>427</x>
+     <y>513</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>x2_setting</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>x2_slider</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>444</x>
+     <y>477</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>407</x>
+     <y>475</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>y2_setting</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>y2_slider</receiver>
+   <slot>setValue(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>442</x>
+     <y>511</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>409</x>
+     <y>514</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
