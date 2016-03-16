@@ -78,11 +78,13 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.calibration = calibration
 		self.display = ImageDisplay(self)
 
+		self.colors = {}
+		self.new_msg_printed = False
+
 		self.selection_color = ""
 		self.detection_color = ""
 		self.display_frame = "unfiltered"
 		self.averaging = 2
-		self.colors = {}
 		self.prevention_setting = {}
 
 		super(self.__class__, self).__init__()
@@ -105,6 +107,10 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.detection_color_setting.activated.connect(self.update_detection_color)
 
 		# Connect the calibration management buttons to the calibration object
+		self.new_color_name_setting.cursorPositionChanged.connect(self.clear_new_name)
+		self.new_color_name_setting.editingFinished.connect(self.print_new_name_msg)
+		self.new_color_name_setting.returnPressed.connect(self.create_new_calibration)
+		self.new_color_button.clicked.connect(self.create_new_calibration)
 		self.delete_color_button.clicked.connect(self.delete_calibration)
 
 		# Link the point control sliders with their roll boxes
@@ -270,6 +276,57 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			self.minimum_hsv_text.setEnabled(False)
 			self.maximum_hsv_text.setEnabled(False)
 
+	def clear_new_name(self):
+		'''
+		Clears the box for setting the name of a new calibration.
+		'''
+		if ((self.new_color_name_setting.text() == "Input a name to generate a new calibration") and (self.new_msg_printed == False)):
+			self.new_color_name_setting.clear()
+
+		# If the default new name message was just printed, do not clear it
+		elif(self.new_msg_printed == True):
+			self.new_msg_printed = False
+
+	def print_new_name_msg(self):
+		'''
+		Prints the default new name text "Input a name to generate a new
+		calibration" into the new calibration name text box.
+		'''
+		# Ensures that the default new name message will not be cleared
+		self.new_msg_printed = True
+
+		self.new_color_name_setting.end(False)
+		if (self.new_color_name_setting.cursorPosition() == 0):
+			self.new_color_name_setting.setText("Input a name to generate a new calibration")
+
+	def create_new_calibration(self):
+		'''
+		Creates a new calibration in the calibration object based on the
+		alphanumeric name specified. All calibration values will initialize to
+		a value of 0.
+		'''
+		name = str(self.new_color_name_setting.text())
+
+		# Ensures that a name has been typed into the new name box
+		if (self.new_color_name_setting.text() == "Input a name to generate a new calibration"):
+			print("ERROR: A name must be specified for the new calibration")
+
+		# Ensures that the string recieved is alphanumeric
+		elif (str.isalnum(name)):
+
+			# Ensures that a unique name has been specified
+			if (name in self.calibration.available_colors):
+				print "ERROR: A calibration for this color already exists"
+			else:
+
+				# Initializes the new calibration an updates relevant lists
+				self.calibration.calibrations[name] = [[0, 0, 0], [0, 0, 0]]
+				self.calibration.update()
+				self.update_color_list()
+
+		else:
+			print("ERROR: The entered name is not alphanumeric")
+
 	def delete_calibration(self):
 		'''
 		Removes a calibration from memory only. Also updates the list of
@@ -346,8 +403,12 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			print("ERROR: One of the HSV fields is blank")
 			return None
 		elif (minimum[0] == '(' and maximum[0] == '(' and minimum[len(minimum) - 1] == ')' and maximum[len(maximum) - 1] == ')'):
-			minimum_values = tuple(int(char) for char in minimum[1:-1].split(','))
-			maximum_values = tuple(int(char) for char in maximum[1:-1].split(','))
+			try:
+				minimum_values = list(int(char) for char in minimum[1:-1].split(','))
+				maximum_values = list(int(char) for char in maximum[1:-1].split(','))
+			except:
+				print("ERROR: The values entered must be integers")
+				return None
 		else:
 			print("ERROR: One of the HSV ranges is not formatted properly")
 			return None
@@ -366,8 +427,8 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.calibration.calibrations[self.detection_color][0] = minimum_values
 		self.calibration.calibrations[self.detection_color][1] = maximum_values
 
-		# Updates the numpy calibration values to reflect the changes for cv2
-		self.calibration.load_cv2()
+		# Updates the available colors list and the numpy calibration values for cv2
+		self.calibration.update()
 
 	def closeEvent(self, event):
 		'''

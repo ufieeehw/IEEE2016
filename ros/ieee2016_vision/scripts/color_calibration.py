@@ -44,14 +44,14 @@ class Calibrations():
 		'''
 		with open(self.calibration_file, 'r') as file:
 			self.calibrations = json.load(file)
-		self.available_colors = self.calibrations.keys()
-		self.load_cv2()
+		self.update()
 
-	def load_cv2(self):
+	def update(self):
 		'''
-		Converts the loaded calibrations from an array format to a numpy format
-		that cv2 can use.
+		Updates the list of available colors and converts the new calibrations
+		from an array format to a numpy format that cv2 can use.
 		'''
+		self.available_colors = self.calibrations.keys()
 		for color in self.available_colors:
 			self.colors[color] = ((np.array(self.calibrations[color][0])), (np.array(self.calibrations[color][1])))
 
