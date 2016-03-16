@@ -67,8 +67,12 @@ class Image():
 		else:
 			self.resize()
 
+		 	# Filters the image to reduce noise
+ 		 	working_frame = cv2.bilateralFilter(self.frame, 9, 75, 75)
+ 		 	working_frame = cv2.medianBlur(working_frame, 5)
+
 			# Converts the frame to a format that is usable with K-Means clustering
-			working_frame = self.frame.reshape((-1, 3))
+			working_frame = working_frame.reshape((-1, 3))
 			working_frame = np.float32(working_frame)
 
 			# Use K-Means clustering to identify the 16 most predominant colors
@@ -78,11 +82,7 @@ class Image():
 			# Reduces the colors in the original image based on the clustering results
 			center = np.uint8(center)
 			working_frame = center[label.flatten()]
-			working_frame = working_frame.reshape((self.frame.shape))
-
-		 	# Filters the remaining colors to reduce noise
- 		 	working_frame = cv2.medianBlur(working_frame, 5)
- 		 	self.frame = cv2.bilateralFilter(working_frame, 9, 75, 75)
+			self.frame = working_frame.reshape((self.frame.shape))
 
 		 	# Stores the frame for later holding
 		 	self.redux_frame = self.frame
