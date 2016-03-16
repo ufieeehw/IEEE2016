@@ -1,51 +1,18 @@
 #!/usr/bin/python2
+#=============================================================================
+# Project: IEEE 2016 Hardware Team Robot (Shia LaBot)
+# Module: Color Detection												v3.0
+#
+# Author: Anthony Olive	<anthony@iris-systems.net>
+#==============================================================================
 
-import json
-import os
-import rospkg
-
-from camera_manager import Camera
+import camera_manager
+from color_calibration import Calibrations
 import cv2
 import numpy as np
-from point_intersector import PointIntersector
+import point_intersector
 import rospy
-from waypoint_utils import load_waypoints
-
-
-class Calibration():
-	'''
-	Manages the calibrations for image color extraction and distance
-	calculation. These are stored in a file in the same directory as the
-	script.
-	'''
-	def __init__(self):
-		rospack = rospkg.RosPack()
-		self.calibration_file = os.path.join(rospack.get_path('ieee2016_vision'), 'scripts/color_calibrations.json')
-		self.colors = {}
-
-		self.load_calibration()
-
-	def save_calibration(self):
-		'''
-		Saves the current calibrations to the JSON file
-		'color_calibrations.json' in the same directory as this script.
-		'''
-		with open('color_calibrations.json', 'w') as file:
-			json.dump(self.calibrations, file)
-
-	def load_calibration(self):
-		'''
-		Loads the calibrations from the JSON file 'color_calibrations.json' in
-		the same directory as this script and stores them in this class object.
-		'''
-		# Imports the dictionary and determines what colors are in it
-		with open('color_calibrations.json', 'r') as file:
-			self.calibrations = json.load(file)
-		self.available_colors = self.calibrations.keys()
-
-		# Converts the values in the dictionary to numpy arrays for cv2
-		for color in self.available_colors:
-			self.colors[color] = ((np.array(self.calibrations[color][0])), (np.array(self.calibrations[color][1])))
+import waypoint_utils
 
 
 class Image():
@@ -74,6 +41,9 @@ class Image():
 		'''
 		self.frame = self.camera.image
 		self.frame = cv2.resize(self.frame, self.operating_dimensions, interpolation = cv2.INTER_AREA)
+
+	def reformat_to_rgb(self):
+		self.frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
 
 	def scale_point(self, point):
 		'''
@@ -121,7 +91,7 @@ class Image():
 		Generates an image from the passed frame that contain hues specified within
 		the defined boundaries for the color id passed.
 		'''
-		self.reduce_colors(16)
+		self.reduce_colors(32)
 
 		# Creates a mask for the selected hue range and overlays them onto the frame
 		working_frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
@@ -241,6 +211,24 @@ class ObjectDetection():
 			else:
 				self.box_centers[color] = None
 
+	def draw_box(self, colors, box_color):
+		'''
+		Draw the box based on the box points around the selected object onto
+		the frame.
+		'''
+		for color in colors:
+			if (self.boxes[color]):
+				box_to_draw = np.int0(self.boxes[color])
+				cv2.drawContours(self.image.frame, [box_to_draw], 0, box_color, 2)
+
+	def draw_center_point(self, colors, point_color):
+		'''
+		Draw the center point of the box onto the frame.
+		'''
+		for color in colors:
+			if (self.boxes[color]):
+				cv2.circle(self.image.frame, self.box_centers[color], 2, point_color, 4)
+
 
 class TrainBoxes():
 	'''
@@ -250,11 +238,11 @@ class TrainBoxes():
 	'''
 	def __init__(self, camera):
 		self.camera = camera
-		self.calibration = Calibration()
+		self.calibration = Calibrations()
 		self.image = Image(camera, calibration, 320)
 		self.detection = ObjectDetection(self.camera, self.calibration)
-		self.waypoints = load_waypoints()
-		self.intersect = PointIntersector()
+		self.waypoints = waypoint_utils.load_waypoints()
+		self.intersect = point_intersector.PointIntersector()
 
 	def get_box_location(self, averaging):
 		'''
@@ -270,8 +258,7 @@ class TrainBoxes():
 		self.camera.deactivate()
 		for color in self.colors:
 
-			# Uses intersect_point 		print self.calibration_file
-to determine the 3D location of each detected box center
+			# Uses intersect_point to determine the 3D location of each detected box center
 			if (self.detection.box_centers[color]):
 				self.box_locations[color] = self.intersect.intersect_point(self.camera, self.image.scale_point(self.detection.box_centers[color]))
 
@@ -359,7 +346,7 @@ def debug_selection(camera, colors, averaging):
 	the frame. Displays real-time selection output using cv2 for feedback.
 	'''
 	camera.activate()
-	calibration = Calibration()
+	calibration = Calibrations()
 	image = Image(camera, calibration, 320)
 	detection = ObjectDetection(camera, calibration, image)
 
@@ -394,8 +381,8 @@ def debug_selection(camera, colors, averaging):
 
 if __name__ == "__main__":
 	rospy.init_node("color_dection")
-	camera = Camera(1)
-	debug_selection(camera, ["green"], 8)
+	camera = camera_manager.Camera(1)
+	debug_selection(camera, ["red"], 2)
 	# train = TrainBoxes(camera)
 	# train.get_box_order(["red", "green", "blue", "yellow"], ["box_1", "box_2", "box_3", "box_4"], 8)
 	exit()
