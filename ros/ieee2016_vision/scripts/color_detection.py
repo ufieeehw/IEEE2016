@@ -1,7 +1,7 @@
 #!/usr/bin/python2
 #=============================================================================
 # Project: IEEE 2016 Hardware Team Robot (Shia LaBot)
-# Module: Color Detection												v3.0
+# Module: Color Detection												v3.1
 #
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
@@ -80,8 +80,9 @@ class Image():
 			working_frame = center[label.flatten()]
 			working_frame = working_frame.reshape((self.frame.shape))
 
-		 	# Blurs the remaining colors to reduce noise
-		 	self.frame = cv2.GaussianBlur(working_frame, (5, 5), 0)
+		 	# Filters the remaining colors to reduce noise
+ 		 	working_frame = cv2.medianBlur(working_frame, 5)
+ 		 	self.frame = cv2.bilateralFilter(working_frame, 9, 75, 75)
 
 		 	# Stores the frame for later holding
 		 	self.redux_frame = self.frame

@@ -59,6 +59,7 @@ target/
 # Eclipse and PyDev:
 .project
 .pydevproject
+.settings
 
 # Compiled code
 .d
