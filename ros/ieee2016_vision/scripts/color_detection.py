@@ -7,7 +7,7 @@
 #==============================================================================
 
 import camera_manager
-from color_calibration import Calibrations
+from color_calibration import CalibrationData
 import cv2
 import numpy as np
 import point_intersector
@@ -21,9 +21,9 @@ class Image():
 	the selection of a color to proceed. Colors id's are as follows: red,
 	green, blue, and yellow.
 	'''
-	def __init__(self, camera, calibration, width = 640):
+	def __init__(self, camera, calibration_file, width = 640):
 		self.camera = camera
-		self.calibration = calibration
+		self.calibration_file = calibration_file
 		self.frame = self.camera.image
 
 		# Store original and operating image dimensions
@@ -96,7 +96,7 @@ class Image():
 
 		# Creates a mask for the selected hue range and overlays them onto the frame
 		working_frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
-		mask = cv2.inRange(working_frame, self.calibration.colors[color][0], self.calibration.colors[color][1])
+		mask = cv2.inRange(working_frame, self.calibration_file.colors[color][0], self.calibration_file.colors[color][1])
 		self.frame = cv2.bitwise_and(working_frame, working_frame, mask = mask)
 
 
@@ -105,7 +105,7 @@ class ObjectDetection():
 	Generates usable data about the location of objects within the frame.
 	Colors id's are as follows: red, green, blue, and yellow.
 	'''
-	def __init__(self, camera, calibration, image):
+	def __init__(self, camera, image):
 		self.image = image
 
 		self.boxes = {}
@@ -239,9 +239,9 @@ class TrainBoxes():
 	'''
 	def __init__(self, camera):
 		self.camera = camera
-		self.calibration = Calibrations()
+		self.calibration_file = CalibrationData()
 		self.image = Image(camera, calibration, 320)
-		self.detection = ObjectDetection(self.camera, self.calibration)
+		self.detection = ObjectDetection(self.camera, self.calibration_file)
 		self.waypoints = waypoint_utils.load_waypoints()
 		self.intersect = point_intersector.PointIntersector()
 
@@ -341,49 +341,9 @@ class TrainBoxes():
 		return(self.matched_boxes)
 
 
-def debug_selection(camera, colors, averaging):
-	'''
-	Used to debug the selection of objects based on hue and relative size in
-	the frame. Displays real-time selection output using cv2 for feedback.
-	'''
-	camera.activate()
-	calibration = Calibrations()
-	image = Image(camera, calibration, 320)
-	detection = ObjectDetection(camera, calibration, image)
-
-	while (True):
-		# Finds the center of the box around the largest object
-		detection.average_box(detection.select_largest_object, colors, averaging)
-		detection.get_box_center()
-
-		# Pulling values used to render the debugging image
-		image.resize()
-		frame = image.frame
-		box = detection.boxes
-		box_centers = detection.box_centers
-
-		for color in colors:
-			# Draw a box around the selected object in the captured frame
-			if (box[color]):
-				box_to_draw = np.int0(box[color])
-				cv2.drawContours(frame, [box_to_draw], 0, (0, 0, 255), 2)
-
-			# Draw the center point of the box in the captured frame
-			if (box_centers[color]):
-				cv2.circle(frame, box_centers[color], 3, (0, 255, 0))
-
-		# Display the frame for debugging
-		cv2.imshow('Debugging', frame)
-		if (cv2.waitKey(5) == 27):
-			cv2.destroyAllWindows
-			break
-
-	camera.deactivate()
-
 if __name__ == "__main__":
 	rospy.init_node("color_dection")
 	camera = camera_manager.Camera(1)
-	debug_selection(camera, ["red"], 2)
-	# train = TrainBoxes(camera)
-	# train.get_box_order(["red", "green", "blue", "yellow"], ["box_1", "box_2", "box_3", "box_4"], 8)
+	train = TrainBoxes(camera)
+	train.get_box_order(["red", "green", "blue", "yellow"], ["box_1", "box_2", "box_3", "box_4"], 8)
 	exit()

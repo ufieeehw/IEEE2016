@@ -1,7 +1,7 @@
 #!/usr/bin/python2
 #=============================================================================
 # Project: IEEE 2016 Hardware Team Robot (Shia LaBot)
-# Module: Color Calibration												v1.0
+# Module: Color Calibration												v1.1
 #
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
@@ -12,22 +12,39 @@ import rospkg
 import numpy as np
 
 
-class Calibrations():
+class CalibrationData():
 	'''
 	Manages the calibrations for image color extraction and distance
 	calculation. These are stored in a file in the same directory as the
 	script.
 	'''
 	def __init__(self, file = None):
+		self.colors = {}
+
 		# Allows a calibration file to be passed in
 		if (file):
 			self.calibration_file = file
+
+		# Defaults to a specific calibration file from the ROS path
 		else:
 			rospack = rospkg.RosPack()
 			self.calibration_file = os.path.join(rospack.get_path("ieee2016_vision"), "scripts/color_calibrations.json")
 
-		self.colors = {}
-		self.load()
+		# Loads the file if it exists; otherwise, creates a new file
+		if (os.path.isfile(self.calibration_file)):
+			self.load()
+		else:
+			self.new()
+
+	def new(self):
+		'''
+		Initializes a new calibration file at the chosen location with blank
+		values or zeros depending on the field.
+		'''
+		self.hsv_ranges = {}
+		self.selection_boxes = {}
+		self.overlap_prevention_rules = {}
+		self.update()
 
 	def save(self):
 		'''
