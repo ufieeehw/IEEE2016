@@ -28,16 +28,16 @@ def update_waypoints(old_names,new_names):
 				save_waypoint_coor(new_names[i],l.split(' ', 1)[1].split())
 
 def save_waypoint(name, x, y, theta):
-		# Take a name and a coordinate [x y yaw] (with no []) and write them to waypoints file, updating if there are repeats.
+	#Take a name and a coordinate [x y yaw] (with no []) and write them to waypoints file, updating if there are repeats.
 	existing_waypoints = load_waypoints()
 	coor = [x,y,theta]
 	new_waypoint = {name:coor}
-
+	
 	existing_waypoints.update(new_waypoint)
 
 	f = open(WAYPOINTS_FILE_URI,'w')
 	for name in existing_waypoints:
-		f.write("%s %s %s %s \n" % (name, x, y, theta))
+		f.write("%s %s %s %s \n" % (name, existing_waypoints[name][0], existing_waypoints[name][1], existing_waypoints[name][2]))
 	f.close()
 
 def save_waypoint_coor(name, coor):
@@ -81,5 +81,5 @@ if __name__ == "__main__":
 	# when you call this script from the command line, it will save the current position as the first arguemnt of the call
 	rospy.init_node('listener', anonymous=True)
 	#print "listneing"
-	sub = rospy.Subscriber("/robot/pf_pose_est", PoseStamped, callback)
+	sub = rospy.Subscriber("/robot/navigation/pf_pose_vis", PoseStamped, callback)
 	rospy.spin()

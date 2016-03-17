@@ -36,7 +36,7 @@ def got_joy_msg(joy_msg):
        map_version.publish(Int8(data=1))
        time.sleep(.2)
        start.publish(Bool(data=True))
-       
+
     #6 start, 7 stop
     if joy_msg.buttons[6]:
         stop_proxy(True)

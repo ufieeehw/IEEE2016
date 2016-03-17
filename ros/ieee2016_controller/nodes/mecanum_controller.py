@@ -10,7 +10,7 @@ import rospy
 ## Ros msgs
 from std_msgs.msg import Header
 from geometry_msgs.msg import (Pose, PoseStamped, TwistStamped, Pose2D, PoseWithCovariance, Point, Quaternion, Vector3,
-    TwistWithCovariance, Twist)
+    TwistWithCovariance, TwistWithCovarianceStamped, Twist)
 from sensor_msgs.msg import Joy
 from nav_msgs.msg import Odometry
 from ieee2016_msgs.msg import Mecanum
@@ -35,7 +35,7 @@ class Controller(object):
 
         self.pose = np.array([0.2, 0.2, 1.57])
         self.odom_pub = rospy.Publisher('/robot/navigation/odom', Odometry, queue_size=10)    
-        self.odom_twist_pub = rospy.Publisher('/robot/navigation/odom_twist', TwistWithCovariance, queue_size=10)  
+        self.odom_twist_pub = rospy.Publisher('/robot/navigation/odom_twist', TwistWithCovarianceStamped, queue_size=10)  
 
         rospy.loginfo("----------Attempting to find set_wheel_speeds service-------------")
         rospy.wait_for_service('/robot/xmega_connector/set_wheel_speeds')
@@ -189,7 +189,7 @@ class Controller(object):
         Each item (pose, odom) is formatted as [x, y, theta]
         Odometry messages are used because they contain covariances
         '''
-        freq = 25 #hz
+        freq = 10 #hz
         r = rospy.Rate(freq)
         while not rospy.is_shutdown():
             odom_srv = self.odometry_proxy()
@@ -206,6 +206,10 @@ class Controller(object):
 
             self.pose += [x, y, vehicle_twist[2]]
 
+            header = Header(
+                    stamp=rospy.Time.now(),
+                    frame_id='base_link',
+                )
             orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
             t_c =TwistWithCovariance(
                 twist=Twist(
@@ -241,8 +245,12 @@ class Controller(object):
                 ),
                 twist=t_c
             )
+            t_c_s = TwistWithCovarianceStamped(
+                header=header,
+                twist=t_c
+            )
             self.odom_pub.publish(odom_msg)
-            self.odom_twist_pub.publish(t_c)
+            self.odom_twist_pub.publish(t_c_s)
             r.sleep()
 
 

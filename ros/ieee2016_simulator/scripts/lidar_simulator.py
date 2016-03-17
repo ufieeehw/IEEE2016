@@ -67,7 +67,7 @@ class GPUAccMap():
 
         self.index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
         # Set up pyopencl
-        self.ctx = cl.create_some_context()
+        self.ctx = cl.Context([cl.get_platforms()[1].get_devices()[0]])
         self.queue = cl.CommandQueue(self.ctx)
         self.mf = cl.mem_flags
         # Load .cl program
@@ -281,16 +281,16 @@ class Simulator():
         
         self.pose = np.array(starting_point).astype(np.float32)
 
-        self.tf_listener.waitForTransform("map","base_link", rospy.Time(0), rospy.Duration(1.0))
+        #self.tf_listener.waitForTransform("map","base_link", rospy.Time(0), rospy.Duration(1.0))
 
         rate = rospy.Rate(25) #hz
         while not rospy.is_shutdown():
 
-            time = self.tf_listener.getLatestCommonTime("map","base_link")
-            pos, quaternion = self.tf_listener.lookupTransform("map","base_link", time)
-            rot = tf.transformations.euler_from_quaternion(quaternion)
+            # time = self.tf_listener.getLatestCommonTime("map","base_link")
+            # pos, quaternion = self.tf_listener.lookupTransform("map","base_link", time)
+            # rot = tf.transformations.euler_from_quaternion(quaternion)
 
-            self.pose = np.array([pos[0],pos[1],rot[2]])
+            self.pose = np.array(self.pose)
 
             self.control()
             rate.sleep()
@@ -309,7 +309,7 @@ def start_navigation(msg):
     m = GPUAccMap(msg.map)
     #m_a = GPUAccMapAct(msg.map)
     print "> Starting navigation."
-    s = Simulator(msg.init_pose,m,m)
+    s = Simulator(np.array([1.2,1.2,0]),m,m)
     
 rospy.init_node('lidar_sim', anonymous=True)
 rospy.Subscriber("/robot/start_navigation", StartNavigation, start_navigation)

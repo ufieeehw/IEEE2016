@@ -24,7 +24,7 @@ class LaserFuser():
         self.tf_listener.waitForTransform("base_link","laser_right", rospy.Time(0), rospy.Duration(5.0))
         self.tf_listener.waitForTransform("base_link","laser_back", rospy.Time(0), rospy.Duration(5.0))
         self.frames = ["laser_left","laser_front","laser_right","laser_back"]
-        self.FOVs = [100,100,100,100] #degrees
+        self.FOVs = [80,80,80,80] #degrees
         print " > TF Found! Starting Fuser."
 
         # Define our message filters - these will make sure the laserscans come in at the same time

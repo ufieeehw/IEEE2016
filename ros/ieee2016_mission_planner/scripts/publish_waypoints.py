@@ -7,7 +7,7 @@ import tf
 
 from waypoint_utils import load_waypoints
 
-publisher = rospy.Publisher('/robot/waypoint',PoseStamped,queue_size=2)
+publisher = rospy.Publisher('/nav_waypoint',PoseStamped,queue_size=2)
 rospy.init_node('pose_publisher', anonymous=True)
 nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
 

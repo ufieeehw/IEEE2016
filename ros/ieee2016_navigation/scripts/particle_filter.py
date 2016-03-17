@@ -2,7 +2,8 @@
 import rospy
 from std_msgs.msg import Header, Float32
 from nav_msgs.msg import MapMetaData, OccupancyGrid, Odometry
-from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, PoseWithCovarianceStamped, PoseWithCovariance, Twist, TwistStamped, Vector3
+from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, \
+        PoseWithCovarianceStamped, PoseWithCovariance, Twist, TwistStamped, Vector3, TwistWithCovarianceStamped
 from sensor_msgs.msg import LaserScan
 
 from ieee2016_msgs.srv import ResetOdom
@@ -198,14 +199,14 @@ class GPUAccFilter():
         self.pose_est_pub = rospy.Publisher('/robot/navigation/pf_pose_vis', PoseStamped, queue_size=2)
         self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/pf_pose', PoseWithCovarianceStamped, queue_size=10)
 
-        self.odom_sub = rospy.Subscriber('/robot/navigation/odom', Odometry, self.got_odom)
+        self.odom_sub = rospy.Subscriber('/robot/navigation/odom_twist', TwistWithCovarianceStamped, self.got_twist)
         self.laser_scan_sub = rospy.Subscriber('/robot/navigation/lidar/scan_fused', LaserScan, self.got_laserscan)
 
         self.br = tf.TransformBroadcaster()
 
         self.m = m
         self.INIT_PARTICLES = 2048
-        self.MAX_PARTICLES = 5096
+        self.MAX_PARTICLES = 2048
 
         # We start at our esitmated starting position
         self.pose = np.array([center[0],center[1],sum(heading_range)/2.0], np.float32)
@@ -225,6 +226,7 @@ class GPUAccFilter():
 
         # Begin running the filter
         print "Running Filter."
+        #self.prev_time = time.time()
         self.run_filter()
 
     def got_pose_estimate(self, msg):
@@ -257,10 +259,10 @@ class GPUAccFilter():
         self.particles = np.vstack((self.particles,np.vstack((x,y,heading)).T))
         self.publish_particle_array()
 
-    def gen_guass_particles(self, number_of_particles, center, sigma):
-        new_particles = np.random.normal(center,sigma,(number_of_particles,3))
+    def gen_guass_particles(self, number_of_particles, center, cov):
+        self.particles = np.random.multivariate_normal(center,cov,number_of_particles)
+        self.particles[:2] = np.clip(self.particles[:2],0,2.5)
         self.publish_particle_array()
-        self.particles = new_particles
 
     def run_filter(self):
         '''
@@ -289,19 +291,22 @@ class GPUAccFilter():
             if np.mean(weights_raw) == 0:
                 break
 
-            # # Remove low weights from particle and weights list
-            weight_percentile = 99 #percent
+            # # # Remove low weights from particle and weights list
+            weight_percentile = 95 #percent
             weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
             weights = np.repeat(weights_raw,3).reshape(len(weights_raw),3)
             #weighted_particles = self.particles*weights/np.mean(weights_raw)
             self.particles = self.particles[weights_indicies_to_keep]
 
+            # Pick the single best particle to spawn new ones from
+            #best = self.particles[np.argmax(weights_raw)]
+
             #Just for debugging ==================================
             # print "WEIGHT PERCENTILE:", weight_percentile
             # print "CUTOFF:", np.percentile(weights_raw,weight_percentile)
-            print "PARTICLE COUNT:", len(self.particles),"/",self.MAX_PARTICLES
-
-            sigma = np.std(self.particles,axis=0) + np.array([.02,.02,.01])
+            status = "PARTICLE COUNT: %i/%i"%(len(self.particles),self.MAX_PARTICLES)
+            rospy.loginfo(status)
+            #sigma = np.std(self.particles,axis=0) + np.array([.02,.02,.01])
 
             # Calculate pose esitmation before generating new particles
             new_pose = np.mean(self.particles, axis=0)
@@ -309,9 +314,10 @@ class GPUAccFilter():
             # Update Pose
             self.publish_pose(new_pose)
 
-            translation_vairance = .3  #m  #.1
-            rotational_vairance = .6 #rads #.5
-            #self.gen_guass_particles(self.MAX_PARTICLES,new_pose,sigma)
+            cov = np.eye(3)*.1**2
+            translation_vairance = .1  #m  #.1
+            rotational_vairance = .5 #rads #.5
+            #self.gen_guass_particles(self.MAX_PARTICLES,new_pose,cov)
             self.gen_particles( self.MAX_PARTICLES - len(self.particles), 
                                 new_pose[:2],
                                 translation_vairance,
@@ -355,10 +361,10 @@ class GPUAccFilter():
             )
         )
 
-        self.br.sendTransform((self.pose_est[0], self.pose_est[1], .125), q,
-                 rospy.Time.now(),
-                 "base_link",
-                 "map")
+        # self.br.sendTransform((self.pose_est[0], self.pose_est[1], .125), q,
+        #          rospy.Time.now(),
+        #          "base_link",
+        #          "map")
 
         # Publish pose with covariance stamped.
         p_c_s = PoseWithCovarianceStamped()
@@ -371,18 +377,19 @@ class GPUAccFilter():
                                  0,   0,   0,   0,   0, 0.1])**2
         p_c.pose = pose
         p_c.covariance = covariance
-        p_c_s.header
+        p_c_s.header = header
+        p_c_s.header.frame_id = "map"
         p_c_s.pose = p_c
         self.p_c_s_est_pub.publish(p_c_s)
 
 
     def got_twist(self,msg):
         # Just a temp method to test the filter
-        vehicle_twist = msg.twist
+        vehicle_twist = msg.twist.twist
         
-        time_since_last_msg = self.prev_time - time.time() #seconds
-        self.prev_time = time.time()
-        incoming_msg_freq = 1.0/time_since_last_msg
+        # time_since_last_msg = self.prev_time - time.time() #seconds
+        # self.prev_time = time.time()
+        # incoming_msg_freq = 10.0
 
         # This accounts for Shia's rotation - if he is pointed at a 45 degree angle and moves straight forward (which is what the twist message will say),
         # he is not moving directly along the x axis, he is moving at an offset angle.
@@ -392,15 +399,15 @@ class GPUAccFilter():
             [s,      c],
         ], dtype=np.float32)
         # Then we add the x or y translation that we move, rounding down if it's super small
-        x, y = np.dot(rot_mat, [vehicle_twist.linear.x/incoming_msg_freq, vehicle_twist.linear.y/incoming_msg_freq]).A1
+        x, y = np.dot(rot_mat, [vehicle_twist.linear.x, vehicle_twist.linear.y]).A1
         tolerance = 1e-7
         if abs(x) < tolerance: x = 0
         if abs(y) < tolerance: y = 0
         if abs(vehicle_twist.angular.z) < tolerance: vehicle_twist.angular.z = 0
         
         # By summing these components, we get an integral - converting velocity to position
-        self.pose_update += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
-        self.pose += [x, y, vehicle_twist.angular.z/incoming_msg_freq]
+        self.pose_update += np.array([x, y, vehicle_twist.angular.z])
+        self.pose += np.array([x, y, vehicle_twist.angular.z])
 
     def got_odom(self,msg):
         # Update current pose based on odom data, note that this is only an estimation of Shia's position
