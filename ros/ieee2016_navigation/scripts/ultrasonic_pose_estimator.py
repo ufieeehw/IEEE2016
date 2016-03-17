@@ -139,17 +139,8 @@ class USPoseEstimator():
             frame_id="map"
         )
         pose = Pose(
-            position=Point(
-                x=pose[0],
-                y=pose[1],
-                z=0
-            ),
-            orientation=Quaternion(
-                x=q[0],
-                y=q[1],
-                z=q[2],
-                w=q[3],
-            )
+            position=Point(x=pose[0], y=pose[1], z=0),
+            orientation=Quaternion( x=q[0], y=q[1], z=q[2], w=q[3])
         )
 
         # Publish pose stamped
@@ -176,7 +167,7 @@ class USPoseEstimator():
                                  0,   0,   0,   0,   0, .05])**2
         p_c.pose = pose
         p_c.covariance = covariance
-        p_c_s.header
+        p_c_s.header = header
         p_c_s.pose = p_c
         self.p_c_s_est_pub.publish(p_c_s)
 
@@ -187,17 +178,8 @@ class USPoseEstimator():
             frame_id="map"
         )
         pose = Pose(
-            position=Point(
-                x=pose[0],
-                y=pose[1],
-                z=0
-            ),
-            orientation=Quaternion(
-                x=q[0],
-                y=q[1],
-                z=q[2],
-                w=q[3],
-            )
+            position=Point(x=pose[0], y=pose[1], z=0),
+            orientation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
         )
         self.pose_est.publish(
             PoseStamped(
