@@ -16,7 +16,7 @@ from waypoint_utils import load_waypoints, update_waypoints
 from qr_detector import DetectQRCodeTemplateMethod
 
 # Temp Imports
-roslib.load_manifest('ieee2016_simulator_new')
+roslib.load_manifest('ieee2016_simulator')
 import random
 
 from kd_tree import KDTree
@@ -552,7 +552,7 @@ class ros_manager():
 
                 # 1 is the map configuration where we start on the right, 2 is on the left.
                 if self.state_machine.map_version == 1:
-                    self.pose = np.array([0,0,0])
+                    self.pose = np.array([2.438-.2,.2,1.57])
                     nav_start.init_pose = self.pose
                     self.nav_start_pub.publish(nav_start)
 
@@ -562,7 +562,7 @@ class ros_manager():
                     nav_start.init_pose = self.pose
                     self.nav_start_pub.publish(nav_start)
 
-                    #self.state_machine.begin_2()
+                    self.state_machine.begin_2()
             else:
                 print "Error, no map version set."
 
@@ -680,6 +680,7 @@ class ros_manager():
                              .508, 0, .508, .303,        1, # Outside left side of truck wall
                              .520, .303, .528, .303,     1, # Front side of left truck wall
                              .528, .303, .528, 0,        1, # Inside left truck wall
+                             .528, .07, .710, .07,       1, # Back wall of truck
                              .710, 0, .710, .303,        1, # Inside right truck wall
                              .710, .303, .730, .303,     1, # Fron side of right truck wall 
                              .730, .303, .730, 0,        1, # Outside right side of truck
@@ -697,9 +698,13 @@ class ros_manager():
                              2.158, 1.795, 2.158, 2.075, 0, # Left side of box_1
                              2.158, 2.075, 2.438, 2.075, 0, # Front side of box_1
                         ]).astype(np.float32) 
-
+        # Flip map_2 over the y axis to get map_1
+        map_1 = np.copy(map_2.reshape(len(map_2)/5,5)).T
+        map_1[0] = 2.438 - map_1[0]
+        map_1[2] = 2.438 - map_1[2]
+        map_1 = map_1.T.flatten()
         if self.state_machine.map_version == 1:
-            return self.state_machine.map_version,[0]
+            return self.state_machine.map_version,map_1
         elif self.state_machine.map_version == 2:
             return self.state_machine.map_version,map_2
 
