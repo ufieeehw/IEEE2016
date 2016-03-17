@@ -4,6 +4,7 @@ import numpy as np
 import tf
 from std_msgs.msg import Header
 from geometry_msgs.msg import TwistStamped, Twist, Vector3, Pose, PoseStamped, Quaternion, Point
+from ieee2016_msgs.msg import StartNavigation
 
 import time
 
@@ -11,7 +12,7 @@ class Simulator():
     def __init__(self, starting_point):
         # ROS inits
         self.pose_est_pub = rospy.Publisher('/robot/pf_pose_est', PoseStamped, queue_size=10)
-        rospy.init_node('simulator')
+
         rospy.Subscriber("/robot/twist", TwistStamped, self.got_twist)
         
         self.tf_broad = tf.TransformBroadcaster()
@@ -71,5 +72,10 @@ class Simulator():
                 tf.transformations.quaternion_from_euler(0,0,self.pose[2]),
                 rospy.Time.now(), "base_link", "map")
 
+def start_navigation(msg):
+    s = Simulator(msg.init_pose)
+
 if __name__ == "__main__":
-    s = Simulator([.2,.2,1.57])
+    rospy.init_node('pose_simulator')
+    sub = rospy.Subscriber("/robot/start_navigation", StartNavigation, start_navigation)
+    rospy.spin()

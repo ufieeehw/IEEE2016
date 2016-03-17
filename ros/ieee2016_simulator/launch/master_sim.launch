@@ -6,8 +6,8 @@
       <node name="vehicle_control" pkg="ieee2016_controller" type="vehicle_controller.py" />
       <node name="arm_control" pkg="ieee2016_arm_control" type="arm_controller.py" output="screen" />
 
-      <node name="lidar_simulator" pkg="ieee2016_simulator_new" type="lidar_simulator.py" output="screen" />
-      <node name="pos_simulator" pkg="ieee2016_simulator_new" type="pos_simulator.py" output="screen" />
+      <node name="lidar_simulator" pkg="ieee2016_simulator" type="lidar_simulator.py" output="screen" />
+      <node name="pos_simulator" pkg="ieee2016_simulator" type="pos_simulator.py" output="screen" />
   </group>
 
   <!-- For remote control -->
