@@ -3,19 +3,24 @@ from __future__ import division
 
 import threading
 import serial
-import rospy
 import math
 import yaml
+import os
+import numpy as np
 
-import numpy
+import rospy
+import rospkg
 from std_msgs.msg import Header, Float64
 from xmega_connector.msg import XMEGAPacket
 from xmega_connector.srv import *
-from geometry_msgs.msg import TwistStamped, Twist, Vector3, PoseStamped, Pose, Point, Quaternion, PoseWithCovarianceStamped, PoseWithCovariance
+from geometry_msgs.msg import TwistStamped, Twist, Vector3, PoseStamped, Pose, Point, Quaternion, PoseWithCovarianceStamped, PoseWithCovariance, \
+                              TwistWithCovariance, TwistWithCovarianceStamped
 from sensor_msgs.msg import Imu
 from tf import transformations
 
-rospy.init_node('xmega_connector')#, log_level=rospy.DEBUG)
+
+rospack = rospkg.RosPack()
+CALIBRATION_FILE_URI = os.path.join(rospack.get_path('ieee2016_xmega_connector_ported'), 'scripts/')
 
 class XMEGAConnector(object):
 
@@ -70,138 +75,6 @@ class XMEGAConnector(object):
         connector_object.send_packet(ack_packet)
 
 
-connector_object = XMEGAConnector(rospy.get_param('~port'))
-
-xmega_lock = threading.Lock()
-
-
-def echo_service(echo_request):
-    xmega_lock.acquire(True)  # wait until lock can be acquired before proceeding
-    rospy.loginfo("XMEGA echo - about to echo: %s", echo_request.send)
-
-    packet = XMEGAPacket()
-    packet.msg_body = echo_request.send
-    packet.msg_type = 0x02  # 0x02 echo request, 0x03 echo reply
-    packet.msg_length = len(packet.msg_body) + 1
-
-    connector_object.send_packet(packet)
-    rospy.loginfo("XMEGA echo - sent echo request packet")
-    response_packet = connector_object.read_packet()
-    rospy.loginfo("XMEGA echo - received echo response packet")
-
-    rospy.loginfo("XMEGA echo - sending ack packet")
-    connector_object.send_ack()
-    rospy.loginfo("XMEGA echo - sent ack packet")
-
-    service_response = EchoResponse()
-    service_response.recv = response_packet.msg_body
-    rospy.loginfo("XMEGA echo - received response: %s", service_response.recv)
-    xmega_lock.release()
-    return service_response
-
-
-def set_wheel_speed_service(ws_req):
-    xmega_lock.acquire(True)
-    packet = XMEGAPacket()
-    packet.msg_type = 0x04
-
-    wheel1 = int(ws_req.wheel1 * 1000.0)
-    wheel2 = int(ws_req.wheel2 * 1000.0)
-    wheel3 = int(ws_req.wheel3 * 1000.0)
-    wheel4 = int(ws_req.wheel4 * 1000.0)
-
-    packet.msg_body = struct.pack('<llll', wheel1, wheel2, wheel3, wheel4)
-    packet.msg_length = len(packet.msg_body) + 1
-
-    connector_object.send_packet(packet)
-
-    xmega_lock.release()
-    return SetWheelSpeedsResponse()
-
-
-def get_odometry_service(odo_req):
-    xmega_lock.acquire(True)
-    packet = XMEGAPacket()
-    packet.msg_type = 0x05
-    packet.msg_length = 1
-
-    connector_object.send_packet(packet)
-
-    response_packet = connector_object.read_packet()
-    wheel1, wheel2, wheel3, wheel4 = struct.unpack("<iiii", response_packet.msg_body)
-    connector_object.send_ack()
-
-    service_response = GetOdometryResponse()
-    service_response.wheel1 = wheel1 / 1000.
-    service_response.wheel2 = wheel2 / 1000.
-    service_response.wheel3 = wheel3 / 1000.
-    service_response.wheel4 = wheel4 / 1000.
-    xmega_lock.release()
-
-    return service_response
-
-INCH = 25.4e-3
-width =  9.345*INCH
-length = 8.119*INCH
-
-wheels = [
-    ((-length/2, -width/2, 0), (+1, -1, 0)), # rear right
-    ((-length/2, +width/2, 0), (+1, +1, 0)), # rear left
-    ((+length/2, -width/2, 0), (+1, +1, 0)), # front right
-    ((+length/2, +width/2, 0), (+1, -1, 0)), # front left
-]
-
-wheel_diameter = 54e-3 # 54 mm
-wheel_radius = wheel_diameter / 2
-
-def get_heading_service(head_req):
-    xmega_lock.acquire(True)
-    packet = XMEGAPacket()
-    packet.msg_type = 0x0A
-    packet.msg_length = 1
-
-    connector_object.send_packet(packet)
-
-    response_packet = connector_object.read_packet()
-    xData, zData, yData = struct.unpack("<hhh", response_packet.msg_body)
-    connector_object.send_ack()
-
-    service_response = GetHeadingResponse()
-    service_response.xData = xData
-    service_response.zData = zData
-    service_response.yData = yData
-
-    xmega_lock.release()
-    return service_response
-
-def get_motion_service(m_req):
-    xmega_lock.acquire(True)
-    print("Lock aquired")
-    packet = XMEGAPacket()
-    packet.msg_type = 0x0B
-    packet.msg_length = 1
-
-    print("Sending message")
-    connector_object.send_packet(packet)
-
-    response_packet = connector_object.read_packet()
-    xAccelData, yAccelData, zAccelData, xGyroData, yGyroData, zGyroData = struct.unpack("<hhhhhh", response_packet.msg_body)
-    connector_object.send_ack()
-
-    print( "Creating response")
-    service_response = GetMotionResponse()
-    service_response.xAccelData = xAccelData
-    service_response.yAccelData = yAccelData
-    service_response.zAccelData = zAccelData
-    service_response.xGyroData = xGyroData
-    service_response.yGyroData = yGyroData
-    service_response.zGyroData = zGyroData
-
-    print( "Returning response")
-    xmega_lock.release()
-    return service_response
-
-
 class MagnetometerManager():
     '''
     This whole file is pretty messy, so I'm going to put this here so I don't have to 
@@ -209,33 +82,28 @@ class MagnetometerManager():
 
     Deals with publishing Magnetometer date. I think this will be a pose with only rotation being changed.
     '''
-    def __init__(self, calibration_file_name = "calibration.yaml"):
+    def __init__(self, service_manager, calibration_file_name = "calibration.yaml"):
         self.pose_est_pub = rospy.Publisher("/robot/navigation/mag_pose_vis", PoseStamped, queue_size=2) 
         self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/mag_pose', PoseWithCovarianceStamped, queue_size=10)
 
-        with open(calibration_file_name, 'r') as infile:
+        file_name = str(CALIBRATION_FILE_URI + calibration_file_name)
+        with open(file_name, 'r') as infile:
             data = yaml.load(infile)
         
         self.correction_matrix = np.matrix(data['correction_matrix'])
         rospy.loginfo("Magnetometer calibration file loaded!")
 
+        self.service_manager = service_manager
+
+        # New service to get corrected heading
         rospy.Service('~get_heading_corrected', GetHeading, self.get_heading_service)
 
+
     def get_heading_service(self,srv):
-        # Most of the xmega stuff comes from get_heading_service
-        xmega_lock.acquire(True)
-        packet = XMEGAPacket()
-        packet.msg_type = 0x0A
-        packet.msg_length = 1
+        # Get the raw heading from the service (but do it locally, not over ros.)
+        heading = self.service_manager.get_heading_service(None)
 
-        connector_object.send_packet(packet)
-
-        response_packet = connector_object.read_packet()
-        xData, zData, yData = struct.unpack("<hhh", response_packet.msg_body)
-        connector_object.send_ack()
-        xmega_lock.release()
-
-        xData,yData = self.correct_mag_data(xData,yData)
+        xData,yData = self.correct_mag_data(heading.xData,heading.yData)
 
         service_response = GetHeadingResponse()
         service_response.xData = xData
@@ -245,32 +113,21 @@ class MagnetometerManager():
         return service_response
 
     def publish_mag_data(self):
-        # Most of the xmega stuff comes from get_heading_service
-        xmega_lock.acquire(True)
-        packet = XMEGAPacket()
-        packet.msg_type = 0x0A
-        packet.msg_length = 1
-
-        connector_object.send_packet(packet)
-
-        response_packet = connector_object.read_packet()
-        xData, zData, yData = struct.unpack("<hhh", response_packet.msg_body)
-        connector_object.send_ack()
-        xmega_lock.release()
-
-        corrected_point = self.correct_mag_data(xData,yData)
+        # Get the raw heading from the service (but do it locally, not over ros.)
+        heading = heading = self.service_manager.get_heading_service(None)
+        corrected_point = self.correct_mag_data(heading.xData,heading.yData)
         angle = np.arctan2(corrected_point[1],corrected_point[0])
         self.generate_pose(angle)
 
     def correct_mag_data(self,xData,yData):
         # Take the corrective matrix and adjust the measured point with it
         point = np.array([[xData],[yData],[1]])
-        corrected_point = np.dot(self.correction_matrix,points)
+        corrected_point = np.dot(self.correction_matrix,point)
         return corrected_point
         
     def generate_pose(self, angle):
         # Generate a pose, all values but the yaw will be 0.
-        q = tf.transformations.quaternion_from_euler(0, 0, angle)
+        q = transformations.quaternion_from_euler(0, 0, angle)
         header = Header(
             stamp=rospy.Time.now(),
             frame_id="map"
@@ -305,56 +162,143 @@ class MagnetometerManager():
         self.p_c_s_est_pub.publish(p_c_s)
 
 
-xyz_array = lambda o: numpy.array([o.x, o.y, o.z])
+class ServiceManager():
+    def __init__(self, connector_object, xmega_lock):
+        # Initialize xmega services
+        rospy.Service('~echo', Echo, self.echo_service)
+        rospy.Service('~set_wheel_speeds', SetWheelSpeeds, self.set_wheel_speed_service)
+        rospy.Service('~get_odometry', GetOdometry, self.get_odometry_service)
+        rospy.Service('~get_heading', GetHeading, self.get_heading_service)
+        rospy.Service('~get_motion', GetMotion, self.get_motion_service)
+        
+        self.connector_object = connector_object
+        self.xmega_lock = xmega_lock
 
-magnetometer = MagnetometerManager()
+    def echo_service(self, echo_request):
+        self.xmega_lock.acquire(True)  # wait until lock can be acquired before proceeding
+        rospy.loginfo("XMEGA echo - about to echo: %s", echo_request.send)
 
-rospy.Service('~echo', Echo, echo_service)
-rospy.Service('~set_wheel_speeds', SetWheelSpeeds, set_wheel_speed_service)
-rospy.Service('~get_odometry', GetOdometry, get_odometry_service)
-rospy.Service('~get_heading', GetHeading, get_heading_service)
-rospy.Service('~get_motion', GetMotion, get_motion_service)
+        packet = XMEGAPacket()
+        packet.msg_body = echo_request.send
+        packet.msg_type = 0x02  # 0x02 echo request, 0x03 echo reply
+        packet.msg_length = len(packet.msg_body) + 1
 
-heading_proxy = rospy.ServiceProxy('~get_heading', GetHeading)
-# odom_pub = rospy.Publisher('odom', PoseStamped)
-# imu_pub = rospy.Publisher('imu', Imu, queue_size=1)
+        self.connector_object.send_packet(packet)
+        rospy.loginfo("XMEGA echo - sent echo request packet")
+        response_packet = self.connector_object.read_packet()
+        rospy.loginfo("XMEGA echo - received echo response packet")
 
-rate = rospy.Rate(10) #hz
-while not rospy.is_shutdown():
-    rate.sleep()
-    magnetometer.publish_mag_data()
+        rospy.loginfo("XMEGA echo - sending ack packet")
+        self.connector_object.send_ack()
+        rospy.loginfo("XMEGA echo - sent ack packet")
 
-    
-    
-    continue
-    # stamp = rospy.Time.now()
-    # resp = heading_proxy()
-    # mx = resp.xData
-    # mz = resp.zData
-    # my = resp.yData
+        service_response = EchoResponse()
+        service_response.recv = response_packet.msg_body
+        rospy.loginfo("XMEGA echo - received response: %s", service_response.recv)
+        self.xmega_lock.release()
+        return service_response
 
 
-    # IMU_msg = Imu(
-    #     header=Header(
-    #         stamp=rospy.Time.now(),
-    #         frame_id='/robot',
-    #     ),
-    #     orientation=Quaternion(x=mx, y=my, z=mz), 
-    #     orientation_covariance=
-    #         [0.03**2, 0,       0,
-    #          0,       0.03**2, 0,
-    #          0,       0,       0.03**2,],
-    #     # angular_velocity=Vector3(*angular_vel), # This was a hack to display mag_orientation est
-    #     # angular_velocity=Vector3(*mag_orientation),
-    #     # angular_velocity_covariance=
-    #         # [0.03**2, 0,       0,
-    #          # 0,       0.03**2, 0,
-    #          # 0,       0,       0.03**2,],
+    def set_wheel_speed_service(self, ws_req):
+        self.xmega_lock.acquire(True)
+        packet = XMEGAPacket()
+        packet.msg_type = 0x04
 
-    #     # linear_acceleration=Vector3(*linear_acc),
-    #     # linear_acceleration_covariance=
-    #         # [0.03**2, 0,       0,
-    #          # 0,       0.03**2, 0,
-    #          # 0,       0,       0.03**2,],
-    # )
-    # # imu_pub.publish(IMU_msg)
+        wheel1 = int(ws_req.wheel1 * 1000.0)
+        wheel2 = int(ws_req.wheel2 * 1000.0)
+        wheel3 = int(ws_req.wheel3 * 1000.0)
+        wheel4 = int(ws_req.wheel4 * 1000.0)
+
+        packet.msg_body = struct.pack('<llll', wheel1, wheel2, wheel3, wheel4)
+        packet.msg_length = len(packet.msg_body) + 1
+
+        self.connector_object.send_packet(packet)
+
+        self.xmega_lock.release()
+        return SetWheelSpeedsResponse()
+
+
+    def get_odometry_service(self, odo_req):
+        self.xmega_lock.acquire(True)
+        packet = XMEGAPacket()
+        packet.msg_type = 0x05
+        packet.msg_length = 1
+
+        self.connector_object.send_packet(packet)
+
+        response_packet = self.connector_object.read_packet()
+        wheel1, wheel2, wheel3, wheel4 = struct.unpack("<iiii", response_packet.msg_body)
+        self.connector_object.send_ack()
+
+        service_response = GetOdometryResponse()
+        service_response.wheel1 = wheel1 / 1000.
+        service_response.wheel2 = wheel2 / 1000.
+        service_response.wheel3 = wheel3 / 1000.
+        service_response.wheel4 = wheel4 / 1000.
+        self.xmega_lock.release()
+
+        return service_response
+
+    def get_heading_service(self, head_req):
+        self.xmega_lock.acquire(True)
+        packet = XMEGAPacket()
+        packet.msg_type = 0x0A
+        packet.msg_length = 1
+
+        self.connector_object.send_packet(packet)
+
+        response_packet = self.connector_object.read_packet()
+        xData, zData, yData = struct.unpack("<hhh", response_packet.msg_body)
+        self.connector_object.send_ack()
+
+        service_response = GetHeadingResponse()
+        service_response.xData = xData
+        service_response.zData = zData
+        service_response.yData = yData
+
+        self.xmega_lock.release()
+        return service_response
+
+    def get_motion_service(self, m_req):
+        self.xmega_lock.acquire(True)
+        print("Lock aquired")
+        packet = XMEGAPacket()
+        packet.msg_type = 0x0B
+        packet.msg_length = 1
+
+        print("Sending message")
+        self.connector_object.send_packet(packet)
+
+        response_packet = self.connector_object.read_packet()
+        xAccelData, yAccelData, zAccelData, xGyroData, yGyroData, zGyroData = struct.unpack("<hhhhhh", response_packet.msg_body)
+        self.connector_object.send_ack()
+
+        print( "Creating response")
+        service_response = GetMotionResponse()
+        service_response.xAccelData = xAccelData
+        service_response.yAccelData = yAccelData
+        service_response.zAccelData = zAccelData
+        service_response.xGyroData = xGyroData
+        service_response.yGyroData = yGyroData
+        service_response.zGyroData = zGyroData
+
+        print( "Returning response")
+        self.xmega_lock.release()
+        return service_response
+
+
+if __name__ == "__main__":
+
+    rospy.init_node('xmega_connector')#, log_level=rospy.DEBUG)
+
+    connector_object = XMEGAConnector(rospy.get_param('~port'))
+    xmega_lock = threading.Lock()
+
+    # Define objects
+    xmega_services = ServiceManager(connector_object,xmega_lock)
+    magnetometer = MagnetometerManager(xmega_services)
+
+    rate = rospy.Rate(10) #hz
+    while not rospy.is_shutdown():
+        rate.sleep()
+        magnetometer.publish_mag_data()
