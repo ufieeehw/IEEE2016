@@ -1,17 +1,17 @@
 #!/usr/bin/python
-
 from __future__ import division
 
 import threading
 import serial
 import rospy
 import math
+import yaml
 
 import numpy
 from std_msgs.msg import Header, Float64
 from xmega_connector.msg import XMEGAPacket
 from xmega_connector.srv import *
-from geometry_msgs.msg import TwistStamped, Twist, Vector3, PoseStamped, Pose, Point, Quaternion
+from geometry_msgs.msg import TwistStamped, Twist, Vector3, PoseStamped, Pose, Point, Quaternion, PoseWithCovarianceStamped, PoseWithCovariance
 from sensor_msgs.msg import Imu
 from tf import transformations
 
@@ -201,7 +201,113 @@ def get_motion_service(m_req):
     xmega_lock.release()
     return service_response
 
+
+class MagnetometerManager():
+    '''
+    This whole file is pretty messy, so I'm going to put this here so I don't have to 
+    be annoyed with it.
+
+    Deals with publishing Magnetometer date. I think this will be a pose with only rotation being changed.
+    '''
+    def __init__(self, calibration_file_name = "calibration.yaml"):
+        self.pose_est_pub = rospy.Publisher("/robot/navigation/mag_pose_vis", PoseStamped, queue_size=2) 
+        self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/mag_pose', PoseWithCovarianceStamped, queue_size=10)
+
+        with open(calibration_file_name, 'r') as infile:
+            data = yaml.load(infile)
+        
+        self.correction_matrix = np.matrix(data['correction_matrix'])
+        rospy.loginfo("Magnetometer calibration file loaded!")
+
+        rospy.Service('~get_heading_corrected', GetHeading, self.get_heading_service)
+
+    def get_heading_service(self,srv):
+        # Most of the xmega stuff comes from get_heading_service
+        xmega_lock.acquire(True)
+        packet = XMEGAPacket()
+        packet.msg_type = 0x0A
+        packet.msg_length = 1
+
+        connector_object.send_packet(packet)
+
+        response_packet = connector_object.read_packet()
+        xData, zData, yData = struct.unpack("<hhh", response_packet.msg_body)
+        connector_object.send_ack()
+        xmega_lock.release()
+
+        xData,yData = self.correct_mag_data(xData,yData)
+
+        service_response = GetHeadingResponse()
+        service_response.xData = xData
+        service_response.zData = zData
+        service_response.yData = yData
+
+        return service_response
+
+    def publish_mag_data(self):
+        # Most of the xmega stuff comes from get_heading_service
+        xmega_lock.acquire(True)
+        packet = XMEGAPacket()
+        packet.msg_type = 0x0A
+        packet.msg_length = 1
+
+        connector_object.send_packet(packet)
+
+        response_packet = connector_object.read_packet()
+        xData, zData, yData = struct.unpack("<hhh", response_packet.msg_body)
+        connector_object.send_ack()
+        xmega_lock.release()
+
+        corrected_point = self.correct_mag_data(xData,yData)
+        angle = np.arctan2(corrected_point[1],corrected_point[0])
+        self.generate_pose(angle)
+
+    def correct_mag_data(self,xData,yData):
+        # Take the corrective matrix and adjust the measured point with it
+        point = np.array([[xData],[yData],[1]])
+        corrected_point = np.dot(self.correction_matrix,points)
+        return corrected_point
+        
+    def generate_pose(self, angle):
+        # Generate a pose, all values but the yaw will be 0.
+        q = tf.transformations.quaternion_from_euler(0, 0, angle)
+        header = Header(
+            stamp=rospy.Time.now(),
+            frame_id="map"
+        )
+        pose = Pose(
+            position=Point(x=0, y=0, z=0),
+            orientation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3],)
+        )
+
+        # Publish pose stamped - just for displaying in rviz
+        self.pose_est_pub.publish(
+            PoseStamped(
+                header=header,
+                pose=pose
+            )
+        )
+
+        # Publish pose with covariance stamped.
+        p_c_s = PoseWithCovarianceStamped()
+        p_c = PoseWithCovariance()
+        covariance = np.array([.05,   0,   0,   0,   0,   0,
+                                 0, .05,   0,   0,   0,   0,
+                                 0,   0, .05,   0,   0,   0,
+                                 0,   0,   0, .05,   0,   0,
+                                 0,   0,   0,   0, .05,   0,
+                                 0,   0,   0,   0,   0, .05])**2
+        p_c.pose = pose
+        p_c.covariance = covariance
+        p_c_s.header = header
+        p_c_s.pose = p_c
+        # Publish pose estimation
+        self.p_c_s_est_pub.publish(p_c_s)
+
+
 xyz_array = lambda o: numpy.array([o.x, o.y, o.z])
+
+magnetometer = MagnetometerManager()
 
 rospy.Service('~echo', Echo, echo_service)
 rospy.Service('~set_wheel_speeds', SetWheelSpeeds, set_wheel_speed_service)
@@ -213,39 +319,42 @@ heading_proxy = rospy.ServiceProxy('~get_heading', GetHeading)
 # odom_pub = rospy.Publisher('odom', PoseStamped)
 # imu_pub = rospy.Publisher('imu', Imu, queue_size=1)
 
+rate = rospy.Rate(10) #hz
 while not rospy.is_shutdown():
-    rospy.sleep(rospy.Duration(0.1))
-    # odom = get_odometry_service(None)
-    stamp = rospy.Time.now()
+    rate.sleep()
+    magnetometer.publish_mag_data()
+
+    
     
     continue
-    resp = heading_proxy()
-    mx = resp.xData
-    mz = resp.zData
-    my = resp.yData
+    # stamp = rospy.Time.now()
+    # resp = heading_proxy()
+    # mx = resp.xData
+    # mz = resp.zData
+    # my = resp.yData
 
 
-    IMU_msg = Imu(
-        header=Header(
-            stamp=rospy.Time.now(),
-            frame_id='/robot',
-        ),
-        orientation=Quaternion(x=mx, y=my, z=mz), 
-        orientation_covariance=
-            [0.03**2, 0,       0,
-             0,       0.03**2, 0,
-             0,       0,       0.03**2,],
-        # angular_velocity=Vector3(*angular_vel), # This was a hack to display mag_orientation est
-        # angular_velocity=Vector3(*mag_orientation),
-        # angular_velocity_covariance=
-            # [0.03**2, 0,       0,
-             # 0,       0.03**2, 0,
-             # 0,       0,       0.03**2,],
+    # IMU_msg = Imu(
+    #     header=Header(
+    #         stamp=rospy.Time.now(),
+    #         frame_id='/robot',
+    #     ),
+    #     orientation=Quaternion(x=mx, y=my, z=mz), 
+    #     orientation_covariance=
+    #         [0.03**2, 0,       0,
+    #          0,       0.03**2, 0,
+    #          0,       0,       0.03**2,],
+    #     # angular_velocity=Vector3(*angular_vel), # This was a hack to display mag_orientation est
+    #     # angular_velocity=Vector3(*mag_orientation),
+    #     # angular_velocity_covariance=
+    #         # [0.03**2, 0,       0,
+    #          # 0,       0.03**2, 0,
+    #          # 0,       0,       0.03**2,],
 
-        # linear_acceleration=Vector3(*linear_acc),
-        # linear_acceleration_covariance=
-            # [0.03**2, 0,       0,
-             # 0,       0.03**2, 0,
-             # 0,       0,       0.03**2,],
-    )
-    # imu_pub.publish(IMU_msg)
+    #     # linear_acceleration=Vector3(*linear_acc),
+    #     # linear_acceleration_covariance=
+    #         # [0.03**2, 0,       0,
+    #          # 0,       0.03**2, 0,
+    #          # 0,       0,       0.03**2,],
+    # )
+    # # imu_pub.publish(IMU_msg)
