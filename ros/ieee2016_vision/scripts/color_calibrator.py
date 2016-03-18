@@ -96,6 +96,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		super(self.__class__, self).__init__()
 		self.setupUi(self)
 		self.connect_ui()
+		self.no_file_interface()
 		self.show()
 
 	def connect_ui(self):
@@ -148,31 +149,138 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		stderr = OutputWrapper(self, False)
 		stderr.outputWritten.connect(self.printOutput)
 
+	def no_file_interface(self):
+		'''
+		Disables all gui objects that are not useable until a file is loaded.
+		'''
+		# Color selection
+		self.selection_color_label.setEnabled(False)
+		self.selection_color_setting.setEnabled(False)
+
+		# Color management
+		self.new_color_name_setting.setEnabled(False)
+		self.new_color_button.setEnabled(False)
+		self.delete_color_button.setEnabled(False)
+
+		# Selection management
+		self.selection_managment_group.setEnabled(False)
+
+		# Overlap prevention
+		self.overlap_prevention_group.setEnabled(False)
+
+		# Calibration button
+		self.detection_color_label.setEnabled(False)
+		self.calibrate_button.setEnabled(False)
+
+		# Detection management
+		self.detection_color_label.setEnabled(False)
+		self.detection_color_setting.setEnabled(False)
+
+		# Color detection
+		self.selections_to_average_label.setEnabled(False)
+		self.averaging_setting.setEnabled(False)
+
+		# Display type
+		self.display_type_group.setEnabled(False)
+
+		# Color HSV Ranges
+		self.color_ranges_group.setEnabled(False)
+
+	def file_loaded_interface(self):
+		'''
+		Enables all gui objects that are not dependent on colors being set.
+		'''
+		# Color selection
+		self.selection_color_label.setEnabled(True)
+		self.selection_color_setting.setEnabled(True)
+
+		# Color management
+		self.new_color_name_setting.setEnabled(True)
+		self.new_color_button.setEnabled(True)
+		self.delete_color_button.setEnabled(True)
+
+		# Color detection
+		self.selections_to_average_label.setEnabled(True)
+		self.averaging_setting.setEnabled(True)
+
+		# Detection management
+		self.detection_color_label.setEnabled(True)
+		self.detection_color_setting.setEnabled(True)
+
+		# Display type
+		self.display_type_group.setEnabled(True)
+
+	def calibration_interface(self, stage):
+		'''
+		Freezes parts of the interface that could interfere with an ongoing
+		calibration and sets the detection frame, averaging setting, and
+		HSV values based on incomming calibration data.
+		'''
+		# Disable parts of the interface that could interfere with the calibration
+		if (stage == "capture"):
+
+			# Uses the no loaded file interface as a base
+			self.no_file_interface()
+
+			# Display type
+			self.display_type_group.setEnabled(True)
+
+			# Holds the detection color so it can be restored after calibration
+			self.detection_color_hold = self.detection_color
+			self.calibrate_button.setEnabled(True)
+
+		# Update relevant areas of the interface to display ongoing calibration data
+		elif (stage == "update"):
+			pass
+
+		# Enable the interface to the extent that it was enabled before calibration
+		elif (stage == "release"):
+
+			# Restores the detection color setting that was stored earlier
+			self.detection_color = self.detection_color_hold
+
+			# Enable parts of the intrerface that were enabled before calibration
+			self.file_loaded_interface()
+			self.update_selection_color()
+			self.update_detection_color()
+
 	def save_file(self):
+		'''
+		Saves the calibration file using the save method in it's c;ass object.
+		'''
 		self.calibration_file.save()
 
 	def load_file(self):
+		'''
+		Loads a file using the QtGui file browser with the default home
+		directory set to the directory that the script was run from. Makes sure
+		that no detection or selection image is being displayed before
+		reloading the color list.
+		'''
 		file = QtGui.QFileDialog.getOpenFileName(self.central_widget, "Load Calibration File", os.getcwd(), "JSON (*.json);;All files (*)")
 
-		# Terminates the displaying of a color that is to be deleted
- 		self.display.loop_selection = False
- 		if (self.detection_color == self.selection_color):
- 			self.display.loop_detection = False
+		if (file):
 
-		# Will not delete the calibration until both displays stop using it
- 			while (self.detection_thread.isAlive()):
- 				continue
- 		while (self.selection_thread.isAlive()):
- 			continue
+			# Terminates the displaying of a color that is to be deleted
+	 		self.display.loop_selection = False
+	 		if (self.detection_color == self.selection_color):
+	 			self.display.loop_detection = False
 
-		# Clears the image frame if no color is selected
- 		if (self.selection_color == ""):
- 			self.selection_frame.clear()
- 		if (self.detection_color == ""):
- 			self.detection_frame.clear()
+			# Will not delete the calibration until both displays stop using it
+	 			while (self.detection_thread.isAlive()):
+	 				continue
+	 		while (self.selection_thread.isAlive()):
+	 			continue
 
-		self.calibration_file = CalibrationData(file)
-		self.update_color_list()
+			# Clears the image frame if no color is selected
+	 		if (self.selection_color == ""):
+	 			self.selection_frame.clear()
+	 		if (self.detection_color == ""):
+	 			self.detection_frame.clear()
+
+			self.calibration_file = CalibrationData(file)
+			self.update_color_list()
+			self.file_loaded_interface()
 
 	def update_frame(self, frame, display_to):
 		'''
@@ -261,19 +369,40 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			except:
 				pass
 
+			# Enable selection management
+			self.selection_managment_group.setEnabled(True)
+
+			# Enable overlap prevention
+			self.overlap_prevention_group.setEnabled(True)
+
+			# Enable calibration button
+			self.detection_color_label.setEnabled(True)
+			self.calibrate_button.setEnabled(True)
+
 			# Set the slider values to those stored for the selection color
 			self.x1_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][0][0])
 			self.x2_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][1][0])
 			self.y1_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][0][1])
 			self.y2_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][2][1])
 
-		# If no selection color is set, disable frame display
 		else:
 			self.selection_color = ""
+
+			# If no selection color is set, disable frame display
 			try:
 				self.display.loop_selection = False
 			except:
 				pass
+
+			# Disable selection management
+			self.selection_managment_group.setEnabled(False)
+
+			# Disable overlap prevention
+			self.overlap_prevention_group.setEnabled(False)
+
+			# Disable calibration button
+			self.detection_color_label.setEnabled(False)
+			self.calibrate_button.setEnabled(False)
 
 	def update_detection_color(self):
 		'''
@@ -298,25 +427,22 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 				pass
 
 			# Enable the HSV value display and populate it
-			self.minimum_hsv_text.setEnabled(True)
-			self.maximum_hsv_text.setEnabled(True)
+			self.color_ranges_group.setEnabled(True)
 			self.load_hsv_boxes()
 
-		# Disables the display and editor if no color is set
 		else:
 			self.detection_color = ""
 
-			# Attempt to start
+			# If no selection color is set, disable frame display
 			try:
 				self.display.loop_detection = False
 			except:
 				pass
 
 			# Clear and disable the HSV value display
+			self.color_ranges_group.setEnabled(False)
 			self.minimum_hsv_text.clear()
 			self.maximum_hsv_text.clear()
-			self.minimum_hsv_text.setEnabled(False)
-			self.maximum_hsv_text.setEnabled(False)
 
 	def clear_new_name(self):
 		'''
@@ -495,17 +621,17 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 				print("ERROR: The values entered must be integers")
 				return None
 		else:
-			print("ERROR: One of the HSV ranges is not formatted properly")
+			print("ERROR: One or more of the HSV ranges is not formatted properly")
 			return None
 
 		# Ensures that the HSV values are within the range limits
 		for value in minimum_values:
 			if not (value >= 0 and value <= 255):
-				print("ERROR: One of the HSV values is out of the expected range of [0, 255]")
+				print("ERROR: One or more of the HSV values is out of the expected range of [0, 255]")
 				return None
 		for value in maximum_values:
 			if not (value >= 0 and value <= 255):
-				print("ERROR: One of the HSV values is out of the expected range of [0, 255]")
+				print("ERROR: One or more of the HSV values is out of the expected range of [0, 255]")
 				return None
 
 		# Saves the values to the calibration object
@@ -571,8 +697,8 @@ class ImageDisplay(QtCore.QObject):
 				self.selection_frame = image.frame
 				self.selection_frame_updated.emit()
 
-				# Keep the refresh rate at or below 60 FPS
-				time.sleep(0.017)
+				# Keep the refresh rate at or below 20 FPS
+				time.sleep(0.05)
 
 			# Clears the image if no color is selected
 			else:
@@ -622,8 +748,8 @@ class ImageDisplay(QtCore.QObject):
 				self.detection_frame = image.frame
 				self.detection_frame_updated.emit()
 
-				# Keep the refresh rate at or below 60 FPS
-				time.sleep(0.02)
+				# Keep the refresh rate at or below 20 FPS
+				time.sleep(0.05)
 
 			# Clears the image if no color is selected
 			else:

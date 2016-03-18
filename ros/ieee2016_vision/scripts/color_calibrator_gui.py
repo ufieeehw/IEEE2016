@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'color_calibrator_gui.ui'
 #
-# Created: Tue Mar 15 22:56:10 2016
+# Created: Thu Mar 17 18:56:52 2016
 #      by: PyQt4 UI code generator 4.11.2
 #
 # WARNING! All changes made in this file will be lost!
@@ -266,6 +266,7 @@ class Ui_MainWindow(object):
         self.gridLayout_4 = QtGui.QGridLayout(self.logging_group)
         self.gridLayout_4.setObjectName(_fromUtf8("gridLayout_4"))
         self.log_output_box = QtGui.QPlainTextEdit(self.logging_group)
+        self.log_output_box.setReadOnly(True)
         self.log_output_box.setObjectName(_fromUtf8("log_output_box"))
         self.gridLayout_4.addWidget(self.log_output_box, 0, 0, 1, 1)
         self.vertical_layout_2.addWidget(self.logging_group)
