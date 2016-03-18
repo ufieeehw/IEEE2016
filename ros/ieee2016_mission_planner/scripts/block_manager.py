@@ -491,7 +491,7 @@ class BlockServer():
     def got_block(self,msg):
         # Find the camera that this image was taken in and transform points appropriately.
         camera = [c for c in self.cameras if c.name == msg.header.frame_id][0]
-        map_point = self.intersector.intersect_point(camera, msg.point, time=msg.header.stamp)
+        map_point = self.intersector.intersect_point(camera, msg.point, time=msg.header.stamp, offset=msg.offset)
         self.k.insert_unique_average(map_point,msg.color)
 
 

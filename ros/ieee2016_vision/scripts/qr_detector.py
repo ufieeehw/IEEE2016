@@ -256,12 +256,13 @@ class DetectQRCodeTemplateMethod(object):
                 rot_mat = cv2.getRotationMatrix2D((cols/2,rows/2),theta,1)
                 cv2.imwrite(self.base_path+color+"/"+str(theta)+".jpg",cv2.warpAffine(template,rot_mat,(cols,rows)))
 
-    def match_templates(self, dist, camera):
+    def match_templates(self, dist, camera, offset=0):
         '''
         Called by main program to process an image from the specified camera and to find QR Codes in that image.
         
         This method takes in the distance to the blocks. We will probably work at 2-4 different distances. Close up and far
-            away for both full blocks and the back half blocks
+            away for both full blocks and the back half blocks. Offset is required so that we know if we are looking for half
+            blocks or full blocks.
 
         This method will publish BlockStamped messages that can be recived by the processing node.
         '''
@@ -286,7 +287,7 @@ class DetectQRCodeTemplateMethod(object):
                     res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                     loc = np.where( res >= threshold)
                     for pt in zip(*loc[::-1]):
-                        self.publish_block(pt+mid_point,"blue")
+                        self.publish_block(pt+mid_point,"blue",offset)
                         cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
 
             elif frame_count == 1:
@@ -296,7 +297,7 @@ class DetectQRCodeTemplateMethod(object):
                     res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                     loc = np.where( res >= threshold)
                     for pt in zip(*loc[::-1]):
-                        self.publish_block(pt+mid_point,"red")
+                        self.publish_block(pt+mid_point,"red",offset)
                         cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
 
             elif frame_count == 2:
@@ -306,7 +307,7 @@ class DetectQRCodeTemplateMethod(object):
                     res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                     loc = np.where( res >= threshold)
                     for pt in zip(*loc[::-1]):
-                        self.publish_block(pt+mid_point,"green")
+                        self.publish_block(pt+mid_point,"green",offset)
                         cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
 
             elif frame_count == 3:
@@ -316,7 +317,7 @@ class DetectQRCodeTemplateMethod(object):
                     res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                     loc = np.where( res >= threshold)
                     for pt in zip(*loc[::-1]):
-                        self.publish_block(pt+mid_point,"yellow")
+                        self.publish_block(pt+mid_point,"yellow",offset)
                         cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
 
             # Only for displaying
