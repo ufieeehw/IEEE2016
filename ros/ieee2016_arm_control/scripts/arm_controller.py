@@ -8,6 +8,7 @@ from geometry_msgs.msg import TwistStamped, Twist, Vector3, Pose, PoseStamped, Q
 from ieee2016_msgs.srv import ArmWaypoint, NavWaypoint
 
 import time
+import maestro
 
 """
 The goal here is to take some desired position and move the arm into that position.
@@ -125,4 +126,40 @@ class ArmController():
         else:
             print "Too high! Can not move to height:",des_height
 
-a = ArmController()
+class ServoController():
+    '''
+    This will control each servo.
+
+    Pass it a list of end effectors and it will assign each gripper to a servo port. It gives control
+    such that the only the end effector and gripper number is required to actuate a servo.
+    
+    ID's will be assigned as follows: 0:L0 1:L1 ... 6:R2 7:R3 (where L0 is the leftmost gripper on the left end effetor)
+    '''
+    def __init__(self, *ee):
+        self.ee_list = ee
+
+        # Populate list of servos, associating each with a port on the maestro.
+        index = 0
+        for ee in self.ee_list
+            for gripper in ee.gripper_positions:
+                gripper.servo_id = index
+                index += 1
+        
+        self.servos = maestro.Controller()
+        # Calibration list contains [closed,open] positions for each of the servos (servo 0 is at index 0 and 1).
+        self.calibration_list = [[900,1100]] * 8 # Not sure what the actual values are for this yet.
+
+    def close_grippers(self, ee, *grippers_to_actuate):
+        #Given an end effector and a list of grippers to close on that ee, close them.
+        for gripper_number in grippers_to_actuate:
+            servo_id = ee.gripper_positions[gripper_number].servo_id
+            servos.setTarget(servo_id, self.calibration_list[servo_id][0])
+
+    def open_grippers(self, ee, *grippers_to_actuate):
+        #Given an end effector and a list of grippers to open on that ee, open them.
+        for gripper_number in grippers_to_actuate:
+            servo_id = ee.gripper_positions[gripper_number].servo_id
+            servos.setTarget(servo_id, self.calibration_list[servo_id][1])
+
+if __name__ == "__main__":
+    a = ArmController()

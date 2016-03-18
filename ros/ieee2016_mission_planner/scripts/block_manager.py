@@ -37,6 +37,7 @@ class Gripper():
     def __init__(self, parent_ee_number, gripper_number, block):
         self.frame_id = str(parent_ee_number) + "-G" + str(gripper_number)
         self.block = block
+        self.servo_id = None
 
     def  __repr__(self):
         return str(self.frame_id + ":" + self.block.color)
@@ -75,13 +76,13 @@ class EndEffector():
         print self.gripper_positions
     
     def pickup(self, block, gripper):
-        # Adds the block to gripper specified
+        # Adds the block to grippers specified. More of a virtual pickup - only adds block to this gripper object.
         g = self.gripper_positions.index(gripper)
         self.gripper_positions[g].block = block
         self.holding += 1
 
     def drop(self, grippers):
-        # Adds the block to gripper specified
+        # Drops blocks in the grippers specified. More of a virtual drop.
         #if len(grippers) == 1: grippers = [grippers]
         print grippers
         for gripper in grippers:
@@ -491,7 +492,7 @@ class BlockServer():
         # Find the camera that this image was taken in and transform points appropriately.
         camera = [c for c in self.cameras if c.name == msg.header.frame_id][0]
         map_point = self.intersector.intersect_point(camera, msg.point, time=msg.header.stamp)
-        self.k.insert_unique(map_point,msg.color)
+        self.k.insert_unique_average(map_point,msg.color)
 
 
 
