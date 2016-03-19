@@ -18,6 +18,8 @@ class CalibrateServos():
             'X': sets the current servo (where X is an integer).
             'closed': sets the current position as the closed position for the current servo.
             'opened': sets the current position as the open position for the current servo.
+            'close': moves servo to closed position.
+            'open': moves servo to opened position.
             'load': loads past calibration data. Loading overwrites current calbriation data.
             'save': saves the calibration data. Saving overwrites past calibration data.
             'exit_save': exits and saves calibration data. Saving overwrites past calibration data. 
@@ -26,19 +28,27 @@ class CalibrateServos():
 
     Due to some threading stuff, ctrl-C maybe need to be followed by the return key.
     '''
-    def __init__(self, min_range=0, max_range=1500):
+    def __init__(self, min_range=672, max_range=2608):
         self.running = True
         img = np.zeros((1,1000), np.uint8)
         cv2.namedWindow('parameters')
         cv2.createTrackbar('value','parameters', min_range, max_range, self.update_servo_position)
 
+        self.min_range = min_range
+        self.max_range = max_range
+
         self.servos = maestro.Controller()
         self.current_servo = None
-        self.current_position = 0
+        self.current_position = min_range
         self.load_data()
 
         command_listener = threading.Thread(target=self.command_listener)
         command_listener.start()
+
+        for servo in range(12):
+            self.servos.set_range(servo, self.min_range, self.max_range)
+            self.servos.set_speed(servo, 200)
+            self.servos.set_acceleration(servo, 200)
 
         while self.running:
             try:
@@ -50,9 +60,11 @@ class CalibrateServos():
 
     def update_servo_position(self, position):
         if self.current_servo is not None:
+            if position < self.min_range or position > self.max_range:
+                return
             self.current_position = position
-            self.servos.setTarget(self.current_servo, position)
-            print position
+            self.servos.set_target(self.current_servo, self.current_position)
+            #print position
 
     def command_listener(self):
         while self.running:
@@ -62,12 +74,20 @@ class CalibrateServos():
             if command == 'closed':
                 this_data = self.calibration_data[self.current_servo]
                 this_data['closed'] = self.current_position
-                print "Saved %i as servo %i's closed position."%(self.current_servo,self.current_position)
+                print "Saved %i as servo %i's closed position."%(self.current_position,self.current_servo)
 
             elif command == 'opened':   
                 this_data = self.calibration_data[self.current_servo]
                 this_data['opened'] = self.current_position
-                print "Saved %i as servo %i's opened position."%(self.current_servo,self.current_position)
+                print "Saved %i as servo %i's opened position."%(self.current_position,self.current_servo)
+            
+            elif command == 'close':
+                closed_position = self.calibration_data[self.current_servo]['closed']
+                self.servos.set_target(self.current_servo, closed_position)
+            
+            elif command == 'open':
+                opened_position = self.calibration_data[self.current_servo]['opened']
+                self.servos.set_target(self.current_servo, opened_position)
 
             elif command == 'load':
                 self.load_data()
