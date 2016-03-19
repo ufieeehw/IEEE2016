@@ -353,8 +353,6 @@ class DetectQRCodeTemplateMethod(object):
             )
         self.block_pub.publish(b_s)
 
-<<<<<<< HEAD
-=======
 if __name__ == "__main__":
     rospy.init_node("detect_qr")
     print "starting"
@@ -367,4 +365,3 @@ if __name__ == "__main__":
         rospy.loginfo("beep")
         r.sleep()
     rospy.spin()
->>>>>>> 297c8bbdf5adc5d4f275db75b9e1a41e027578e3
