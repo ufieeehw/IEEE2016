@@ -12,7 +12,41 @@ class PointIntersector():
     '''
     def __init__(self):
         # Map used for estimating distances
-        self.map = np.array([0, 0, 0, .784, 0, .784, .015, .784, .015, .784, .015, 1.158, 0, 1.158, .015, 1.158, 0, 1.158, 0, 2.153, .464, .784, .479, .784, .479, .784, .479, 1.158, .464, .784, .464, 1.158, .464, 1.158, .479, 1.158, 0, 0, .549, 0, .549, 0, .549, .317, .549, .317, .569, .317, .569, 0, .569, .317, .569, 0, .809, 0, .809, 0, .809, .317, .809, .317, .829, .317, .829, 0, .829, .317, .829, 0, 2.458, 0, 0, 2.153, 2.458, 2.153, 2.458, 0, 2.458, .907, 2.161, .907, 2.458, .907, 2.161, .907, 2.161, 1.178, 2.161, 1.178, 2.458, 1.178, 2.458, 1.178, 2.458, 1.181, 2.161, 1.181, 2.458, 1.181, 2.161, 1.181, 2.161, 1.452, 2.161, 1.452, 2.458, 1.452, 2.458, 1.452, 2.458, 1.482, 2.161, 1.482, 2.458, 1.482, 2.161, 1.482, 2.161, 1.753, 2.161, 1.753, 2.458, 1.753, 2.458, 1.753, 2.458, 1.783, 2.161, 1.783, 2.458, 1.783, 2.161, 1.783, 2.161, 2.054, 2.161, 2.054, 2.458, 2.054, 2.458, 2.054, 2.458, 2.153]).astype(np.float32)
+        self.map = np.array([0, 0, 0, 2.174,             1, # Left Wall
+                             0, 0, 2.438, 0,             1, # Back Wall
+                             2.438, 0, 2.438, 2.174,     1, # Right Wall
+                             0, 2.174, 2.438, 2.174,     0, # Front Wall
+                             # Tunnel
+                             0, .76, .017, .76,          0, # Rear wall of left side of tunnel 
+                             .017, .76, .017, 1.14,      0, # Inside face of left side of tunnel
+                             0, 1.14, .017, 1.14,        0, # Front wall of left side of tunnel
+                             0, 1.14, 0, 2.17,           0, # Left map wall up to Block area 
+                             .440, .76, .456, .76,       0, # Rear wall of right side of tunnel
+                             .456, .76, .456, 1.14,      0, # Ouside face of right side of tunnel
+                             .440, .76, .440, 1.14,      0, # Inside face of right side of tunnel
+                             .440, 1.14, .456, 1.14,     0, # Front wall of right side of tunnel
+                             # Truck
+                             .508, 0, .508, .303,        1, # Outside left side of truck wall
+                             .520, .303, .528, .303,     1, # Front side of left truck wall
+                             .528, .303, .528, 0,        1, # Inside left truck wall
+                             .528, .07, .710, .07,       1, # Back wall of truck
+                             .710, 0, .710, .303,        1, # Inside right truck wall
+                             .710, .303, .730, .303,     1, # Fron side of right truck wall 
+                             .730, .303, .730, 0,        1, # Outside right side of truck
+                             # Train
+                             2.158, .88, 2.438, .88,     0, # Back side of box_4
+                             2.158, .88, 2.158, 1.16,    0, # Left side of box_4
+                             2.158, 1.16, 2.438, 1.16,   0, # Front side of box_4
+                             2.158, 1.185, 2.438, 1.185, 0, # Back side of box_3
+                             2.158, 1.185, 2.158, 1.465, 0, # Left side of box_3
+                             2.158, 1.465, 2.438, 1.465, 0, # Front side of box_3
+                             2.158, 1.49, 2.438, 1.49,   0, # Back side of box_2
+                             2.158, 1.49, 2.158, 1.77,   0, # Left side of box_2
+                             2.158, 1.77, 2.438, 1.77,   0, # Front side of box_2
+                             2.158, 1.795, 2.438, 1.795, 0, # Back side of box_1
+                             2.158, 1.795, 2.158, 2.075, 0, # Left side of box_1
+                             2.158, 2.075, 2.438, 2.075, 0, # Front side of box_1
+                ]).astype(np.float32) 
         # rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose, queue_size=10)
 
     def intersect_point(self, camera, point, time = None, offset = 0):
@@ -32,7 +66,8 @@ class PointIntersector():
         theta = cam_tf[2] + signed_alpha
         point = cam_tf[:2]
 
-        dist = self.simulate_scan(point, theta) + offset
+        self.offset = offset
+        dist = self.simulate_scan(point, theta)
         return camera.make_3d_point(raw_ray, dist, output_frame = "map", time = time)
 
     def simulate_scan(self, point, theta):
@@ -44,12 +79,14 @@ class PointIntersector():
         # Make sure the point is a numpy array
         point = np.array(point)
         ray_direction = np.array([np.cos(theta), np.sin(theta)])
-
         intersections = []
         # Go through each wall and test for intersections, then pick the closest intersection
-        for w in range(len(self.map) / 4):
-            intersection_dist = self.find_intersection(point, ray_direction, np.array([self.map[4 * w], self.map[4 * w + 1]]),
-                                                                            np.array([self.map[4 * w + 2], self.map[4 * w + 3]]))
+        # Sketchy as fuck way of detecting half blocks - move all the walls upwards.
+        offset_map = (self.map.reshape(len(self.map)/5,5) + np.array([0,self.offset,0,self.offset,0])).flatten()
+        for w in range(len(offset_map) / 5):
+            intersection_dist = self.find_intersection(point, ray_direction, 
+                                                       np.array([offset_map[5 * w],     offset_map[5 * w + 1]]),
+                                                       np.array([offset_map[5 * w + 2] ,offset_map[5 * w + 3]]))
             if intersection_dist is not None:
                 intersections.append(intersection_dist)
 
@@ -73,7 +110,6 @@ class PointIntersector():
         if t1 >= 0.0 and t2 >= 0.0 and t2 <= 1.0:
             return t1
         return None
-
 
 if __name__ == "__main__":
     rospy.init_node("point_intersector")
