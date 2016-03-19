@@ -6,6 +6,7 @@ from sensor_msgs.msg import Image as Image_msg, CameraInfo, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
 
 from ieee2016_msgs.msg import BlockStamped
+from camera_manager import Camera
 
 import QR
 import zbar
@@ -204,39 +205,45 @@ class DetectQRCodeTemplateMethod(object):
         self.block_pub = rospy.Publisher("/camera/block_detection", BlockStamped, queue_size=50)
 
         # Template Lists
-        self.blues = []
-        self.reds = []
-        self.greens = []
-        self.yellows = []
+        self.colors = []
 
-        self.load_templates(distances[0])
+        # Make sure distances are [full block, back half block, full block, ....]
+        self.load_templates(distances)
+        self.distances = distances
 
-    def load_templates(self,dist):
+    def load_templates(self, dists):
         # Only works with one distance right now
-        self.base_path = os.path.join(TEMPLATES_FOLDER, str(dist)) #str(min(QR_DISTANCES, key=lambda x:abs(x-dist))))
+        for dist in dists:
+            blues = []
+            reds = []
+            greens = []
+            yellows = []
 
-        colors = {"/blue":self.blues,"/red":self.reds,"/green":self.greens,"/yellow":self.yellows}
-        thetas = [0,90,180,270]
+            self.base_path = os.path.join(TEMPLATES_FOLDER, str(dist)) #str(min(QR_DISTANCES, key=lambda x:abs(x-dist))))
 
-        # Save raw image for manually getting templates from. Need to specify a camera for this.
-        #cv2.imwrite(self.base_path+"/raw.jpg",self.camera.image)
+            colors = {"/blue":blues,"/red":reds,"/green":greens,"/yellow":yellows}
+            thetas = [0,90,180,270]
 
-        # Check if there is already a folder with rotated and scaled images in it 
-        if cv2.imread(self.base_path+"/blue/0.jpg") is None:
-            # No folder exists so lets make some
-            # Check to make sure template images are there (we assume if the blue one is there, they all are).
-            if cv2.imread(self.base_path+"/blue.jpg") is None:
+            # Save raw image for manually getting templates from. Need to specify a camera for this.
+            #cv2.imwrite(self.base_path+"/raw.jpg",self.camera.image)
+
+            # Check if there is already a folder with rotated and scaled images in it 
+            if cv2.imread(self.base_path+"/blue/0.jpg") is None:
                 # No folder exists so lets make some
-                print "Template images are missing!"
-                exit()
+                # Check to make sure template images are there (we assume if the blue one is there, they all are).
+                if cv2.imread(self.base_path+"/blue.jpg") is None:
+                    # No folder exists so lets make some
+                    print "Template images are missing!"
+                    exit()
 
-            print "Rotated templates do not exist. Creating them now."
-            self.make_rotated_templates(colors,thetas)
+                print "Rotated templates do not exist. Creating them now."
+                self.make_rotated_templates(colors,thetas)
 
-        for color in colors:
-            for theta in thetas:
-                colors[color].append(cv2.imread(self.base_path+color+"/"+str(theta)+".jpg",0))
+            for color in colors:
+                for theta in thetas:
+                    colors[color].append(cv2.imread(self.base_path+color+"/"+str(theta)+".jpg",0))
 
+            self.colors.append(colors)
 
     def make_rotated_templates(self, colors, thetas):
         for color in colors:
@@ -256,7 +263,7 @@ class DetectQRCodeTemplateMethod(object):
                 rot_mat = cv2.getRotationMatrix2D((cols/2,rows/2),theta,1)
                 cv2.imwrite(self.base_path+color+"/"+str(theta)+".jpg",cv2.warpAffine(template,rot_mat,(cols,rows)))
 
-    def match_templates(self, dist, camera, offset=0):
+    def match_templates(self, camera, offset=0):
         '''
         Called by main program to process an image from the specified camera and to find QR Codes in that image.
         
@@ -268,63 +275,72 @@ class DetectQRCodeTemplateMethod(object):
         '''
 
         threshold = .65
-        
-        blues = self.blues 
-        reds = self.reds 
-        greens = self.greens 
-        yellows = self.yellows 
+        self.camera = camera
+        for i,color in enumerate(self.colors):
+            if i%2:
+                # Every other distance should represent the distance to a back half block if the robot hasn't 
+                # moved since the i-1 position. Make sense? Good.
+                offset = .0625
+            else:
+                offset = 0
 
-        # Load image from camera, save it 
-        image = self.camera.image
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        gray = cv2.equalizeHist(gray)
+            blues = color["/blue"]  
+            reds = color["/red"]
+            greens = color["/green"]
+            yellows = color["/yellow"]
 
-        for frame_count in range(len(self.blues)):
-            if frame_count == 0:
-                mid_point = np.array(self.blues[0].shape[::-1])/2
-                for template in self.blues:
-                    # Apply matching threshold for this rotation/scale
-                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        self.publish_block(pt+mid_point,"blue",offset)
-                        cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
+            # Load image from camera, save it 
+            image = np.copy(camera.image)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            gray = cv2.equalizeHist(gray)
 
-            elif frame_count == 1:
-                mid_point = np.array(self.reds[0].shape[::-1])/2
-                for template in self.reds:
-                    # Apply matching threshold for this rotation/scale
-                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        self.publish_block(pt+mid_point,"red",offset)
-                        cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
+            for frame_count in range(len(blues)):
+                if frame_count == 0:
+                    mid_point = np.array(blues[0].shape[::-1])/2
+                    for template in blues:
+                        # Apply matching threshold for this rotation/scale
+                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                        loc = np.where( res >= threshold)
+                        for pt in zip(*loc[::-1]):
+                            self.publish_block(pt+mid_point,"blue",offset)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
 
-            elif frame_count == 2:
-                mid_point = np.array(self.greens[0].shape[::-1])/2
-                for template in self.greens:
-                    # Apply matching threshold for this rotation/scale
-                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        self.publish_block(pt+mid_point,"green",offset)
-                        cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
+                elif frame_count == 1:
+                    mid_point = np.array(reds[0].shape[::-1])/2
+                    for template in reds:
+                        # Apply matching threshold for this rotation/scale
+                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                        loc = np.where( res >= threshold)
+                        for pt in zip(*loc[::-1]):
+                            self.publish_block(pt+mid_point,"red",offset)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
 
-            elif frame_count == 3:
-                mid_point = np.array(self.yellows[0].shape[::-1])/2
-                for template in self.yellows:
-                    # Apply matching threshold for this rotation/scale
-                    res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        self.publish_block(pt+mid_point,"yellow",offset)
-                        cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
+                elif frame_count == 2:
+                    mid_point = np.array(greens[0].shape[::-1])/2
+                    for template in greens:
+                        # Apply matching threshold for this rotation/scale
+                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                        loc = np.where( res >= threshold)
+                        for pt in zip(*loc[::-1]):
+                            self.publish_block(pt+mid_point,"green",offset)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
 
-            # Only for displaying
-            cv2.imshow("found",image)
-            cv2.waitKey(1)
+                elif frame_count == 3:
+                    mid_point = np.array(yellows[0].shape[::-1])/2
+                    for template in yellows:
+                        # Apply matching threshold for this rotation/scale
+                        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+                        loc = np.where( res >= threshold)
+                        for pt in zip(*loc[::-1]):
+                            self.publish_block(pt+mid_point,"yellow",offset)
+                            #cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
 
-    def publish_block(self,uv_point,color):
+                # Only for displaying
+                #cv2.imshow("found",image)
+                #cv2.waitKey(1)
+
+    def publish_block(self,uv_point,color,offset):
+        print "block detected"
         #print uv_point
         b_s = BlockStamped(
                 header=Header(
@@ -332,7 +348,23 @@ class DetectQRCodeTemplateMethod(object):
                         frame_id=self.camera.name
                     ),
                 point=uv_point,
+                offset=offset,
                 color=color
             )
         self.block_pub.publish(b_s)
 
+<<<<<<< HEAD
+=======
+if __name__ == "__main__":
+    rospy.init_node("detect_qr")
+    print "starting"
+    cam = Camera("1")
+    cam.activate()
+    d = DetectQRCodeTemplateMethod([50,56.25])
+    r = rospy.Rate()
+    while not rospy.is_shutdown():
+        d.match_templates(cam)
+        rospy.loginfo("beep")
+        r.sleep()
+    rospy.spin()
+>>>>>>> 297c8bbdf5adc5d4f275db75b9e1a41e027578e3
