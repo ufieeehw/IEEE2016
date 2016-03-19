@@ -481,7 +481,7 @@ class BlockServer():
     Given a BlockStamped message, the server will find the actual point in the map frame and keep an updated pointcloud as Shia moves.
     '''
     def __init__(self, *cameras):
-        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=20)
+        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=1)
         self.cameras = cameras
 
         # Make kd-tree with a tolerance when trying to add duplicated blocks
@@ -492,15 +492,20 @@ class BlockServer():
         # Find the camera that this image was taken in and transform points appropriately.
         camera = [c for c in self.cameras if c.name == msg.header.frame_id][0]
         map_point = self.intersector.intersect_point(camera, msg.point, time=msg.header.stamp, offset=msg.offset)
+        #try:
         self.k.insert_unique_average(map_point,msg.color)
+        # except:
 
+        #     rospy.logwarn("An ERROR was found and excepted.")
+
+        print self.k
 
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
-    # c1 = Camera("cam_1")
-    # c1.activate()
-    # b_s = BlockServer(c1)
-    ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
-    ProcessBlocks(ee1)
+    c1 = Camera("1")
+    c1.activate()
+    b_s = BlockServer(c1)
+    # ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
+    # ProcessBlocks(ee1)
     rospy.spin()

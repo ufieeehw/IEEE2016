@@ -335,3 +335,4 @@ class DetectQRCodeTemplateMethod(object):
                 color=color
             )
         self.block_pub.publish(b_s)
+
