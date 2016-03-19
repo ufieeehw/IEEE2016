@@ -50,33 +50,36 @@ class Controller:
     # ***Note that the Maestro itself is configured to limit the range of servo travel
     # which has precedence over these values.  Use the Maestro Control Center to configure
     # ranges that are saved to the controller.  Use setRange for software controllable ranges.
-    def setRange(self, chan, min, max):
-        self.Mins[chan] = min
-        self.Maxs[chan] = max
+    def set_range(self, chan, min, max):
+        self.Mins[chan] = min*4
+        self.Maxs[chan] = max*4
 
     # Return Minimum channel range value
-    def getMin(self, chan):
+    def get_min(self, chan):
         return self.Mins[chan]
 
     # Return Minimum channel range value
-    def getMax(self, chan):
+    def get_max(self, chan):
         return self.Maxs[chan]
 
     # Set channel to a specified target value.  Servo will begin moving based
     # on Speed and Acceleration parameters previously set.
     # Target values will be constrained within Min and Max range, if set.
     # For servos, target represents the pulse width in of quarter-microseconds
-    # Servo center is at 1500 microseconds, or 600d0 quarter-microseconds
+    # Servo center is at 1500 microseconds, or 6000 quarter-microseconds
     # Typcially valid servo range is 3000 to 9000 quarter-microseconds
     # If channel is configured for digital output, values < 6000 = Low ouput
-    def setTarget(self, chan, target):
+    def set_target(self, chan, target):
+        # Convert from microseconds to quarter-microseconds
+        target *= 4
+
         # if Min is defined and Target is below, force to Min
         if self.Mins[chan] > 0 and target <= self.Mins[chan]:
             target = self.Mins[chan]
         # if Max is defined and Target is above, force to Max
         if self.Maxs[chan] > 0 and target >= self.Maxs[chan]:
             target = self.Maxs[chan]
-        #    
+        
         lsb = target & 0x7f #7 bits for least significant byte
         msb = (target >> 7) & 0x7f #shift 7 and take next 7 bits for msb
         # Send Pololu intro, device number, command, channel, and target lsb/msb
@@ -90,7 +93,7 @@ class Controller:
     # For the standard 1ms pulse width change to move a servo between extremes, a speed
     # of 1 will take 1 minute, and a speed of 60 would take 1 second.
     # Speed of 0 is unrestricted.
-    def setSpeed(self, chan, speed):
+    def set_speed(self, chan, speed):
         lsb = speed & 0x7f #7 bits for least significant byte
         msb = (speed >> 7) & 0x7f #shift 7 and take next 7 bits for msb
         # Send Pololu intro, device number, command, channel, speed lsb, speed msb
@@ -101,7 +104,7 @@ class Controller:
     # This provide soft starts and finishes when servo moves to target position.
     # Valid values are from 0 to 255. 0=unrestricted, 1 is slowest start.
     # A value of 1 will take the servo about 3s to move between 1ms to 2ms range.
-    def setAccel(self, chan, accel):
+    def set_acceleration(self, chan, accel):
         lsb = accel & 0x7f #7 bits for least significant byte
         msb = (accel >> 7) & 0x7f #shift 7 and take next 7 bits for msb
         # Send Pololu intro, device number, command, channel, accel lsb, accel msb
@@ -115,7 +118,7 @@ class Controller:
     # to the servo. If the Speed is set to below the top speed of the servo, then
     # the position result will align well with the acutal servo position, assuming
     # it is not stalled or slowed.
-    def getPosition(self, chan):
+    def get_position(self, chan):
         cmd = self.PololuCmd + chr(0x10) + chr(chan)
         self.usb.write(cmd)
         lsb = ord(self.usb.read())
@@ -128,7 +131,7 @@ class Controller:
     # ***Note if target position goes outside of Maestro's allowable range for the
     # channel, then the target can never be reached, so it will appear to allows be
     # moving to the target.  See setRange comment.
-    def isMoving(self, chan):
+    def is_moving(self, chan):
         if self.Targets[chan] > 0:
             if self.getPosition(chan) != self.Targets[chan]:
                 return True
@@ -136,7 +139,7 @@ class Controller:
     
     # Have all servo outputs reached their targets? This is useful only if Speed and/or
     # Acceleration have been set on one or more of the channels. Returns True or False.
-    def getMovingState(self):
+    def get_moving_state(self):
         cmd = self.PololuCmd + chr(0x13)
         self.usb.write(cmd)
         if self.usb.read() == chr(0):
@@ -144,16 +147,16 @@ class Controller:
         else:
             return True
 
-    # Run a Maestro Script subroutine in the currently active script. Scripts can
-    # have multiple subroutines, which get numbered sequentially from 0 on up. Code your
-    # Maestro subroutine to either infinitely loop, or just end (return is not valid).
-    def runScriptSub(self, subNumber):
-        cmd = self.PololuCmd + chr(0x27) + chr(subNumber)
-        # can pass a param with comman 0x28
-        # cmd = self.PololuCmd + chr(0x28) + chr(subNumber) + chr(lsb) + chr(msb)
-        self.usb.write(cmd)
+    # # Run a Maestro Script subroutine in the currently active script. Scripts can
+    # # have multiple subroutines, which get numbered sequentially from 0 on up. Code your
+    # # Maestro subroutine to either infinitely loop, or just end (return is not valid).
+    # def runScriptSub(self, subNumber):
+    #     cmd = self.PololuCmd + chr(0x27) + chr(subNumber)
+    #     # can pass a param with comman 0x28
+    #     # cmd = self.PololuCmd + chr(0x28) + chr(subNumber) + chr(lsb) + chr(msb)
+    #     self.usb.write(cmd)
 
-    # Stop the current Maestro Script
-    def stopScript(self):
-        cmd = self.PololuCmd + chr(0x24)
-        self.usb.write(cmd)
+    # # Stop the current Maestro Script
+    # def stopScript(self):
+    #     cmd = self.PololuCmd + chr(0x24)
+    #     self.usb.write(cmd)
