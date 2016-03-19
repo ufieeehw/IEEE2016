@@ -6,3 +6,5 @@ KERNEL=="ttyUSB*", SUBSYSTEMS=="usb", ATTRS{idProduct}=="6001", ATTRS{idVendor}=
 # UVC cameras
 SUBSYSTEMS=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="082d", ATTRS{serial}=="57E86DAF", MODE="0666"
 SUBSYSTEMS=="usb", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="082d", ATTRS{serial}=="6D880EAF", MODE="0666"
+# Maestro Servo Controller
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1ffb", MODE="0666"
