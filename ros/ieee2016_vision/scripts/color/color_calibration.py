@@ -1,14 +1,13 @@
 #!/usr/bin/python2
 #=============================================================================
-# Project: IEEE 2016 Hardware Team Robot (Shia LaBot)
-# Module: Color Calibration												v1.1
+# Project: Machine Vision - Color Detection
+# Module: Color Calibration												v1.3
 #
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
 
 import json
 import os
-import rospkg
 import numpy as np
 
 
@@ -18,17 +17,11 @@ class CalibrationData():
 	calculation. These are stored in a file in the same directory as the
 	script.
 	'''
-	def __init__(self, file = None):
+	def __init__(self, file):
 		self.colors = {}
 
 		# Allows a calibration file to be passed in
-		if (file):
-			self.calibration_file = file
-
-		# Defaults to a specific calibration file from the ROS path
-		else:
-			rospack = rospkg.RosPack()
-			self.calibration_file = os.path.join(rospack.get_path("ieee2016_vision"), "scripts/color_calibrations.json")
+		self.calibration_file = file
 
 		# Loads the file if it exists; otherwise, creates a new file
 		if (os.path.isfile(self.calibration_file)):

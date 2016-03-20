@@ -1,7 +1,7 @@
 #!/usr/bin/python2
 #=============================================================================
-# Project: IEEE 2016 Hardware Team Robot (Shia LaBot)
-# Module: Color Calibrator												v1.5
+# Project: Machine Vision - Color Detection
+# Module: Color Calibrator												v1.6
 #
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
@@ -12,12 +12,10 @@ import sys
 import threading
 import time
 
-import camera_manager
+from camera_stream import Camera
 from color_calibration import CalibrationData
 from color_calibrator_gui import Ui_MainWindow
 from color_detection import Image, ObjectDetection
-import rospy
-
 
 try:
     _fromUtf8 = QtCore.QString.fromUtf8
@@ -153,6 +151,9 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		'''
 		Disables all gui objects that are not useable until a file is loaded.
 		'''
+		# Menu
+		self.menu_save.setEnabled(False)
+
 		# Color selection
 		self.selection_color_label.setEnabled(False)
 		self.selection_color_setting.setEnabled(False)
@@ -190,6 +191,9 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		'''
 		Enables all gui objects that are not dependent on colors being set.
 		'''
+		# Menu
+		self.menu_save.setEnabled(True)
+
 		# Color selection
 		self.selection_color_label.setEnabled(True)
 		self.selection_color_setting.setEnabled(True)
@@ -706,8 +710,7 @@ class ImageDisplay(QtCore.QObject):
 
 		# Cleanly disables the camera when it is no longer in use
 		if (not self.loop_selection and not self.loop_detection):
-			if (self.camera.active):
-				camera.deactivate()
+			camera.deactivate()
 
 	def get_detection_frame(self):
 		'''
@@ -757,16 +760,12 @@ class ImageDisplay(QtCore.QObject):
 
 		# Cleanly disables the camera when it is no longer in use
 		if (not self.loop_selection and not self.loop_detection):
-			if (self.camera.active):
-				camera.deactivate()
+			camera.deactivate()
 
 
 if __name__ == '__main__':
-	# ROS, color calibration, and camera dependencies
-	rospy.init_node("color_calibrator")
-	camera = camera_manager.Camera(1)
-
-	# Launching the application
+	# Creating a camera object and launching the application
+	camera = Camera(20)
 	app = QtGui.QApplication(sys.argv)
 	gui = ColorCalibrator()
 	sys.exit(app.exec_())
