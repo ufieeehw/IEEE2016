@@ -261,7 +261,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		that no detection or selection image is being displayed before
 		reloading the color list.
 		'''
-		file = QtGui.QFileDialog.getOpenFileName(self.central_widget, "Load Calibration File", os.getcwd(), "JSON (*.json);;All files (*)")
+		file = QtGui.QFileDialog.getOpenFileName(self.central_widget, "Load Calibration File", os.getcwd(), "YAML (*.yaml);;All files (*)")
 
 		if (file):
 

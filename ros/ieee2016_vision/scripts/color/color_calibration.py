@@ -1,13 +1,14 @@
 #!/usr/bin/python2
 #=============================================================================
 # Project: Machine Vision - Color Detection
-# Module: Color Calibration												v1.3
+# Module: Color Calibration												v1.4
 #
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
 
-import json
 import os
+import yaml
+
 import numpy as np
 
 
@@ -41,21 +42,20 @@ class CalibrationData():
 
 	def save(self):
 		'''
-		Saves the current calibrations to the JSON file
-		'color_calibrations.json' in the same directory as this script.
+		Saves the current calibrations to the YAML file that was specified.
 		'''
 		data = {"hsv_ranges": self.hsv_ranges, "selection_boxes": self.selection_boxes, "overlap_prevention_rules": self.overlap_prevention_rules}
 
 		with open(self.calibration_file, 'w') as file:
-			json.dump(data, file)
+			yaml.safe_dump(data, file)
 
 	def load(self):
 		'''
-		Loads the calibrations from the JSON file 'color_calibrations.json' in
-		the same directory as this script and stores them in this class object.
+		Loads the calibrations from the YAML file specified and stores them in
+		this class object.
 		'''
 		with open(self.calibration_file, 'r') as file:
-			data = json.load(file)
+			data = yaml.safe_load(file)
 		self.hsv_ranges = data["hsv_ranges"]
 		self.selection_boxes = data["selection_boxes"]
 		self.overlap_prevention_rules = data["overlap_prevention_rules"]
