@@ -1,6 +1,8 @@
 <launch>
   <node pkg="ieee2016_vision" type="camera_manager.py" name="camera_manager" output="screen">
-    <param name="cam_1_index" value="1"/>
+    <param name="fps" value="17"/>
+
+    <param name="cam_1_index" value="0"/>
     <param name="cam_1_width" value="1920"/>
     <param name="cam_1_heigth" value="1080"/>
 

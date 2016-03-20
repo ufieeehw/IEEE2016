@@ -199,26 +199,21 @@ class CameraManager():
         br = CvBridge()
         rospy.Service('/camera/camera_set', CameraSet, self.set_camera)
 
-        # Caution: don't turn this up too much! The usb buffer will get overloaded or some shit.
-        # 17 was the limit at the time of testing this, who knows if that will go down.
-        fps = 17
-
         # Find the cameras with the given parameters
         self.cam_1 = cv2.VideoCapture(rospy.get_param("~cam_1_index"))
-        self.cam_1.set(3, rospy.get_param("~cam_1_width"))  # CV_CAP_PROP_FRAME_WIDTH
+        self.cam_1.set(3, rospy.get_param("~cam_1_width"))   # CV_CAP_PROP_FRAME_WIDTH
         self.cam_1.set(4, rospy.get_param("~cam_1_heigth"))  # CV_CAP_PROP_FRAME_HEIGHT
-        self.cam_1.set(5, rospy.get_param("~cam_1_heigth"))
-
+        self.cam_1.set(5, rospy.get_param("~fps"))           # FPS
 
         self.cam_2 = cv2.VideoCapture(rospy.get_param("~cam_2_index"))
-        self.cam_2.set(3, rospy.get_param("~cam_2_width"))  # CV_CAP_PROP_FRAME_WIDTH
+        self.cam_2.set(3, rospy.get_param("~cam_2_width"))   # CV_CAP_PROP_FRAME_WIDTH
         self.cam_2.set(4, rospy.get_param("~cam_2_heigth"))  # CV_CAP_PROP_FRAME_HEIGHT
-        self.cam_2.set(5, rospy.get_param("~cam_1_heigth"))
+        self.cam_2.set(5, rospy.get_param("~fps"))           # FPS
 
         self.cam = None
 
         print "> Initialization Complete."
-        rate = rospy.Rate(fps)  # hz
+        rate = rospy.Rate(rospy.get_param("~fps"))  # hz
         while not rospy.is_shutdown():
             try:
                 if self.cam:
