@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 
+# Template Images
+templates/
+
 # C extensions
 *.so
 

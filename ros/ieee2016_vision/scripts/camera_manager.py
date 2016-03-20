@@ -73,7 +73,7 @@ class Camera():
         self.perspective_frame_id = self.name + "_vision"
         self.position_frame_id = self.name + "_pose"
 
-        image_topic = "/camera/" + self.name
+        image_topic = "/camera/cam_stream"
 
         rospy.Subscriber(image_topic, Image, self.got_image)
         self.tf_listener = tf.TransformListener()
@@ -190,56 +190,56 @@ class Camera():
 
 class CameraManager():
     def __init__(self):
-
         # ROS inits
-        self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 1)
-        self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 1)
+        # self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 1)
+        # self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 1)
+        self.cam_pub = rospy.Publisher("/camera/cam_stream", Image, queue_size = 1)
+        
         rospy.init_node("camera_manager")
         br = CvBridge()
         rospy.Service('/camera/camera_set', CameraSet, self.set_camera)
+
+        # Caution: don't turn this up too much! The usb buffer will get overloaded or some shit.
+        # 17 was the limit at the time of testing this, who knows if that will go down.
+        fps = 17
 
         # Find the cameras with the given parameters
         self.cam_1 = cv2.VideoCapture(rospy.get_param("~cam_1_index"))
         self.cam_1.set(3, rospy.get_param("~cam_1_width"))  # CV_CAP_PROP_FRAME_WIDTH
         self.cam_1.set(4, rospy.get_param("~cam_1_heigth"))  # CV_CAP_PROP_FRAME_HEIGHT
+        self.cam_1.set(5, rospy.get_param("~cam_1_heigth"))
+
 
         self.cam_2 = cv2.VideoCapture(rospy.get_param("~cam_2_index"))
         self.cam_2.set(3, rospy.get_param("~cam_2_width"))  # CV_CAP_PROP_FRAME_WIDTH
         self.cam_2.set(4, rospy.get_param("~cam_2_heigth"))  # CV_CAP_PROP_FRAME_HEIGHT
+        self.cam_2.set(5, rospy.get_param("~cam_1_heigth"))
 
         self.cam = None
-        self.pub = None
 
         print "> Initialization Complete."
-        rate = rospy.Rate(10)  # hz
-        run_rate = rospy.Rate(25)  # hz
+        rate = rospy.Rate(fps)  # hz
         while not rospy.is_shutdown():
             try:
-                if self.cam and self.pub:
-                    self.pub.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
-                    run_rate.sleep()  # Okay some rest, just to not overload CPU
-                else:
-                    rate.sleep()
+                if self.cam:
+                    self.cam_pub.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
+                rate.sleep()
             except:
                 print "> Error opening Camera:", self.cam
                 rate.sleep()
+
     def set_camera(self, srv):
         cam_name = srv.cam_name.data
+        self.cam = None
         if cam_name == "cam_1":
             print "> Publishing Camera 1."
             self.cam = self.cam_1
-            self.pub = self.cam_1_pub
         elif cam_name == "cam_2":
             print "> Publishing Camera 2."
             self.cam = self.cam_2
-            self.pub = self.cam_2_pub
         elif cam_name == "STOP":
             print "> Stopping Publishing."
-
-            self.cam.release()
-
             self.cam = None
-            self.pub = None
             return CameraInfo()
 
         return self.get_cam_info(cam_name)
