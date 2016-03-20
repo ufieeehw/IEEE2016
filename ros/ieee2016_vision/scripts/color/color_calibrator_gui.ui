@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1010</width>
-    <height>744</height>
+    <width>1255</width>
+    <height>848</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -29,14 +29,14 @@
             <widget class="QLabel" name="selection_frame">
              <property name="minimumSize">
               <size>
-               <width>320</width>
-               <height>180</height>
+               <width>480</width>
+               <height>270</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>320</width>
-               <height>180</height>
+               <width>480</width>
+               <height>270</height>
               </size>
              </property>
              <property name="text">
@@ -292,7 +292,7 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>458</width>
+                <width>580</width>
                 <height>80</height>
                </rect>
               </property>
@@ -431,14 +431,14 @@
             <widget class="QLabel" name="detection_frame">
              <property name="minimumSize">
               <size>
-               <width>320</width>
-               <height>180</height>
+               <width>480</width>
+               <height>270</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>320</width>
-               <height>180</height>
+               <width>480</width>
+               <height>270</height>
               </size>
              </property>
              <property name="text">
@@ -568,22 +568,6 @@
          </widget>
         </item>
         <item>
-         <widget class="QGroupBox" name="logging_group">
-          <property name="title">
-           <string>Logging</string>
-          </property>
-          <layout class="QGridLayout" name="gridLayout_4">
-           <item row="0" column="0">
-            <widget class="QPlainTextEdit" name="log_output_box">
-             <property name="readOnly">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
-        <item>
          <spacer name="vertical_spacer_6">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
@@ -607,7 +591,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1010</width>
+     <width>1255</width>
      <height>29</height>
     </rect>
    </property>
@@ -623,6 +607,7 @@
    </widget>
    <addaction name="menu_file"/>
   </widget>
+  <widget class="QStatusBar" name="status_bar"/>
   <action name="menu_new">
    <property name="text">
     <string>New</string>

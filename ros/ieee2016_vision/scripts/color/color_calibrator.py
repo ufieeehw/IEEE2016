@@ -1,7 +1,7 @@
 #!/usr/bin/python2
 #=============================================================================
 # Project: Machine Vision - Color Detection
-# Module: Color Calibrator												v1.6
+# Module: Color Calibrator												v1.7
 #
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
@@ -18,54 +18,18 @@ from color_calibrator_gui import Ui_MainWindow
 from color_detection import Image, ObjectDetection
 
 try:
-    _fromUtf8 = QtCore.QString.fromUtf8
+	_fromUtf8 = QtCore.QString.fromUtf8
 except AttributeError:
-    def _fromUtf8(s):
-        return s
+	def _fromUtf8(s):
+		return s
 
 try:
-    _encoding = QtGui.QApplication.UnicodeUTF8
-    def _translate(context, text, disambig):
-        return QtGui.QApplication.translate(context, text, disambig, _encoding)
+	_encoding = QtGui.QApplication.UnicodeUTF8
+	def _translate(context, text, disambig):
+		return QtGui.QApplication.translate(context, text, disambig, _encoding)
 except AttributeError:
-    def _translate(context, text, disambig):
-        return QtGui.QApplication.translate(context, text, disambig)
-
-class OutputWrapper(QtCore.QObject):
-	'''
-	The class used as an output wrapper for messages originating at stdout and
-	stderr.
-	'''
-	outputWritten = QtCore.pyqtSignal(object, object)
-
-	def __init__(self, parent, stdout = True):
-		QtCore.QObject.__init__(self, parent)
-		if stdout:
-			self._stream = sys.stdout
-			sys.stdout = self
-		else:
-			self._stream = sys.stderr
-			sys.stderr = self
-		self._stdout = stdout
-
-	def write(self, text):
-		'''
-		This method is called to print the output text.
-		'''
-		self._stream.write(text)
-		self.outputWritten.emit(text, self._stdout)  # Signal to initiate the text box action
-
-	def __getattr__(self, name):
-		return getattr(self._stream, name)
-
-	def __del__(self):
-		try:
-			if self._stdout:
-				sys.stdout = self._stream
-			else:
-				sys.stderr = self._stream
-		except AttributeError:
-			pass
+	def _translate(context, text, disambig):
+		return QtGui.QApplication.translate(context, text, disambig)
 
 
 class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
@@ -103,9 +67,9 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		facilitate running the three subsystems.
 		'''
 		# Enable menu file manipulation and program quitting
-		self.menu_new.triggered.connect(self.load_file)
+		self.menu_new.triggered.connect(lambda: self.load_file("new"))
 		self.menu_save.triggered.connect(self.save_file)
-		self.menu_load.triggered.connect(self.load_file)
+		self.menu_load.triggered.connect(lambda: self.load_file("load"))
 		self.menu_quit.triggered.connect(self.closeEvent)
 
 		# Connect frame updates from the ImageDisplay to the gui update method
@@ -140,12 +104,6 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.undo_changes_button.clicked.connect(self.load_hsv_boxes)
 		self.minimum_hsv_text.returnPressed.connect(self.save_hsv_boxes)
 		self.maximum_hsv_text.returnPressed.connect(self.save_hsv_boxes)
-
-		# Redirect the output of stdout and stderr to an output wrapper class
-		stdout = OutputWrapper(self, True)
-		stdout.outputWritten.connect(self.printOutput)
-		stderr = OutputWrapper(self, False)
-		stderr.outputWritten.connect(self.printOutput)
 
 	def no_file_interface(self):
 		'''
@@ -250,22 +208,26 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 
 	def save_file(self):
 		'''
-		Saves the calibration file using the save method in it's c;ass object.
+		Saves the calibration file using the save method in it's class object.
 		'''
 		self.calibration_file.save()
+		self.status_bar.showMessage("File has been saved to %s" % (self.calibration_file.file))
 
-	def load_file(self):
+	def load_file(self, mode):
 		'''
-		Loads a file using the QtGui file browser with the default home
-		directory set to the directory that the script was run from. Makes sure
-		that no detection or selection image is being displayed before
-		reloading the color list.
+		Used to create or load a file using the QtGui file browser with the
+		default home directory set to the directory that the script was run
+		from. Makes sure that no detection or selection image is being
+		displayed before reloading the color list.
 		'''
-		file = QtGui.QFileDialog.getOpenFileName(self.central_widget, "Load Calibration File", os.getcwd(), "YAML (*.yaml);;All files (*)")
+		if (mode == "new"):
+			file = QtGui.QFileDialog.getSaveFileName(self.central_widget, "New Calibration File", os.getcwd(), "YAML (*.yaml);;All files (*)")
+		elif (mode == "load"):
+			file = QtGui.QFileDialog.getOpenFileName(self.central_widget, "Load Calibration File", os.getcwd(), "YAML (*.yaml);;All files (*)")
 
 		if (file):
 
-			# Terminates the displaying of a color that is to be deleted
+			# Terminates the displaying of selection or detection frames
 	 		self.display.loop_selection = False
 	 		if (self.detection_color == self.selection_color):
 	 			self.display.loop_detection = False
@@ -282,9 +244,19 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 	 		if (self.detection_color == ""):
 	 			self.detection_frame.clear()
 
-			self.calibration_file = CalibrationData(file)
+	 		# Prevents loading files that do not exist
+	 		if (mode == "load" and not os.path.isfile(file)):
+				mode = "new"
+
+			self.calibration_file = CalibrationData(file, mode)
 			self.update_color_list()
 			self.file_loaded_interface()
+
+			# Prints the message relevant to the operation performed
+			if (mode == "new"):
+				self.status_bar.showMessage("New file has been created at %s" % (self.calibration_file.file))
+			elif (mode == "load"):
+				self.status_bar.showMessage("File has been loaded from %s" % (self.calibration_file.file))
 
 	def update_frame(self, frame, display_to):
 		'''
@@ -481,14 +453,14 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 
 		# Ensures that a name has been typed into the new name box
 		if (self.new_color_name_setting.text() == "Input a name to generate a new calibration"):
-			print("ERROR: A name must be specified for the new calibration")
+			self.status_bar.showMessage("ERROR: A name must be specified for the new calibration")
 
 		# Ensures that the string recieved is alphanumeric
 		elif (str.isalnum(name)):
 
 			# Ensures that a unique name has been specified
 			if (name in self.calibration_file.available_colors):
-				print "ERROR: A calibration for this color already exists"
+				self.status_bar.showMessage("ERROR: A calibration for this color already exists")
 			else:
 
 				# Initializes the new calibration an updates relevant lists
@@ -497,9 +469,10 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 				self.calibration_file.overlap_prevention_rules[name] = []
 				self.calibration_file.update()
 				self.update_color_list()
+				self.status_bar.showMessage("A new calibration has been created for '%s'" % (name))
 
 		else:
-			print("ERROR: The entered name is not alphanumeric")
+			self.status_bar.showMessage("ERROR: The entered name is not alphanumeric")
 
 	def delete_calibration(self):
 		'''
@@ -521,6 +494,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 
 			# Deletes the color from the calibration object
 			self.calibration_file.delete(self.colors[self.selection_color_setting.currentIndex()])
+			self.status_bar.showMessage("The calibration for '%s' has been deleted" % (self.selection_color))
 			self.update_color_list()
 
  			# Clears the image frame if no color is selected
@@ -531,7 +505,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 
 		# Prevents the deletion of a null selection
 		else:
-			print("ERROR: Cannot delete a nonexistant calibration")
+			self.status_bar.showMessage("ERROR: Cannot delete a nonexistant calibration")
 
 	def update_x1_coordinate(self, value):
 		'''
@@ -582,13 +556,6 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		if self.display_extracted_button.isChecked():
 			self.display_frame = "extracted"
 
-	def printOutput(self, text):
-		'''
-		Used to print the output of stdout and stderr to a text box.
-		'''
-		self.log_output_box.moveCursor(QtGui.QTextCursor.End)
-		self.log_output_box.insertPlainText(text)
-
 	def load_hsv_boxes(self):
 		'''
 		Prints the maximum and minimum HSV ranges for the set detection color
@@ -615,32 +582,34 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 
 		# Determine if the tupple is properly formatted to (x, y, z)
 		if not (maximum and minimum):
-			print("ERROR: One of the HSV fields is blank")
+			self.status_bar.showMessage("ERROR: One of the HSV fields is blank")
 			return None
 		elif (minimum[0] == '(' and maximum[0] == '(' and minimum[len(minimum) - 1] == ')' and maximum[len(maximum) - 1] == ')'):
 			try:
 				minimum_values = list(int(char) for char in minimum[1:-1].split(','))
 				maximum_values = list(int(char) for char in maximum[1:-1].split(','))
 			except:
-				print("ERROR: The values entered must be integers")
+				self.status_bar.showMessage("ERROR: The values entered must be integers")
 				return None
 		else:
-			print("ERROR: One or more of the HSV ranges is not formatted properly")
+			self.status_bar.showMessage("ERROR: One or more of the HSV ranges is not formatted properly")
 			return None
 
 		# Ensures that the HSV values are within the range limits
 		for value in minimum_values:
 			if not (value >= 0 and value <= 255):
-				print("ERROR: One or more of the HSV values is out of the expected range of [0, 255]")
+				self.status_bar.showMessage("ERROR: One or more of the HSV values is out of the expected range of [0, 255]")
 				return None
 		for value in maximum_values:
 			if not (value >= 0 and value <= 255):
-				print("ERROR: One or more of the HSV values is out of the expected range of [0, 255]")
+				self.status_bar.showMessage("ERROR: One or more of the HSV values is out of the expected range of [0, 255]")
 				return None
 
 		# Saves the values to the calibration object
 		self.calibration_file.hsv_ranges[self.detection_color][0] = minimum_values
 		self.calibration_file.hsv_ranges[self.detection_color][1] = maximum_values
+		self.status_bar.showMessage("The HSV value ranges for '%s' have been saved to memory" % (self.detection_color))
+
 
 		# Updates the available colors list and the numpy calibration values for cv2
 		self.calibration_file.update()
@@ -680,7 +649,7 @@ class ImageDisplay(QtCore.QObject):
 		'''
 		# Separate image manipulation and detection objects for this frame
 		camera.activate()
-		image = Image(camera, self.gui.calibration_file, 320)
+		image = Image(camera, self.gui.calibration_file, 480)
 		detect = ObjectDetection(self.camera, image)
 
 		while (self.loop_selection == True):
@@ -702,7 +671,7 @@ class ImageDisplay(QtCore.QObject):
 				self.selection_frame_updated.emit()
 
 				# Keep the refresh rate at or below 20 FPS
-				time.sleep(0.05)
+				time.sleep(1.0 / 20)
 
 			# Clears the image if no color is selected
 			else:
@@ -720,7 +689,7 @@ class ImageDisplay(QtCore.QObject):
 		'''
 		# Separate image manipulation and detection objects for this frame
 		camera.activate()
-		image = Image(camera, self.gui.calibration_file, 320)
+		image = Image(camera, self.gui.calibration_file, 480)
 		detect = ObjectDetection(self.camera, image)
 
 		while (self.loop_detection == True):
@@ -752,7 +721,7 @@ class ImageDisplay(QtCore.QObject):
 				self.detection_frame_updated.emit()
 
 				# Keep the refresh rate at or below 20 FPS
-				time.sleep(0.05)
+				time.sleep(1.0 / 20)
 
 			# Clears the image if no color is selected
 			else:

@@ -22,21 +22,30 @@ class Image():
 		self.calibration_file = calibration_file
 		self.frame = self.camera.image
 
-		# Store original and operating image dimensions
+		# Store original and operating image dimensions and associated ratios
 		self.original_dimensions = (self.frame.shape[1], self.frame.shape[0])
-		aspect_ratio = float(self.original_dimensions[0]) / self.original_dimensions[1]
-		self.operating_dimensions = (width, int(width / aspect_ratio))
+		self.aspect_ratio = float(self.original_dimensions[0]) / self.original_dimensions[1]
+		self.operating_dimensions = (width, int(width / self.aspect_ratio))
 		self.scaling_ratio = float(self.original_dimensions[0]) / self.operating_dimensions[0]
 
 		self.hold_redux_frame = False
 
-	def resize(self):
+	def resize(self, width = None):
 		'''
 		Resizes a frame from the video feed to the operating image with and
-		proportional height.
+		proportional height. If a width is specified, a frame scaled to that
+		width by the aspect ratio is returned.
 		'''
 		self.frame = self.camera.image
-		self.frame = cv2.resize(self.frame, self.operating_dimensions, interpolation = cv2.INTER_AREA)
+
+		if (width):
+			width = (width / 4) * 4
+			height = int(width / self.aspect_ratio)
+			new_dimensions = (width, height)
+		else:
+			new_dimensions = self.operating_dimensions
+
+		self.frame = cv2.resize(self.frame, new_dimensions, interpolation = cv2.INTER_AREA)
 
 	def reformat_to_rgb(self):
 		self.frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
@@ -44,7 +53,8 @@ class Image():
 	def scale_point(self, point):
 		'''
 		Scales a point from an image of lower resolution to the camera's true
-		image resolution.
+		image resolution. The scaling ratio is based on the operating image
+		dimensions.
 		'''
 		for i in range(2):
 			point[i] = point[i] * self.scaling_ratio

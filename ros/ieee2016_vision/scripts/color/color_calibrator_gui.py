@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'color_calibrator_gui.ui'
 #
-# Created: Thu Mar 17 18:56:52 2016
+# Created: Sun Mar 20 06:59:54 2016
 #      by: PyQt4 UI code generator 4.11.2
 #
 # WARNING! All changes made in this file will be lost!
@@ -26,7 +26,7 @@ except AttributeError:
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName(_fromUtf8("MainWindow"))
-        MainWindow.resize(1010, 744)
+        MainWindow.resize(1255, 848)
         self.central_widget = QtGui.QWidget(MainWindow)
         self.central_widget.setObjectName(_fromUtf8("central_widget"))
         self.horizontalLayout_3 = QtGui.QHBoxLayout(self.central_widget)
@@ -40,8 +40,8 @@ class Ui_MainWindow(object):
         self.gridLayout = QtGui.QGridLayout(self.color_selection_group)
         self.gridLayout.setObjectName(_fromUtf8("gridLayout"))
         self.selection_frame = QtGui.QLabel(self.color_selection_group)
-        self.selection_frame.setMinimumSize(QtCore.QSize(320, 180))
-        self.selection_frame.setMaximumSize(QtCore.QSize(320, 180))
+        self.selection_frame.setMinimumSize(QtCore.QSize(480, 270))
+        self.selection_frame.setMaximumSize(QtCore.QSize(480, 270))
         self.selection_frame.setText(_fromUtf8(""))
         self.selection_frame.setObjectName(_fromUtf8("selection_frame"))
         self.gridLayout.addWidget(self.selection_frame, 1, 1, 1, 1)
@@ -149,7 +149,7 @@ class Ui_MainWindow(object):
         self.overlap_prevention_list.setWidgetResizable(True)
         self.overlap_prevention_list.setObjectName(_fromUtf8("overlap_prevention_list"))
         self.overlap_prevention_colors = QtGui.QWidget()
-        self.overlap_prevention_colors.setGeometry(QtCore.QRect(0, 0, 458, 80))
+        self.overlap_prevention_colors.setGeometry(QtCore.QRect(0, 0, 580, 80))
         self.overlap_prevention_colors.setObjectName(_fromUtf8("overlap_prevention_colors"))
         self.verticalLayout_8 = QtGui.QVBoxLayout(self.overlap_prevention_colors)
         self.verticalLayout_8.setObjectName(_fromUtf8("verticalLayout_8"))
@@ -193,8 +193,8 @@ class Ui_MainWindow(object):
         spacerItem8 = QtGui.QSpacerItem(55, 20, QtGui.QSizePolicy.MinimumExpanding, QtGui.QSizePolicy.Minimum)
         self.gridLayout_3.addItem(spacerItem8, 3, 2, 1, 1)
         self.detection_frame = QtGui.QLabel(self.object_detection_group)
-        self.detection_frame.setMinimumSize(QtCore.QSize(320, 180))
-        self.detection_frame.setMaximumSize(QtCore.QSize(320, 180))
+        self.detection_frame.setMinimumSize(QtCore.QSize(480, 270))
+        self.detection_frame.setMaximumSize(QtCore.QSize(480, 270))
         self.detection_frame.setText(_fromUtf8(""))
         self.detection_frame.setObjectName(_fromUtf8("detection_frame"))
         self.gridLayout_3.addWidget(self.detection_frame, 3, 1, 1, 1)
@@ -261,26 +261,20 @@ class Ui_MainWindow(object):
         self.horizontal_layout_8.addWidget(self.undo_changes_button)
         self.gridLayout_2.addLayout(self.horizontal_layout_8, 2, 1, 1, 1)
         self.vertical_layout_2.addWidget(self.color_ranges_group)
-        self.logging_group = QtGui.QGroupBox(self.central_widget)
-        self.logging_group.setObjectName(_fromUtf8("logging_group"))
-        self.gridLayout_4 = QtGui.QGridLayout(self.logging_group)
-        self.gridLayout_4.setObjectName(_fromUtf8("gridLayout_4"))
-        self.log_output_box = QtGui.QPlainTextEdit(self.logging_group)
-        self.log_output_box.setReadOnly(True)
-        self.log_output_box.setObjectName(_fromUtf8("log_output_box"))
-        self.gridLayout_4.addWidget(self.log_output_box, 0, 0, 1, 1)
-        self.vertical_layout_2.addWidget(self.logging_group)
         spacerItem9 = QtGui.QSpacerItem(20, 40, QtGui.QSizePolicy.Minimum, QtGui.QSizePolicy.Expanding)
         self.vertical_layout_2.addItem(spacerItem9)
         self.horizontal_layout_1.addLayout(self.vertical_layout_2)
         self.horizontalLayout_3.addLayout(self.horizontal_layout_1)
         MainWindow.setCentralWidget(self.central_widget)
         self.menu_bar = QtGui.QMenuBar(MainWindow)
-        self.menu_bar.setGeometry(QtCore.QRect(0, 0, 1010, 29))
+        self.menu_bar.setGeometry(QtCore.QRect(0, 0, 1255, 29))
         self.menu_bar.setObjectName(_fromUtf8("menu_bar"))
         self.menu_file = QtGui.QMenu(self.menu_bar)
         self.menu_file.setObjectName(_fromUtf8("menu_file"))
         MainWindow.setMenuBar(self.menu_bar)
+        self.status_bar = QtGui.QStatusBar(MainWindow)
+        self.status_bar.setObjectName(_fromUtf8("status_bar"))
+        MainWindow.setStatusBar(self.status_bar)
         self.menu_new = QtGui.QAction(MainWindow)
         self.menu_new.setObjectName(_fromUtf8("menu_new"))
         self.menu_load = QtGui.QAction(MainWindow)
@@ -336,7 +330,6 @@ class Ui_MainWindow(object):
         self.maximum_hsv_label.setText(_translate("MainWindow", "Maximum:", None))
         self.save_changes_button.setText(_translate("MainWindow", "Save to Memory Only", None))
         self.undo_changes_button.setText(_translate("MainWindow", "Undo Changes", None))
-        self.logging_group.setTitle(_translate("MainWindow", "Logging", None))
         self.menu_file.setTitle(_translate("MainWindow", "File", None))
         self.menu_new.setText(_translate("MainWindow", "New", None))
         self.menu_load.setText(_translate("MainWindow", "Load", None))

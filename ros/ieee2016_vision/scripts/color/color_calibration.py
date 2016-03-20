@@ -18,17 +18,17 @@ class CalibrationData():
 	calculation. These are stored in a file in the same directory as the
 	script.
 	'''
-	def __init__(self, file):
+	def __init__(self, file, mode):
 		self.colors = {}
 
 		# Allows a calibration file to be passed in
-		self.calibration_file = file
+		self.file = file
 
-		# Loads the file if it exists; otherwise, creates a new file
-		if (os.path.isfile(self.calibration_file)):
-			self.load()
-		else:
+		# Loads the file or creates a new one based on the mode parameter
+		if (mode == "new"):
 			self.new()
+		else:
+			self.load()
 
 	def new(self):
 		'''
@@ -46,7 +46,7 @@ class CalibrationData():
 		'''
 		data = {"hsv_ranges": self.hsv_ranges, "selection_boxes": self.selection_boxes, "overlap_prevention_rules": self.overlap_prevention_rules}
 
-		with open(self.calibration_file, 'w') as file:
+		with open(self.file, 'w') as file:
 			yaml.safe_dump(data, file)
 
 	def load(self):
@@ -54,7 +54,7 @@ class CalibrationData():
 		Loads the calibrations from the YAML file specified and stores them in
 		this class object.
 		'''
-		with open(self.calibration_file, 'r') as file:
+		with open(self.file, 'r') as file:
 			data = yaml.safe_load(file)
 		self.hsv_ranges = data["hsv_ranges"]
 		self.selection_boxes = data["selection_boxes"]
