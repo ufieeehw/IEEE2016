@@ -15,6 +15,55 @@ from std_msgs.msg import String, Header
 import tf
 
 
+class PointProjector():
+    '''
+    The goal of the Point Projector is to display 3d points in the map frame as 2d points
+    on the camera image.
+
+    Takes a Point Stamped ros message or just 
+
+    This is a major hypothetical program since it is hard to test it (I haven't tested it at all).
+    '''
+    def __init__(self, camera):
+        cam_name = camera.name
+        rospy.Subscriber('/camera/'+cam_name+'/project_points', PointStamped, self.got_point)
+        self.camera = camera
+        self.projection_matrix = self.camera.proj_mat
+
+        # Will contain [[frame_id,[x,y,z]],[frame_id,[x,y,z]], ...]
+        self.points = []
+
+    def got_point(self, msg):
+        # Handles getting ROS points.
+        frame_id = msg.header.frame_id
+        point = np.array([msg.point.x,msg.point.y,msg.point.z])
+        
+        self.points.append([frame_id,point])
+
+    def draw_point(self, point):
+        # Handles getting user inputted points.
+        point = np.array([point])
+
+    def draw_on_frame(self):
+        # Method to take current camera frame and draw the points in the list on the frame
+        current_frame = self.camera.image
+        colors = [(0,0,255),(255,255,255),(255,0,0)]
+        for i,point_stamped in enumerate(self.points):
+            frame_id = point_stamped[0]
+            point = point_stamped[1]
+            
+            # New point is [x,y,z,1] in the camera frame
+            point = np.append(self.camera.transform_point(point, from_frame=frame_id, target_frame=self.camera.perspective_frame_id),1)
+            if point[2] <= 0:
+                # If the point is behind the camera, don't draw it.
+                continue
+            
+            point_uvw = self.projection_matrix.dot(point)
+            point_xy = (point_uv/point_uv[2])[:2]
+
+            # The x,y points may need to be reversed.
+            cv2.circle(current_frame,point_xy, 5, colors[i%len(colors)], -1)
+
 class Camera():
     def __init__(self, cam_number):
         self.name = "cam_" + str(cam_number)
@@ -73,14 +122,15 @@ class Camera():
 
         return np.array([pos[0], pos[1], rot[2]])
 
-    def transform_point(self, point, target_frame = "map", time = None):
+    def transform_point(self, point, from_frame=None, target_frame="map", time=None):
         # Given a 3d point in the camera frame, return that point in the map frame.
-        if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.perspective_frame_id)
-        self.tf_listener.waitForTransform(target_frame, self.perspective_frame_id, time, rospy.Duration(1.0))
+        if from_frame is None: from_frame = self.perspective_frame_id
+        if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, from_frame)
+        self.tf_listener.waitForTransform(target_frame, from_frame, time, rospy.Duration(1.0))
         p_s = PointStamped(
                 header = Header(
                         stamp = time,
-                        frame_id = self.perspective_frame_id
+                        frame_id = from_frame
                     ),
                 point = Point(
                         x = point[0],
