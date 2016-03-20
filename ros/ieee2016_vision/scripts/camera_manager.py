@@ -14,7 +14,6 @@ from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String, Header
 import tf
 
-
 class PointProjector():
     '''
     The goal of the Point Projector is to display 3d points in the map frame as 2d points
@@ -102,9 +101,15 @@ class Camera():
         self.active = True
 
     def deactivate(self):
-        ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data = "STOP"))
+        '''
+        Doesn't do anything, activate a different camera if you need it.
+        '''
+        if True:
+            return None
+        else:
+            ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data = "STOP"))
 
-        self.active = False
+            self.active = False
 
     def get_tf(self, mode = "pose", target_frame = "base_link", time = None):
         # Returns the relative [x,y,yaw] between the target_frame and the camera
