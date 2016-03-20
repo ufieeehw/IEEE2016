@@ -104,19 +104,20 @@ class MagnetometerManager():
         # Get the raw heading from the service (but do it locally, not over ros.)
         heading = self.service_manager.get_heading_service(None)
 
-        xData,yData = self.correct_mag_data(heading.xData,heading.yData)
+        xData,yData = self.correct_mag_data(heading.xData,heading.yData)[:2]
 
         service_response = GetHeadingResponse()
         service_response.xData = xData
-        service_response.zData = zData
+        service_response.zData = 0
         service_response.yData = yData
 
         return service_response
 
     def publish_mag_data(self):
         # Get the raw heading from the service (but do it locally, not over ros.)
-        heading = heading = self.service_manager.get_heading_service(None)
+        heading = self.service_manager.get_heading_service(None)
         corrected_point = self.correct_mag_data(heading.xData,heading.yData)
+        #print (corrected_point).astype(np.int32)
         angle = np.arctan2(corrected_point[1],corrected_point[0])
         self.generate_pose(angle)
 
@@ -135,7 +136,7 @@ class MagnetometerManager():
         )
         pose = Pose(
             position=Point(x=0, y=0, z=0),
-            orientation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3],)
+            orientation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
         )
 
         # Publish pose stamped - just for displaying in rviz
