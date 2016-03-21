@@ -19,10 +19,8 @@ import maestro
 import numpy as np
 import yaml
 
-import rospkg
 rospack = rospkg.RosPack()
 CALIBRATION_FILE_URI = os.path.join(rospack.get_path('ieee2016_arm_control'), 'scripts/calibration.yaml')
-
 
 """
 The goal here is to take some desired position and move the arm into that position.
@@ -58,8 +56,6 @@ class ArmController():
         self.nav_goal_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=2) #Just for visualization
         self.elevator = rospy.Publisher("/robot/arms/elevator", Float64, queue_size=2)
         self.rail = rospy.Publisher("/robot/arms/rail", Float64, queue_size=2)
-
-        rospy.init_node('arm_controller')
         
         # For this we will use a service. When the arm moves to the desired location,
         # the service will return True to the person who called it
@@ -140,6 +136,26 @@ class ArmController():
         else:
             print "Too high! Can not move to height:",des_height
 
+    def set_rail(self, des_extend, frame="base_link"):
+        '''
+        Set the rail to some extended from base_link.
+
+        **These parameters needs to be set from the mech team.**
+        
+        '''
+        t = self.tf_listener.getLatestCommonTime(frame, '/base_link')
+        trans,rot = self.tf_listener.lookupTransform(frame, '/base_link', t)
+        des_height += np.abs(trans[1])
+
+        min_dist = 0 #m
+        max_dist = .3 #m
+        radius = .035 / 2 #m
+        print "Sending",des_extend
+        if min_dist <= des_extend <= max_dist:
+            self.elevator.publish(Float64(data=des_extend/radius))
+        else:
+            print "Too extended! Can not move to extension:",des_extend
+
 class ServoController():
     '''
     This will control each servo.
@@ -187,7 +203,7 @@ class ServoController():
             self.servos.set_target(servo_id, self.calibration_data[servo_id]['opened'])
 
 if __name__ == "__main__":
-    rospy.init_node("arm_conroller")
+    rospy.init_node("arm_controller")
     ee = EndEffector(4, 1, 2)
     s = ServoController(ee)
 
