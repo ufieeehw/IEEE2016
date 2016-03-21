@@ -1,3 +1,10 @@
 ---
-int8 map_version
-float32[] map
+int8 map_version	# The current map version
+float32 block_wall_y	# The y value (m) of the wall that the blocks are on.
+float32 far_wall_x	# The largest x value (m) of the map (the right side wall). Used mainly when changing map orientation. 
+float32[] map		# The map data formatted as follows:
+			# [w1_x1, w1_y1, w1_x2, w1_y2, w1_mod, w2_x1, w2_y1, ...]
+			# Where w1_x1 is the first x coordinate of the first wall.
+			# w1_mod is the modifier code for the wall current modifiers are as follows:
+			# 	0 - Normal Wall
+			# 	1 - Black (or dark) Wall
