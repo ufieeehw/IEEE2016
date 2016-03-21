@@ -355,11 +355,8 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			self.detection_color_label.setEnabled(True)
 			self.calibrate_button.setEnabled(True)
 
-			# Set the slider values to those stored for the selection color
-			self.x1_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][0][0])
-			self.x2_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][1][0])
-			self.y1_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][0][1])
-			self.y2_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][2][1])
+			# Sets the selection sliders from the stored calibration values
+			self.set_selection_sliders()
 
 		else:
 			self.selection_color = ""
@@ -465,7 +462,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 
 				# Initializes the new calibration an updates relevant lists
 				self.calibration_file.hsv_ranges[name] = [[0, 0, 0], [0, 0, 0]]
-				self.calibration_file.selection_boxes[name] = [[0, 0], [0, 0], [0, 0], [0, 0]]
+				self.calibration_file.selection_boxes[name] = [[160, 90], [320, 90], [320, 180], [160, 180]]
 				self.calibration_file.overlap_prevention_rules[name] = []
 				self.calibration_file.update()
 				self.update_color_list()
@@ -507,6 +504,27 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		else:
 			self.status_bar.showMessage("ERROR: Cannot delete a nonexistant calibration")
 
+	def set_selection_sliders(self):
+		'''
+		Set the slider values to those stored for the detection color.
+		'''
+		self.x1_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][0][0])
+		self.x2_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][1][0])
+		self.y1_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][0][1])
+		self.y2_slider.setValue(self.calibration_file.selection_boxes[self.selection_color][2][1])
+
+	def selection_minimum(self):
+		'''
+		Ensures that the selection has an area of greater then 400 so that the
+		object is large enough in the frame to be detected.
+		'''
+		box_length = abs(self.calibration_file.selection_boxes[self.selection_color][1][0] - self.calibration_file.selection_boxes[self.selection_color][0][0])
+		box_width = abs(self.calibration_file.selection_boxes[self.selection_color][0][1] - self.calibration_file.selection_boxes[self.selection_color][2][1])
+		if ((box_length * box_width) < 400):
+			self.calibration_file.selection_boxes[self.selection_color] = [[160, 90], [320, 90], [320, 180], [160, 180]]
+			self.set_selection_sliders()
+			self.status_bar.showMessage("WARNING: The selection box should not be smaller than a 20x20 box - resetting")
+
 	def update_x1_coordinate(self, value):
 		'''
 		Updates the X1 point of the selection box.
@@ -514,6 +532,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		if (self.selection_color):
 			self.calibration_file.selection_boxes[self.selection_color][0][0] = value
 			self.calibration_file.selection_boxes[self.selection_color][3][0] = value
+			self.selection_minimum()
 
 	def update_y1_coordinate(self, value):
 		'''
@@ -522,6 +541,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		if (self.selection_color):
 			self.calibration_file.selection_boxes[self.selection_color][0][1] = value
 			self.calibration_file.selection_boxes[self.selection_color][1][1] = value
+			self.selection_minimum()
 
 	def update_x2_coordinate(self, value):
 		'''
@@ -530,6 +550,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		if (self.selection_color):
 			self.calibration_file.selection_boxes[self.selection_color][1][0] = value
 			self.calibration_file.selection_boxes[self.selection_color][2][0] = value
+			self.selection_minimum()
 
 	def update_y2_coordinate(self, value):
 		'''
@@ -538,6 +559,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		if (self.selection_color):
 			self.calibration_file.selection_boxes[self.selection_color][2][1] = value
 			self.calibration_file.selection_boxes[self.selection_color][3][1] = value
+			self.selection_minimum()
 
 	def update_averaging(self, value):
 		'''

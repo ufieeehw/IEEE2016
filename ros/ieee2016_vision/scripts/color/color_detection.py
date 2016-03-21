@@ -28,23 +28,27 @@ class Image():
 		self.operating_dimensions = (width, int(width / self.aspect_ratio))
 		self.scaling_ratio = float(self.original_dimensions[0]) / self.operating_dimensions[0]
 
+		# Enables reuse of the reduced color frame
 		self.hold_redux_frame = False
+		self.redux_frame = {}
 
-	def resize(self, width = None):
+	def resize(self):
 		'''
 		Resizes a frame from the video feed to the operating image with and
-		proportional height. If a width is specified, a frame scaled to that
-		width by the aspect ratio is returned.
+		proportional height.
 		'''
 		self.frame = self.camera.image
+		self.frame = cv2.resize(self.frame, self.operating_dimensions, interpolation = cv2.INTER_AREA)
 
-		if (width):
-			width = (width / 4) * 4
-			height = int(width / self.aspect_ratio)
-			new_dimensions = (width, height)
-		else:
-			new_dimensions = self.operating_dimensions
-
+	def resize_to(self, width):
+		'''
+		Resizes the EXISTING frame in this object to the specified width and
+		proportional height. Used to improve K-Means performance by reducing
+		the amount of pixles to calculate for.
+		'''
+		width = (width / 4) * 4
+		height = int(width / self.aspect_ratio)
+		new_dimensions = (width, height)
 		self.frame = cv2.resize(self.frame, new_dimensions, interpolation = cv2.INTER_AREA)
 
 	def reformat_to_rgb(self):
@@ -67,8 +71,8 @@ class Image():
 		the set color depth.
 		'''
 		# Can be set to reuse the reduced color frame to reduce processing cost
-		if (self.hold_redux_frame):
-			self.frame = self.redux_frame
+		if ((self.hold_redux_frame) and (image_color_depth in self.redux_frame.keys())):
+			self.frame = self.redux_frame[image_color_depth]
 
 		else:
 			self.resize()
@@ -91,7 +95,9 @@ class Image():
 			self.frame = working_frame.reshape((self.frame.shape))
 
 		 	# Stores the frame for later holding
-		 	self.redux_frame = self.frame
+		 	self.redux_frame[image_color_depth] = self.frame
+
+		print self.redux_frame.keys()
 
 	def extract_color(self, color):
 		'''

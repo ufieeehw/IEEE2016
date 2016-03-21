@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'color_calibrator_gui.ui'
 #
-# Created: Sun Mar 20 06:59:54 2016
+# Created: Mon Mar 21 14:05:44 2016
 #      by: PyQt4 UI code generator 4.11.2
 #
 # WARNING! All changes made in this file will be lost!
@@ -86,7 +86,7 @@ class Ui_MainWindow(object):
         self.gridLayout_6 = QtGui.QGridLayout(self.tab_1)
         self.gridLayout_6.setObjectName(_fromUtf8("gridLayout_6"))
         self.x1_slider = QtGui.QSlider(self.tab_1)
-        self.x1_slider.setMaximum(319)
+        self.x1_slider.setMaximum(479)
         self.x1_slider.setOrientation(QtCore.Qt.Horizontal)
         self.x1_slider.setObjectName(_fromUtf8("x1_slider"))
         self.gridLayout_6.addWidget(self.x1_slider, 0, 1, 1, 1)
@@ -94,7 +94,7 @@ class Ui_MainWindow(object):
         self.x1_label.setObjectName(_fromUtf8("x1_label"))
         self.gridLayout_6.addWidget(self.x1_label, 0, 0, 1, 1)
         self.y1_slider = QtGui.QSlider(self.tab_1)
-        self.y1_slider.setMaximum(179)
+        self.y1_slider.setMaximum(269)
         self.y1_slider.setOrientation(QtCore.Qt.Horizontal)
         self.y1_slider.setObjectName(_fromUtf8("y1_slider"))
         self.gridLayout_6.addWidget(self.y1_slider, 1, 1, 1, 1)
@@ -102,11 +102,11 @@ class Ui_MainWindow(object):
         self.y1_label.setObjectName(_fromUtf8("y1_label"))
         self.gridLayout_6.addWidget(self.y1_label, 1, 0, 1, 1)
         self.x1_setting = QtGui.QSpinBox(self.tab_1)
-        self.x1_setting.setMaximum(319)
+        self.x1_setting.setMaximum(479)
         self.x1_setting.setObjectName(_fromUtf8("x1_setting"))
         self.gridLayout_6.addWidget(self.x1_setting, 0, 2, 1, 1)
         self.y1_setting = QtGui.QSpinBox(self.tab_1)
-        self.y1_setting.setMaximum(179)
+        self.y1_setting.setMaximum(269)
         self.y1_setting.setObjectName(_fromUtf8("y1_setting"))
         self.gridLayout_6.addWidget(self.y1_setting, 1, 2, 1, 1)
         self.point_selector.addTab(self.tab_1, _fromUtf8(""))
@@ -121,21 +121,21 @@ class Ui_MainWindow(object):
         self.x2_label.setObjectName(_fromUtf8("x2_label"))
         self.gridLayout_5.addWidget(self.x2_label, 2, 0, 1, 1)
         self.x2_slider = QtGui.QSlider(self.tab_11)
-        self.x2_slider.setMaximum(319)
+        self.x2_slider.setMaximum(479)
         self.x2_slider.setOrientation(QtCore.Qt.Horizontal)
         self.x2_slider.setObjectName(_fromUtf8("x2_slider"))
         self.gridLayout_5.addWidget(self.x2_slider, 2, 1, 1, 1)
         self.y2_slider = QtGui.QSlider(self.tab_11)
-        self.y2_slider.setMaximum(179)
+        self.y2_slider.setMaximum(269)
         self.y2_slider.setOrientation(QtCore.Qt.Horizontal)
         self.y2_slider.setObjectName(_fromUtf8("y2_slider"))
         self.gridLayout_5.addWidget(self.y2_slider, 3, 1, 1, 1)
         self.x2_setting = QtGui.QSpinBox(self.tab_11)
-        self.x2_setting.setMaximum(319)
+        self.x2_setting.setMaximum(479)
         self.x2_setting.setObjectName(_fromUtf8("x2_setting"))
         self.gridLayout_5.addWidget(self.x2_setting, 2, 2, 1, 1)
         self.y2_setting = QtGui.QSpinBox(self.tab_11)
-        self.y2_setting.setMaximum(179)
+        self.y2_setting.setMaximum(269)
         self.y2_setting.setObjectName(_fromUtf8("y2_setting"))
         self.gridLayout_5.addWidget(self.y2_setting, 3, 2, 1, 1)
         self.point_selector.addTab(self.tab_11, _fromUtf8(""))

@@ -38,13 +38,18 @@ class Camera():
 		will not recreate the stream thread.
 		'''
 		if (not self.stream_thread.isAlive()):
+			# Opens the camera stream and sets it to a 1920x1080 (16x9) size
 			self.stream = cv2.VideoCapture(CAPTURE_DEVICE)
+			self.stream.set(3, 1920)
+			self.stream.set(4, 1080)
 
+			# Creates and starts a thread to retrieve frames at the set FPS
 			self.loop_read = True
 			self.stream_thread = threading.Thread(target = self.get_frame)
 			self.stream_thread.daemon = True
 			self.stream_thread.start()
 
+			# Does not allow the calling code to continue until it is active
 			while (self.image == None):
 				continue
 
@@ -58,6 +63,7 @@ class Camera():
 			while (self.stream_thread.isAlive()):
  				continue
 
+			# Turns the camera off
 			self.stream.release()
 
 	def get_frame(self):
