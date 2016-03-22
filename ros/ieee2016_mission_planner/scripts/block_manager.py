@@ -503,7 +503,7 @@ class BlockServer():
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
-    c1 = Camera("1")
+    c1 = Camera("2")
     c1.activate()
     b_s = BlockServer(c1)
     # ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
