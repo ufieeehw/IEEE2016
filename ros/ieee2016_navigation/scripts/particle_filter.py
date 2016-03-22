@@ -269,7 +269,7 @@ class GPUAccFilter():
         This function deals with actually running the filter.
         '''
         print "running"
-        r = rospy.Rate(15) #hz
+        r = rospy.Rate(10) #hz
         start_time = time.time()
         while not rospy.is_shutdown():
             r.sleep()
@@ -343,7 +343,7 @@ class GPUAccFilter():
             position=Point(
                 x=self.pose_est[0],
                 y=self.pose_est[1],
-                z=0
+                z=.127
             ),
             orientation=Quaternion(
                 x=q[0],
