@@ -279,18 +279,18 @@ class DetectQRCodeTemplateMethod(object):
         cam_to_base_link = np.abs(camera.get_tf()[1])
 
         if directive == "inital_scan":
-            distance_to_wall = distance_to_wall - cam_to_base_link
-            self.normal_scan(distance_to_wall)
+            #distance_to_wall = args - cam_to_base_link
+            self.normal_scan(args)
         elif directive == "half_block_scan":
-            distance_to_wall = distance_to_wall - cam_to_base_link
-            self.normal_scan(distance_to_wall, offset=.0625)
+            #distance_to_wall = args - cam_to_base_link
+            self.normal_scan(args, offset=.0625)
         elif directive == "close_up_scan":
-            distance_to_wall = distance_to_wall - cam_to_base_link[0]
+            #distance_to_wall = args - cam_to_base_link[0]
             self.visual_servo(distance_to_wall)
 
-    def normal_scan(self, size, offset=0, frames=8):
+    def normal_scan(self, dist, offset=0, frames=8):
         '''
-        Uses template matching to test all combinations of colors and rotation for the specified size and for the number of frames.
+        Uses template matching to test all combinations of colors and rotation for the specified dist and for the number of frames.
 
         Offset is used to test for halfblocks.
 
@@ -298,73 +298,73 @@ class DetectQRCodeTemplateMethod(object):
         etc etc until we've reached the fourth frame, then we restart again until weve checked 'frames' frames. This was done to keep image
         up to date.
         '''
-        
-        blues = color["/blue"]  
-        reds = color["/red"]
-        greens = color["/green"]
-        yellows = color["/yellow"]
+        colors = self.colors[self.distances.index(dist+offset)]
+        blues = colors["/blue"]  
+        reds = colors["/red"]
+        greens = colors["/green"]
+        yellows = colors["/yellow"]
         # Run this whole process frames/4 times
         for frames in range(frames/4):
             # The process is detecing qr codes. 
             for frame_count in range(4):
                 # Load image from camera, save it
-                image = np.copy(camera.image)
+                image = np.copy(self.camera.image)
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
                 gray = cv2.equalizeHist(gray)
 
                 if frame_count == 0:
                     mid_point = np.array(blues[0].shape[::-1])/2
-                    for template in blues:
+                    for rotation,template in enumerate(blues):
                         # Apply matching threshold for this rotation
                         res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
-                            self.publish_block(pt+mid_point,"blue",offset)
+                            self.publish_block(pt+mid_point,"blue",offset,rotation)
                             cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
 
                 elif frame_count == 1:
                     mid_point = np.array(reds[0].shape[::-1])/2
-                    for template in reds:
+                    for rotation,template in enumerate(reds):
                         # Apply matching threshold for this rotation
                         res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
-                            self.publish_block(pt+mid_point,"red",offset)
+                            self.publish_block(pt+mid_point,"red",offset,rotation)
                             cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
 
                 elif frame_count == 2:
                     mid_point = np.array(greens[0].shape[::-1])/2
-                    for template in greens:
+                    for rotation,template in enumerate(greens):
                         # Apply matching threshold for this rotation
                         res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
-                            self.publish_block(pt+mid_point,"green",offset)
+                            self.publish_block(pt+mid_point,"green",offset,rotation)
                             cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
 
                 elif frame_count == 3:
                     mid_point = np.array(yellows[0].shape[::-1])/2
-                    for template in yellows:
+                    for rotation,template in enumerate(yellows):
                         # Apply matching threshold for this rotation
                         res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
-                            self.publish_block(pt+mid_point,"yellow",offset)
+                            self.publish_block(pt+mid_point,"yellow",offset,rotation)
                             cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
-
                 # Only for displaying
                 cv2.imshow("found",image)
                 cv2.waitKey(1)
 
-    def visual_servo(self, size, color, orientation):
+    def visual_servo(self, dist, block_color, orientation):
         '''
         Returns a more accurate location to put the camera gripper
         We specify a color and orientation so we don't have to check every combination of color and rotation when template matching.
         
         Orientation is an index to the color list NOT an absolute rotation.
         '''
-        color_name = "/"+color
-        this_color = color[color_name]
+
+        color_name = "/"+block_color
+        this_color = self.colors[self.distances.index(dist)][color_name]
 
         image = np.copy(camera.image)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -378,14 +378,14 @@ class DetectQRCodeTemplateMethod(object):
         loc = np.where( res >= self.threshold)
 
         # We are going to average and display all the points here.
-        pt = np.mean(loc[::-1])
-        cv2.circle(image, (_pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)    
+        pt = np.mean(loc[::-1], axis=1) + mid_point
+        #cv2.circle(image, (_pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)    
 
         # Calculate estimated block position in space.
         return self.point_intersector.intersect_point(self.camera, pt)
 
-    def publish_block(self,uv_point,color,offset):
-        print "block detected"
+    def publish_block(self,uv_point,color,offset,rotation):
+        print "block detected:",uv_point
         #print uv_point
         b_s = BlockStamped(
                 header=Header(
@@ -394,7 +394,8 @@ class DetectQRCodeTemplateMethod(object):
                     ),
                 point=uv_point,
                 offset=offset,
-                color=color
+                color=color,
+                rotation_index=rotation
             )
         self.block_pub.publish(b_s)
 
@@ -407,7 +408,7 @@ if __name__ == "__main__":
     d = DetectQRCodeTemplateMethod([50,56.25])
     r = rospy.Rate(10)
     while not rospy.is_shutdown():
-        d.match_templates(cam)
+        d.match_templates(cam, "inital_scan", 50)
         rospy.loginfo("beep")
         r.sleep()
     rospy.spin()
