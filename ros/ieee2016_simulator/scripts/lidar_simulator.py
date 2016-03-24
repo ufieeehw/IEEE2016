@@ -309,7 +309,7 @@ def start_navigation(msg):
     m = GPUAccMap(msg.map)
     #m_a = GPUAccMapAct(msg.map)
     print "> Starting navigation."
-    s = Simulator(np.array([1.2,1.2,0]),m,m)
+    s = Simulator(np.array(msg.init_pose),m,m)
     
 rospy.init_node('lidar_sim', anonymous=True)
 rospy.Subscriber("/robot/start_navigation", StartNavigation, start_navigation)

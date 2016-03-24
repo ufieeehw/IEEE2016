@@ -356,10 +356,10 @@ class DetectQRCodeTemplateMethod(object):
 if __name__ == "__main__":
     rospy.init_node("detect_qr")
     print "starting"
-    cam = Camera("1")
+    cam = Camera("2")
     cam.activate()
     d = DetectQRCodeTemplateMethod([50,56.25])
-    r = rospy.Rate()
+    r = rospy.Rate(10)
     while not rospy.is_shutdown():
         d.match_templates(cam)
         rospy.loginfo("beep")

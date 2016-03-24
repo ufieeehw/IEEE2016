@@ -116,10 +116,18 @@ class TFPublisher():
                 rospy.Time.now(), "EE2", "elevator")
 
 
-        # Temp
+        self.tf_broad.sendTransform((0,0,.127), 
+                tf.transformations.quaternion_from_euler(0,0,0),
+                rospy.Time.now(), "base_link", "base_footprint")
+
+        #Temp
         self.tf_broad.sendTransform((0,0,0), 
                 tf.transformations.quaternion_from_euler(0,0,0),
-                rospy.Time.now(), "base_link", "odom")
+                rospy.Time.now(), "base_footprint", "odom")
+
+        # self.tf_broad.sendTransform((.47457,1.629,0), 
+        #         (0,0,.9999,-.0146),
+        #         rospy.Time.now(), "base_footprint", "map")
 
 if __name__ == "__main__":
     rospy.init_node('tf_broadcaster')
