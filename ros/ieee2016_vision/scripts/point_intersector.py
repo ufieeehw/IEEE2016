@@ -1,53 +1,22 @@
 #!/usr/bin/env python
-from camera_manager import Camera
-import numpy as np
 import rospy
+from camera_manager import Camera
 import tf
+
+from ieee2016_msgs.srv import RequestMap
+
+import numpy as np
 
 
 class PointIntersector():
     '''
     Given a point in the camera frame and Shia's current position estimate where that point is along the wall.
-    (We are assuming that the blocks will be flush against the wall, or have some offset from the wall.)
+    (We are assuming that the blocks will be flush against the wall, or have some offset from the wall).
     '''
     def __init__(self):
         # Map used for estimating distances
-        self.map = np.array([0, 0, 0, 2.174,             1, # Left Wall
-                             0, 0, 2.438, 0,             1, # Back Wall
-                             2.438, 0, 2.438, 2.174,     1, # Right Wall
-                             0, 2.174, 2.438, 2.174,     0, # Front Wall
-                             # Tunnel
-                             0, .76, .017, .76,          0, # Rear wall of left side of tunnel 
-                             .017, .76, .017, 1.14,      0, # Inside face of left side of tunnel
-                             0, 1.14, .017, 1.14,        0, # Front wall of left side of tunnel
-                             0, 1.14, 0, 2.17,           0, # Left map wall up to Block area 
-                             .440, .76, .456, .76,       0, # Rear wall of right side of tunnel
-                             .456, .76, .456, 1.14,      0, # Ouside face of right side of tunnel
-                             .440, .76, .440, 1.14,      0, # Inside face of right side of tunnel
-                             .440, 1.14, .456, 1.14,     0, # Front wall of right side of tunnel
-                             # Truck
-                             .508, 0, .508, .303,        1, # Outside left side of truck wall
-                             .520, .303, .528, .303,     1, # Front side of left truck wall
-                             .528, .303, .528, 0,        1, # Inside left truck wall
-                             .528, .07, .710, .07,       1, # Back wall of truck
-                             .710, 0, .710, .303,        1, # Inside right truck wall
-                             .710, .303, .730, .303,     1, # Fron side of right truck wall 
-                             .730, .303, .730, 0,        1, # Outside right side of truck
-                             # Train
-                             2.158, .88, 2.438, .88,     0, # Back side of box_4
-                             2.158, .88, 2.158, 1.16,    0, # Left side of box_4
-                             2.158, 1.16, 2.438, 1.16,   0, # Front side of box_4
-                             2.158, 1.185, 2.438, 1.185, 0, # Back side of box_3
-                             2.158, 1.185, 2.158, 1.465, 0, # Left side of box_3
-                             2.158, 1.465, 2.438, 1.465, 0, # Front side of box_3
-                             2.158, 1.49, 2.438, 1.49,   0, # Back side of box_2
-                             2.158, 1.49, 2.158, 1.77,   0, # Left side of box_2
-                             2.158, 1.77, 2.438, 1.77,   0, # Front side of box_2
-                             2.158, 1.795, 2.438, 1.795, 0, # Back side of box_1
-                             2.158, 1.795, 2.158, 2.075, 0, # Left side of box_1
-                             2.158, 2.075, 2.438, 2.075, 0, # Front side of box_1
-                ]).astype(np.float32) 
-        # rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose, queue_size=10)
+        map_request = rospy.ServiceProxy('/robot/request_map',RequestMap)
+        self.map = np.array(map_request().map)
 
     def intersect_point(self, camera, point, time = None, offset = 0):
         # Make a ray and remove components we don't need

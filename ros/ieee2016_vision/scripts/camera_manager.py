@@ -204,7 +204,7 @@ class CameraManager():
         br = CvBridge()
         rospy.Service('/camera/camera_set', CameraSet, self.set_camera)
 
-        # Find the cameras with the given parameters
+        #Find the cameras with the given parameters
         self.cam_1 = cv2.VideoCapture(rospy.get_param("~cam_1_index"))
         self.cam_1.set(3, rospy.get_param("~cam_1_width"))   # CV_CAP_PROP_FRAME_WIDTH
         self.cam_1.set(4, rospy.get_param("~cam_1_heigth"))  # CV_CAP_PROP_FRAME_HEIGHT
