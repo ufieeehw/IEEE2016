@@ -775,7 +775,7 @@ class ImageDisplay(QtCore.QObject):
 
 			if (color):
 				# Average detection of the selected color to obtain box and center points
-				detect.average_box(detect.select_largest_object, [color], averaging)
+				detect.average_box(detect.select_largest_solid, [color], averaging)
 				detect.get_box_center()
 
 				# Pull the requested frame to display the image on

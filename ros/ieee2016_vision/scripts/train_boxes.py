@@ -40,7 +40,7 @@ class TrainBoxes():
 		self.box_locations = {}
 		self.not_detected = []
 
-		self.detection.average_box(self.detection.select_largest_object, self.colors , averaging)
+		self.detection.average_box(self.detection.select_largest_solid, self.colors , averaging)
 		self.detection.get_box_center()
 		for color in self.colors:
 
