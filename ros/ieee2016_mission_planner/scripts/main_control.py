@@ -295,7 +295,6 @@ class ShiaStateMachine():
         self.map_version = 0
 
         self.running = False
-        self.waypoints = load_waypoints()
 
         print "> ========= Creating Limbs ========="
         # Defining Shia's limbs. 
@@ -309,12 +308,11 @@ class ShiaStateMachine():
         print "> ========= Creating Detection Objects ========="
         # Objects for detecting and returning location of QR codes. Parameters are the set distances from the codes (cm).
         self.qr_distances = [50]
-        self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
+        #self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
         self.waypoint_generator = WaypointGenerator(self.ee1, self.ee2)
-        self.arm_controller = ArmController()
+        #self.arm_controller = ArmController()
 
         # Misc Objects
-        self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
         self.point_cloud_generator = temp_GenerateBlockPoints(16)
         self.point_cloud_generator.generate_b_blocks()
         print
@@ -322,6 +320,14 @@ class ShiaStateMachine():
         print "> Waiting for map selection and start command."
 
         rospy.spin()
+
+    def load_waypoints(self):
+        waypoints_temp = load_waypoints()
+        if self.map_version == 1:
+            # If we are on the right side map configuration, switch all the waypoints 
+            for point in waypoints_temp:
+                waypoints_temp[key][0] = self.ros_manager.far_wall_x - waypoints_temp[key][0]  
+        self.waypoints = waypoints_temp
 
     def begin_2(self):
         '''
@@ -331,8 +337,10 @@ class ShiaStateMachine():
         print "> Running"
         print "> Map Version:",self.map_version
         print
+        self.load_waypoints()
+        self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
 
-        self.current_state+=1
+        self.current_state+=0
 
         self.running = True
         rate = rospy.Rate(25) #hz
@@ -549,21 +557,21 @@ class RosManager():
         self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
 
     def recieve_start_command(self,msg):
-        if msg.data and not self.state_machine.running:
+        if msg.data: #and not self.state_machine.running:
             if self.state_machine.map_version:
                 print "> State Machine Starting..."
                 nav_start = StartNavigation()
-                nav_start.map = self.get_map(None)[1]
+                nav_start.map = self.get_map(None)[3]
 
                 # 1 is the map configuration where we start on the right, 2 is on the left.
                 if self.state_machine.map_version == 1:
-                    self.pose = np.array([2.438-.2,.2,1.57])
+                    self.pose = np.array([self.far_wall_x - .2,.2,1.57])
                     nav_start.init_pose = self.pose
                     self.nav_start_pub.publish(nav_start)
 
                     #self.state_machine.begin_1()
                 elif self.state_machine.map_version == 2:
-                    self.pose = np.array([.2,.2,1.57])
+                    self.pose = np.array([.24,.48,1.57])
                     nav_start.init_pose = self.pose
                     self.nav_start_pub.publish(nav_start)
 
@@ -678,9 +686,9 @@ class RosManager():
         map_1[2] = 2.438 - map_1[2]
         map_1 = map_1.T.flatten()
         if self.state_machine.map_version == 1:
-            return self.state_machine.map_version,self.block_wall_y,map_1
+            return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_1
         elif self.state_machine.map_version == 2:
-            return self.state_machine.map_version,self.block_wall_y,map_2
+            return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_2
 
 if __name__ == "__main__":
     os.system("clear")

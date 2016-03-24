@@ -359,9 +359,13 @@ class ProcessBlocks():
 
 class WaypointGenerator():
     '''
-    The arm waypoints generator. The algorithm we will use is still in the works.
+    The arm waypoints generator. (Anything relating to simulation_blocks can be removed for competition)
+
+    Given a kd_tree of points, attempt to find the top left point and generate an arm waypoint there.
+    Do this for both arms then return the list back to the caller.
+
     '''
-    def __init__(self,*ee):
+    def __init__(self, *ee):
         self.ee_pose_pub = rospy.Publisher("/arm/waypoint", PoseStamped, queue_size=1)
 
         self.ee_list = ee
@@ -371,7 +375,7 @@ class WaypointGenerator():
         self.tf_listener = tf.TransformListener()
         print "> Waypoint Generator Online."
 
-    def generate_arm_waypoints(self,block_tree,pickup,simulation_blocks):
+    def generate_arm_waypoints(self, block_tree, pickup, simulation_blocks):
         '''
         Given some block_tree, try to pick up 'pickup' number of blocks with all the end effectors. Starting
         If pickup is -1, we will try to pick up as many blocks as the end effector can.
@@ -427,7 +431,7 @@ class WaypointGenerator():
                 simulation_blocks[simulation_blocks.index([sorted_blocks[0].point.tolist(),sorted_blocks[0].linked_object])][1] = "none"
 
                 # Loop through the remaining grippers and check if they can pick up and blocks.
-                block_tolerance = .01 # m
+                block_tolerance = .03175 # m
                 for i in range(grippers_to_actuate[0]+1,pickup):
                     # Get the relative y position and check if there is a block within tolerance of that point.
                     rel_gripper_position = abs(ee.gripper_positions[i].get_tf(self.tf_listener,from_frame=base_gripper.frame_id)[0][1])
@@ -456,11 +460,7 @@ class WaypointGenerator():
 
             # We have added all the contiuous blocks starting from the top left, now if there is still space left in the gripper
             # see if we can fit any more blocks onto the gripper.
-            # if ee.holding < ee.gripper_count:
-            #     sorted_blocks = sorted(block_tree.nodes, key=lambda node:node.point[2])
 
-
-        # Now temp tree has only the remaining blocks in it.
         # Returning the new tree, the waypoints for the gripper, and the temp simulation block list
         return block_tree, waypoints_list, simulation_blocks
 
