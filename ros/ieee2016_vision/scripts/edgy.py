@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-image = cv2.imread('new_QR3.jpg', 1)
+image = cv2.imread('QR_test.jpg', 1)
 
 # Remove noise from the colored image
 image = cv2.fastNlMeansDenoisingColored(image,None,10,10,7,21)
