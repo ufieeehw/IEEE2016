@@ -274,7 +274,7 @@ class DetectQRCodeTemplateMethod(object):
                 args: [distance_to_wall, block_color, qr_rotation]. These are specified so we don't have to search every color and every rotation.
         '''
 
-        self.threshold = .65
+        self.threshold = .67
         self.camera = camera
         cam_to_base_link = np.abs(camera.get_tf()[1])
 
@@ -303,12 +303,13 @@ class DetectQRCodeTemplateMethod(object):
         reds = colors["/red"]
         greens = colors["/green"]
         yellows = colors["/yellow"]
+        image = np.copy(self.camera.image)
         # Run this whole process frames/4 times
         for frames in range(frames/4):
             # The process is detecing qr codes. 
             for frame_count in range(4):
                 # Load image from camera, save it
-                image = np.copy(self.camera.image)
+                #
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
                 gray = cv2.equalizeHist(gray)
 
@@ -407,8 +408,8 @@ if __name__ == "__main__":
     cam.activate()
     d = DetectQRCodeTemplateMethod([50,56.25])
     r = rospy.Rate(10)
-    while not rospy.is_shutdown():
-        d.match_templates(cam, "inital_scan", 50)
-        rospy.loginfo("beep")
-        r.sleep()
-    rospy.spin()
+    d.match_templates(cam, "inital_scan", 50)
+    rospy.loginfo("beep")
+    #     r.sleep()
+    # rospy.spin()
+    cv2.waitKey(0)
