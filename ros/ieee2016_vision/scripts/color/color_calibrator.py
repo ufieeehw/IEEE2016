@@ -298,9 +298,6 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			self.colors[item] = color
 			item += 1
 
-		# Updates the prevention setting colors
-		self.update_prevention_settings()
-
 		# Selects previously set selection color from index if available
 		for index in range(len(self.colors)):
 			if (self.colors[index] == self.selection_color):
@@ -318,6 +315,9 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			else:
 				self.detection_color_setting.setCurrentIndex(-1)
 		self.update_detection_color()
+
+		# Updates the prevention setting colors
+		self.update_prevention_settings()
 
 	def update_selection_color(self):
 		'''
@@ -522,7 +522,7 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		if ((box_length * box_width) < 400):
 			self.calibration_file.selection_boxes[self.selection_color] = [[160, 90], [320, 90], [320, 180], [160, 180]]
 			self.set_selection_sliders()
-			self.status_bar.showMessage("WARNING: The selection box should not be smaller than a 20x20 box - resetting")
+			self.status_bar.showMessage("WARNING: The selection box should not be smaller than a 20x20 box; resetting to center")
 
 	def update_x1_coordinate(self, value):
 		'''

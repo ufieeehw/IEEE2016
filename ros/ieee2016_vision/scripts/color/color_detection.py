@@ -6,10 +6,11 @@
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
 
+from sklearn.cluster import KMeans
+
 from color_calibration import CalibrationData
 import cv2
 import numpy as np
-
 
 class Image():
 	'''
@@ -75,27 +76,37 @@ class Image():
 			self.frame = self.redux_frame[image_color_depth]
 
 		else:
+		 	# Filters a new frame to reduce noise
 			self.resize()
+ 		 	working_frame = cv2.bilateralFilter(self.frame, 20, 75, 75)
+
+			# Downsamples the frame and converts it to a 2D floating point array
+			self.resize_to(32)
+			working_frame = np.float32(self.frame.reshape((-1, 3)))
+
+			# Uses K-Means clustering to determine the requested highest density colors
+			kmeans = KMeans(image_color_depth, "k-means++", 10, 4, 1e-4, "auto", 0, None, False, 1)
+			kmeans.fit(working_frame)
 
 		 	# Filters the image to reduce noise
+			self.resize()
  		 	working_frame = cv2.bilateralFilter(self.frame, 9, 75, 75)
- 		 	working_frame = cv2.medianBlur(working_frame, 5)
 
-			# Converts the frame to a format that is usable with K-Means clustering
-			working_frame = working_frame.reshape((-1, 3))
-			working_frame = np.float32(working_frame)
+			# Downsamples a new frame and converts it to a 2D floating point array
+ 		 	self.resize_to(75)
+			working_frame = np.float32(self.frame.reshape((-1, 3)))
 
-			# Use K-Means clustering to identify the 16 most predominant colors
-			criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-			ret, label, center = cv2.kmeans(working_frame, image_color_depth, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+			# Reduces the colors in the frame based on the clustering results
+			labels = kmeans.fit_predict(working_frame)
+			center = np.uint8(kmeans.cluster_centers_)
+			working_frame = center[labels]
 
-			# Reduces the colors in the original image based on the clustering results
-			center = np.uint8(center)
-			working_frame = center[label.flatten()]
+			# Resizes the frame to the operating parameters
 			self.frame = working_frame.reshape((self.frame.shape))
+			self.resize_to(self.operating_dimensions[0])
 
-		 	# Stores the frame for later holding
-		 	self.redux_frame[image_color_depth] = self.frame
+			# Stores the frame for later holding
+			self.redux_frame[image_color_depth] = self.frame
 
 	def extract_color(self, color):
 		'''
