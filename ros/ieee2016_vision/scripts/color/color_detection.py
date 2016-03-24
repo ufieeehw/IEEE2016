@@ -97,8 +97,6 @@ class Image():
 		 	# Stores the frame for later holding
 		 	self.redux_frame[image_color_depth] = self.frame
 
-		print self.redux_frame.keys()
-
 	def extract_color(self, color):
 		'''
 		Generates an image from the passed frame that contain hues specified within

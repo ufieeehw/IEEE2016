@@ -285,26 +285,21 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.selection_color_setting.clear()
 		self.detection_color_setting.clear()
 		self.colors = {}
-		for setting in self.prevention_setting:
-			self.prevention_setting[setting].setParent(None)
-		self.prevention_setting = {}
 
 		for color in self.calibration_file.available_colors:
+
 			# Adds an entry to both of the color setting boxes for each color
 			self.selection_color_setting.addItem(_fromUtf8(""))
 			self.selection_color_setting.setItemText(item, _translate("MainWindow", color, None))
 			self.detection_color_setting.addItem(_fromUtf8(""))
 			self.detection_color_setting.setItemText(item, _translate("MainWindow", color, None))
 
-			# Adds an entry to the overlap prevention scroll area for each color
-			self.prevention_setting[item] = QtGui.QCheckBox(self.overlap_prevention_colors)
-			self.prevention_setting[item].setObjectName(_fromUtf8("%s_prevention_setting" % (color)))
-			self.verticalLayout_8.addWidget(self.prevention_setting[item])
-			self.prevention_setting[item].setText(_translate("MainWindow", color, None))
-
 			# A dictionary storing which index each color is stored under
 			self.colors[item] = color
 			item += 1
+
+		# Updates the prevention setting colors
+		self.update_prevention_settings()
 
 		# Selects previously set selection color from index if available
 		for index in range(len(self.colors)):
@@ -358,6 +353,9 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			# Sets the selection sliders from the stored calibration values
 			self.set_selection_sliders()
 
+			# Updates the overlap prevention settings
+			self.update_prevention_settings()
+
 		else:
 			self.selection_color = ""
 
@@ -370,7 +368,8 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			# Disable selection management
 			self.selection_managment_group.setEnabled(False)
 
-			# Disable overlap prevention
+			# Disable overlap prevention and clear all of the check boxes
+			self.clear_prevention_settings()
 			self.overlap_prevention_group.setEnabled(False)
 
 			# Disable calibration button
@@ -560,6 +559,62 @@ class ColorCalibrator(QtGui.QMainWindow, Ui_MainWindow):
 			self.calibration_file.selection_boxes[self.selection_color][2][1] = value
 			self.calibration_file.selection_boxes[self.selection_color][3][1] = value
 			self.selection_minimum()
+
+	def clear_prevention_settings(self):
+		'''
+		Clears all of the check boxes from the prevention settings list view
+		and allows the garbage collector to destroy them.
+		'''
+		for setting in self.prevention_setting:
+			self.prevention_setting[setting].setParent(None)
+		self.prevention_setting = {}
+
+	def update_prevention_settings(self):
+		'''
+		Regenerates the list view of overlap prevention check boxes based on
+		the overlap prevention settings that exist in the calibrations for the
+		selection color.
+		'''
+		self.clear_prevention_settings()
+		if (self.selection_color != ""):
+			for color in self.calibration_file.available_colors:
+
+				# Prevents the selected color from being added to the list
+				if (not color == self.selection_color):
+
+					# Adds an entry to the overlap prevention scroll area for each color
+					self.prevention_setting[color] = QtGui.QCheckBox(self.overlap_prevention_colors)
+					self.prevention_setting[color].setObjectName(_fromUtf8("%s_prevention_setting" % (color)))
+					self.verticalLayout_8.addWidget(self.prevention_setting[color])
+					self.prevention_setting[color].setText(_translate("MainWindow", color, None))
+
+					# Loads existing prevention settings from the calibrations
+					if (color in self.calibration_file.overlap_prevention_rules[self.selection_color]):
+						self.prevention_setting[color].setCheckState(2)
+					else:
+						self.prevention_setting[color].setCheckState(0)
+
+					# Connect the check boxes to a method that updates the respective calibration values
+					self.prevention_setting[color].stateChanged.connect(self.modify_prevention_settings)
+
+	def modify_prevention_settings(self):
+		'''
+		If the box has been checked, the color is added to the prevention list.
+		If the box has been unchecked, the color is removed from the prevention
+		list.
+		'''
+		for color in self.colors.values():
+
+			# Prevents the selected color from being checked
+			if (not color == self.selection_color):
+
+				# Adds an item to the calibration's prevention settings if it was checked
+				if ((self.prevention_setting[color].isChecked()) and (not color in self.calibration_file.overlap_prevention_rules[self.selection_color])):
+					self.calibration_file.overlap_prevention_rules[self.selection_color].append(color)
+
+				# Removes an item from the calibration's prevention settings if it was unchecked
+				elif ((not self.prevention_setting[color].isChecked()) and (color in self.calibration_file.overlap_prevention_rules[self.selection_color])):
+					self.calibration_file.overlap_prevention_rules[self.selection_color].remove(color)
 
 	def update_averaging(self, value):
 		'''
