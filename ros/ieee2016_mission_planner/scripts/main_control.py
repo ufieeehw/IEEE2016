@@ -301,6 +301,7 @@ class ShiaStateMachine():
         # 1 is on the right, 2 is on the left
         self.ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=2)
         self.ee2 = EndEffector(gripper_count=4, ee_number=2, cam_position=2)
+        self.ee_list = [self.ee1,self.ee2]
 
         self.cam1 = Camera(cam_number=1)
         self.cam2 = Camera(cam_number=2)
@@ -386,17 +387,21 @@ class ShiaStateMachine():
                 The goals of this state are:
                     1. Move to pick up blocks with first end effector
                     2. Do this again for the second end effector
+
+                When we move in close, we are moving to an esimated position of a block. When we get in close, we try again to identify qr codes
+                but this time they will be more accurate. We only want the one qr code infront of the camera.
                 '''
                 print "=== STATE 3 ==="
                 print "> Executing waypoints."
 
                 # Used to determine if we need to rotate or naw.
-                last_ee = 0
+                last_ee = None
                 # Go through each waypoint and make sure we dont hit anything
-                for gripper,waypoint,grippers_to_acutate in arm_waypoints:
+                for gripper, waypoint, grippers_to_acutate, qr_rotation in arm_waypoints:
                     # We don't want to move and rotate here (unless we arent rotating) - so just rotate and get lined up away from the wall.
                     # Should move this to be part of the controller, but for now it can just go here.
-                    if gripper[:1] != last_ee:
+                    this_ee = [ee for ee in self.ee_list if ee.frame_id == ("EE"+gripper[:1])]
+                    if this_ee != last_ee:
                         # We need to back up slighly in order to rotate
                         backup_movement = np.copy(self.ros_manager.pose)
                         backup_movement[1] = self.ros_manager.block_wall_y - self.qr_distances[0] #m
@@ -410,20 +415,35 @@ class ShiaStateMachine():
 
                     # Now move in close to the wall. We move so that the edge of the robot is some distance from the wall.
                     # .1524m is 6 inches, or half the robot size
-                    distance_off_wall = .02032 #m
+                    distance_off_wall = .0116 #m
                     base_link_to_edge = .1524 #m
                     print "Moving Close"
                     waypoint[1] = self.ros_manager.block_wall_y - (base_link_to_edge + distance_off_wall)
                     self.ros_manager.set_arm_waypoint(gripper,waypoint)
 
-                    # This is where the fucking happens with the dynamixel controlling.
+                    # Move elevator to est height
+
+                    # Get a more accurate position estimate where to put the gripper
+                    if qr_rotation:
+                        print "Correcting Position"
+                        camera_gripper = this_ee.gripper_positions[this_ee.cam_position]
+                        updated_position = self.qr_detector.visual_servo((base_link_to_edge + distance_off_wall), camera_gripper.block.color, qr_rotation)
+                        waypoint[1] = np.copy(self.ros_manager.pose)[1]
+                        # We want to line the camera gripper up with the block in the frame
+                        self.ros_manager.set_arm_waypoint(camera_gripper, updated_position)
+
+
+                    # Move dynamixle in
 
                     # Pick up the blocks IRL somehow
                     print "Picking up with:",grippers_to_acutate
+
+                    # Pull ee back in
+
                     time.sleep(1)
 
                     # Used to determine if we need to rotate or naw.
-                    last_ee = gripper[:1]
+                    last_ee = this_ee
 
                 # Regenerate point cloud - for simulation only
                 self.point_cloud_generator.publish_points(b_tree,self.point_cloud_generator.point_cloud_pub)
@@ -446,7 +466,7 @@ class ShiaStateMachine():
                 # Right now we have to stop at each box, it would be good if we didnt have to.
                 print "Blocks:",self.ee1
                 print "Blocks:",self.ee2
-                for direction,ee in enumerate([self.ee1,self.ee2]):
+                for direction,ee in enumerate(self.ee_list):
                     # First make sure the gripper has blocks in it.
                     if ee.holding == 0:
                         continue
@@ -682,9 +702,10 @@ class RosManager():
 
         # Flip map_2 over the y axis to get map_1
         map_1 = np.copy(map_2.reshape(len(map_2)/5,5)).T
-        map_1[0] = 2.438 - map_1[0]
-        map_1[2] = 2.438 - map_1[2]
+        map_1[0] = self.far_wall_x - map_1[0]
+        map_1[2] = self.far_wall_x - map_1[2]
         map_1 = map_1.T.flatten()
+        self.state_machine.map_version = 2
         if self.state_machine.map_version == 1:
             return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_1
         elif self.state_machine.map_version == 2:

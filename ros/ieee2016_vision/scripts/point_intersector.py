@@ -11,9 +11,9 @@ import numpy as np
 class PointIntersector():
     '''
     Given a point in the camera frame and Shia's current position estimate where that point is along the wall.
-    (We are assuming that the blocks will be flush against the wall, or have some offset from the wall.)
+    (We are assuming that the blocks will be flush against the wall, or have some offset from the wall).
     '''
-    def __init__(self, map):
+    def __init__(self):
         # Map used for estimating distances
         map_request = rospy.ServiceProxy('/robot/request_map',RequestMap)
         self.map = np.array(map_request().map)
