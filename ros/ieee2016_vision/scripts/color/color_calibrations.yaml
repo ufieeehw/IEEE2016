@@ -12,10 +12,10 @@ hsv_ranges:
   - [20, 110, 110]
   - [50, 255, 255]
 overlap_prevention_rules:
-  blue: []
-  green: []
-  red: []
-  yellow: []
+  blue: [yellow, red, green]
+  green: [blue, red, yellow]
+  red: [green, yellow, blue]
+  yellow: [blue, green, red]
 selection_boxes:
   blue:
   - [160, 90]
