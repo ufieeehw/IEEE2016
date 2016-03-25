@@ -204,6 +204,8 @@ class DetectQRCodeTemplateMethod(object):
         self.load_templates(distances)
         self.distances = distances
 
+        self.blocks = []
+
     def load_templates(self, dists):
         # Only works with one distance right now
         for dist in dists:
@@ -274,7 +276,7 @@ class DetectQRCodeTemplateMethod(object):
                 args: [distance_to_wall, block_color, qr_rotation]. These are specified so we don't have to search every color and every rotation.
         '''
 
-        self.threshold = .67
+        self.threshold = .66
         self.camera = camera
         cam_to_base_link = np.abs(camera.get_tf()[1])
 
@@ -321,7 +323,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"blue",offset,rotation)
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
 
                 elif frame_count == 1:
                     mid_point = np.array(reds[0].shape[::-1])/2
@@ -331,7 +333,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"red",offset,rotation)
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
 
                 elif frame_count == 2:
                     mid_point = np.array(greens[0].shape[::-1])/2
@@ -341,7 +343,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"green",offset,rotation)
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
 
                 elif frame_count == 3:
                     mid_point = np.array(yellows[0].shape[::-1])/2
@@ -351,10 +353,10 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"yellow",offset,rotation)
-                            cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
+                            #cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
                 # Only for displaying
-                cv2.imshow("found",image)
-                cv2.waitKey(1)
+                #cv2.imshow("found",image)
+                #cv2.waitKey(1)
 
     def visual_servo(self, dist, block_color, orientation):
         '''
@@ -398,18 +400,32 @@ class DetectQRCodeTemplateMethod(object):
                 color=color,
                 rotation_index=rotation
             )
+        self.blocks.append(b_s)
         self.block_pub.publish(b_s)
+
+    def continuous_publish(self):
+        r = rospy.Rate(10)
+        while not rospy.is_shutdown():
+            rospy.loginfo("beep")
+            for b_s in self.blocks:
+                self.block_pub.publish(b_s)
+            r.sleep()
 
 if __name__ == "__main__":
     #d = DetectQRCodeZBar(qr_code_count=1, timeout=10)
     rospy.init_node("detect_qr")
     print "starting"
-    cam = Camera(1)
+    cam = Camera(2)
     cam.activate()
+    print cam.image
     d = DetectQRCodeTemplateMethod([50,56.25])
     r = rospy.Rate(10)
-    d.match_templates(cam, "inital_scan", 50)
-    rospy.loginfo("beep")
+    while not rospy.is_shutdown():
+        d.match_templates(cam, "inital_scan", 50)
+
+        rospy.loginfo("beep")
+        r.sleep()
+    #sd.continuous_publish()
     #     r.sleep()
     # rospy.spin()
-    cv2.waitKey(0)
+    #cv2.waitKey(0)

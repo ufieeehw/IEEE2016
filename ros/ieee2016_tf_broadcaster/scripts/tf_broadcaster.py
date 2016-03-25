@@ -86,13 +86,13 @@ class TFPublisher():
         # elevator -> main cameras
         self.tf_broad.sendTransform((.072,.0584,.0354), 
                         tf.transformations.quaternion_from_euler(1.57,3.1415,1.57),
-                        rospy.Time.now(), "cam_1_vision", "elevator")
+                        rospy.Time.now(), "cam_1_vision", "cam_1_adjust")
         self.tf_broad.sendTransform((-.072,-.0584,.0354), 
                         tf.transformations.quaternion_from_euler(1.57,3.1415,-1.57),
                         rospy.Time.now(), "cam_2_vision", "elevator")
         self.tf_broad.sendTransform((.072,.0584,.0354), 
                         tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "cam_1_pose", "elevator")
+                        rospy.Time.now(), "cam_1_pose", "cam_1_adjust")
         self.tf_broad.sendTransform((-.072,-.0584,.0354), 
                         tf.transformations.quaternion_from_euler(0,0,3.1415),
                         rospy.Time.now(), "cam_2_pose", "elevator")
@@ -116,18 +116,18 @@ class TFPublisher():
                 rospy.Time.now(), "EE2", "elevator")
 
 
-        self.tf_broad.sendTransform((0,0,.127), 
+        self.tf_broad.sendTransform((0,0,.119), 
                 tf.transformations.quaternion_from_euler(0,0,0),
                 rospy.Time.now(), "base_link", "base_footprint")
 
         #Temp
-        self.tf_broad.sendTransform((0,0,0), 
-                tf.transformations.quaternion_from_euler(0,0,0),
-                rospy.Time.now(), "base_footprint", "odom")
+        # self.tf_broad.sendTransform((0,0,0), 
+        #         tf.transformations.quaternion_from_euler(0,0,0),
+        #         rospy.Time.now(), "base_footprint", "odom")
 
-        # self.tf_broad.sendTransform((.47457,1.629,0), 
-        #         (0,0,.9999,-.0146),
-        #         rospy.Time.now(), "base_footprint", "map")
+        self.tf_broad.sendTransform((.241,1.608,0), 
+                tf.transformations.quaternion_from_euler(0,0,0),
+                rospy.Time.now(), "base_footprint", "map")
 
 if __name__ == "__main__":
     rospy.init_node('tf_broadcaster')
