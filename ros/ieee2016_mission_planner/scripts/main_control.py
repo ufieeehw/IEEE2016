@@ -298,7 +298,7 @@ class ShiaStateMachine():
 
         print "> ========= Creating Limbs ========="
         # Defining Shia's limbs. 
-        # 1 is on the right, 2 is on the left
+        # 1 is on the left, 2 is on the right
         self.ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=2)
         self.ee2 = EndEffector(gripper_count=4, ee_number=2, cam_position=2)
         self.ee_list = [self.ee1,self.ee2]
@@ -548,6 +548,7 @@ class ShiaStateMachine():
             #if self.current_state > 50: self.current_state = 0
             rate.sleep()
 
+
 class RosManager():
     def __init__(self,s):
         self.state_machine = s
@@ -583,19 +584,18 @@ class RosManager():
                 nav_start = StartNavigation()
                 nav_start.map = self.get_map(None)[3]
 
-                # 1 is the map configuration where we start on the right, 2 is on the left.
-                if self.state_machine.map_version == 1:
-                    self.pose = np.array([self.far_wall_x - .2,.2,1.57])
-                    nav_start.init_pose = self.pose
-                    self.nav_start_pub.publish(nav_start)
-
+                # 1 is the map configuration where we start on the left, 2 is on the right.
                     #self.state_machine.begin_1()
-                elif self.state_machine.map_version == 2:
+                if self.state_machine.map_version == 1:
                     self.pose = np.array([.24,.48,1.57])
                     nav_start.init_pose = self.pose
                     self.nav_start_pub.publish(nav_start)
+                    self.state_machine.begin()
 
-                    self.state_machine.begin_2()
+                elif self.state_machine.map_version == 2:
+                    self.pose = np.array([self.far_wall_x - .2,.2,1.57])
+                    nav_start.init_pose = self.pose
+                    self.nav_start_pub.publish(nav_start)
             else:
                 print "Error, no map version set."
 
@@ -664,7 +664,7 @@ class RosManager():
     def get_map(self,srv):
         self.block_wall_y = 2.174 #m
         self.far_wall_x = 2.438 #m
-        map_2 = np.array([   0, 0, 0, 2.174,             1, # Left Wall
+        map_1 = np.array([   0, 0, 0, 2.174,             1, # Left Wall
                              0, 0, 2.438, 0,             1, # Back Wall
                              2.438, 0, 2.438, 2.174,     1, # Right Wall
                              0, 2.174, 2.438, 2.174,     0, # Front Wall
@@ -701,15 +701,15 @@ class RosManager():
                         ]).astype(np.float32) 
 
         # Flip map_2 over the y axis to get map_1
-        map_1 = np.copy(map_2.reshape(len(map_2)/5,5)).T
-        map_1[0] = self.far_wall_x - map_1[0]
-        map_1[2] = self.far_wall_x - map_1[2]
-        map_1 = map_1.T.flatten()
-        self.state_machine.map_version = 2
+        map_2 = np.copy(map_1.reshape(len(map_1)/5,5)).T
+        map_2[0] = self.far_wall_x - map_2[0]
+        map_2[2] = self.far_wall_x - map_2[2]
+        map_2 = map_2.T.flatten()
+
         if self.state_machine.map_version == 1:
-            return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_1
-        elif self.state_machine.map_version == 2:
             return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_2
+        elif self.state_machine.map_version == 2:
+            return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_1
 
 if __name__ == "__main__":
     os.system("clear")
