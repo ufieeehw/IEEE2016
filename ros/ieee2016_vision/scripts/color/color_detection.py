@@ -6,10 +6,11 @@
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
 
+from sklearn.cluster import KMeans
+
 from color_calibration import CalibrationData
 import cv2
 import numpy as np
-
 
 class Image():
 	'''
@@ -75,27 +76,37 @@ class Image():
 			self.frame = self.redux_frame[image_color_depth]
 
 		else:
+		 	# Filters a new frame to reduce noise
 			self.resize()
+ 		 	working_frame = cv2.bilateralFilter(self.frame, 20, 75, 75)
+
+			# Downsamples the frame and converts it to a 2D floating point array
+			self.resize_to(32)
+			working_frame = np.float32(self.frame.reshape((-1, 3)))
+
+			# Uses K-Means clustering to determine the requested highest density colors
+			kmeans = KMeans(image_color_depth, "k-means++", 10, 4, 1e-4, "auto", 0, None, False, 1)
+			kmeans.fit(working_frame)
 
 		 	# Filters the image to reduce noise
+			self.resize()
  		 	working_frame = cv2.bilateralFilter(self.frame, 9, 75, 75)
- 		 	working_frame = cv2.medianBlur(working_frame, 5)
 
-			# Converts the frame to a format that is usable with K-Means clustering
-			working_frame = working_frame.reshape((-1, 3))
-			working_frame = np.float32(working_frame)
+			# Downsamples a new frame and converts it to a 2D floating point array
+ 		 	self.resize_to(75)
+			working_frame = np.float32(self.frame.reshape((-1, 3)))
 
-			# Use K-Means clustering to identify the 16 most predominant colors
-			criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-			ret, label, center = cv2.kmeans(working_frame, image_color_depth, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+			# Reduces the colors in the frame based on the clustering results
+			labels = kmeans.fit_predict(working_frame)
+			center = np.uint8(kmeans.cluster_centers_)
+			working_frame = center[labels]
 
-			# Reduces the colors in the original image based on the clustering results
-			center = np.uint8(center)
-			working_frame = center[label.flatten()]
+			# Resizes the frame to the operating parameters
 			self.frame = working_frame.reshape((self.frame.shape))
+			self.resize_to(self.operating_dimensions[0])
 
-		 	# Stores the frame for later holding
-		 	self.redux_frame[image_color_depth] = self.frame
+			# Stores the frame for later holding
+			self.redux_frame[image_color_depth] = self.frame
 
 	def extract_color(self, color):
 		'''
@@ -121,35 +132,59 @@ class ObjectDetection():
 		self.boxes = {}
 		self.box_centers = {}
 
-	def select_largest_object(self, colors):
+	def weighted_average(self, contours):
+		'''
+		Create a weighted average of each box's area and solidity (basically a
+		pixel density measurement) based on the following multipliers:
+		Area = 0.3 and Solidity = 0.7.
+		'''
+		averages = []
+
+		for contour in contours:
+			# Calculate the area of the contour
+			area = cv2.contourArea(contour)
+
+			# Calculate the density of the contour
+			hull = cv2.convexHull(contour)
+			hull_area = cv2.contourArea(hull)
+			if (hull_area > 0):
+				solidity = float(area) / hull_area
+			else:
+				solidity = 0
+
+			averages.append((area * 0.3) + (solidity * 0.7))
+
+		return averages
+
+	def select_largest_solid(self, colors):
 		'''
 		Selects the largest object in a frame by finding all contours and
 		selecting the largest one.
 		'''
 		for color in colors:
-			largest_area = None
-			largest_contour = None
 
 			# Reuse the reduced color frame for all colors to reduce processing cost
 			self.image.extract_color(color)
 			self.image.hold_redux_frame = True
-
-			# Generates a gray frame for the passed color id
 	 		working_frame = cv2.cvtColor(self.image.frame, cv2.COLOR_BGR2GRAY)
 
 			# Finds all contours within the frame
-			ret, thresh = cv2.threshold(working_frame, 50, 255, 0)
+			ret, thresh = cv2.threshold(working_frame, 45, 255, 0)
 			contours, hierarchy = cv2.findContours(thresh, 1, 2)
 
-			# Selects the largest contour in the frame
-			for contour in contours:
-				area = cv2.contourArea(contour)
-				if (area > largest_area):
-					largest_area = area
-					largest_contour = contour
+			# Computes a weighted average for each contour
+			averages = self.weighted_average(contours)
 
-			if (largest_contour != None):
-				rect = cv2.minAreaRect(largest_contour)
+			# Selects the best contour by finding the largest average
+			largest_average = None
+			best_contour = None
+			for index in range(len(averages)):
+				if (averages[index] > largest_average):
+					largest_average = averages[index]
+					best_contour = contours[index]
+
+			if (best_contour != None):
+				rect = cv2.minAreaRect(best_contour)
 				self.boxes[color] = cv2.cv.BoxPoints(rect)
 			else:
 				self.boxes[color] = None
