@@ -72,7 +72,7 @@ class Camera():
         self.perspective_frame_id = self.name + "_vision"
         self.position_frame_id = self.name + "_pose"
 
-        image_topic = "/camera/cam_stream"
+        image_topic = "/camera/"+self.name
 
         rospy.Subscriber(image_topic, Image, self.got_image)
         self.tf_listener = tf.TransformListener()
@@ -196,9 +196,9 @@ class Camera():
 class CameraManager():
     def __init__(self):
         # ROS inits
-        # self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 1)
-        # self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 1)
-        self.cam_pub = rospy.Publisher("/camera/cam_stream", Image, queue_size = 1)
+        self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 1)
+        self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 1)
+        #self.cam_pub = rospy.Publisher("/camera/cam_stream", Image, queue_size = 1)
         
         rospy.init_node("camera_manager")
         br = CvBridge()
@@ -222,7 +222,8 @@ class CameraManager():
         while not rospy.is_shutdown():
             try:
                 if self.cam:
-                    self.cam_pub.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
+                    self.cam_1_pub.publish(br.cv2_to_imgmsg(self.cam_1.read()[1], "bgr8"))
+                    self.cam_2_pub.publish(br.cv2_to_imgmsg(self.cam_2.read()[1], "bgr8"))
                 rate.sleep()
             except:
                 print "> Error opening Camera:", self.cam
@@ -234,9 +235,11 @@ class CameraManager():
         if cam_name == "cam_1":
             print "> Publishing Camera 1."
             self.cam = self.cam_1
+            self.pub = self.cam_1_pub
         elif cam_name == "cam_2":
             print "> Publishing Camera 2."
             self.cam = self.cam_2
+            self.pub = self.cam_2_pub
         elif cam_name == "STOP":
             print "> Stopping Publishing."
             self.cam = None
