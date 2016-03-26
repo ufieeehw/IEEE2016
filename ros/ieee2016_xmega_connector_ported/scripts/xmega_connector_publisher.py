@@ -11,8 +11,8 @@ import numpy as np
 import rospy
 import rospkg
 from std_msgs.msg import Header, Float64
-from xmega_connector.msg import XMEGAPacket
-from xmega_connector.srv import *
+from ieee2016_xmega_connector_ported.msg import XMEGAPacket
+from ieee2016_xmega_connector_ported.srv import *
 from geometry_msgs.msg import TwistStamped, Twist, Vector3, PoseStamped, Pose, Point, Quaternion, PoseWithCovarianceStamped, PoseWithCovariance, \
                               TwistWithCovariance, TwistWithCovarianceStamped
 from sensor_msgs.msg import Imu
@@ -99,7 +99,6 @@ class MagnetometerManager():
         # New service to get corrected heading
         rospy.Service('~get_heading_corrected', GetHeading, self.get_heading_service)
 
-
     def get_heading_service(self,srv):
         # Get the raw heading from the service (but do it locally, not over ros.)
         heading = self.service_manager.get_heading_service(None)
@@ -110,7 +109,6 @@ class MagnetometerManager():
         service_response.xData = xData
         service_response.zData = 0
         service_response.yData = yData
-
         return service_response
 
     def publish_mag_data(self):
@@ -221,26 +219,25 @@ class ServiceManager():
 
 
     def get_odometry_service(self, odo_req):
-        print "1"
         self.xmega_lock.acquire(True)
         packet = XMEGAPacket()
         packet.msg_type = 0x05
         packet.msg_length = 1
-        print "2"
+
         self.connector_object.send_packet(packet)
-        print "3"
+
         response_packet = self.connector_object.read_packet()
-        print "4"
+
         wheel1, wheel2, wheel3, wheel4 = struct.unpack("<iiii", response_packet.msg_body)
         self.connector_object.send_ack()
-        print "5"
+
         service_response = GetOdometryResponse()
         service_response.wheel1 = wheel1 / 1000.
         service_response.wheel2 = wheel2 / 1000.
         service_response.wheel3 = wheel3 / 1000.
         service_response.wheel4 = wheel4 / 1000.
         self.xmega_lock.release()
-        print "6"
+
         return service_response
 
     def get_heading_service(self, head_req):
@@ -301,8 +298,9 @@ if __name__ == "__main__":
     # Define objects
     xmega_services = ServiceManager(connector_object,xmega_lock)
     magnetometer = MagnetometerManager(xmega_services)
+
+    rate = rospy.Rate(10) #hz
+    while not rospy.is_shutdown():
+        rate.sleep()
+        magnetometer.publish_mag_data()
     rospy.spin()
-    # rate = rospy.Rate(10) #hz
-    # while not rospy.is_shutdown():
-    #     rate.sleep()
-    #     magnetometer.publish_mag_data()
