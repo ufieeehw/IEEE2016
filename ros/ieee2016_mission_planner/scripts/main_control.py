@@ -324,7 +324,7 @@ class ShiaStateMachine():
 
     def load_waypoints(self):
         waypoints_temp = load_waypoints()
-        if self.map_version == 1:
+        if self.map_version == 2:
             # If we are on the right side map configuration, switch all the waypoints 
             for point in waypoints_temp:
                 waypoints_temp[key][0] = self.ros_manager.far_wall_x - waypoints_temp[key][0]  
@@ -548,6 +548,265 @@ class ShiaStateMachine():
             #if self.current_state > 50: self.current_state = 0
             rate.sleep()
 
+class ControlUnit():
+    '''
+    Deals with keeping track of which stage we are in and what we are doing in that stage. 
+
+    The goal is not to clutter up the state machine with methods that don't need to be there but can instead be here.
+
+    I don't know if this is the best way to implement this.
+    '''
+    def __init__(self, waypoints):
+        self.waypoints = waypoints
+        self.current_block_zone = 'B'
+        self.current_block_stage = 1
+        self.processing_waypoint = None
+
+    def find_next_waypoint(self):
+        test_waypoint_name = "process_%s_%i"%(self.current_block_stage.lower(), self.current_block_stage)
+        waypoint = [value for value in self.waypoints.iteritems() if key.startswith(test_waypoint_name)]
+        self.current_block_stage += 1
+        return waypoint
+
+    def next_stage(self):
+        if self.current_block_zone == 'A':
+            self.current_block_zone = 'C'
+            self.current_block_stage = 1
+        elif self.current_block_zone == 'B':
+            self.current_block_zone = 'A'
+            self.current_block_stage = 1
+        elif self.current_block_zone == 'C':
+            self.current_block_zone = None
+
+class TestingStateMachine():
+    def __init__(self):
+        self.ros_manager = RosManager(self)
+
+        self.current_state = 0
+        self.map_version = 0
+
+        self.running = False
+
+        print "> ========= Creating Limbs ========="
+        # Defining Shia's limbs. 
+        # 1 is on the right, 2 is on the left
+        self.ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=2)
+        self.ee_list = [self.ee1]
+
+        self.cam1 = Camera(cam_number=1)
+
+        print "> ========= Creating Detection Objects ========="
+        # Objects for detecting and returning location of QR codes. Parameters are the set distances from the codes (cm).
+        self.qr_distances = [50]
+        self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
+        self.waypoint_generator = WaypointGenerator(self.ee1)#, self.ee2)
+        #self.arm_controller = ArmController()
+
+        #self.point_cloud_generator = temp_GenerateBlockPoints(16)
+        #self.point_cloud_generator.generate_b_blocks()
+        print
+        print "> ========= State Machine Init Complete ========="
+        print "> Waiting for map selection and start command."
+
+        rospy.spin()
+
+    def load_waypoints(self):
+        waypoints_temp = load_waypoints()
+        if self.map_version == 2:
+            # If we are on the right side map configuration, switch all the waypoints 
+            for point in waypoints_temp:
+                waypoints_temp[key][0] = self.ros_manager.far_wall_x - waypoints_temp[key][0]  
+        self.waypoints = waypoints_temp
+
+    def begin(self):
+        '''
+        This will run the map configuration where we start on the left side of the map.
+        '''
+        print
+        print "> Running Test"
+        print "> Map Version:",self.map_version
+        print
+        self.load_waypoints()
+        # This needs to be here since it requires the waypoints.
+        self.control = ControlUnit(self.waypoints) # Note that Ken does not have any self.control.
+
+        #self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
+
+        self.current_state += 0
+
+        self.running = True
+        rate = rospy.Rate(25) #hz
+        while not rospy.is_shutdown():
+            
+            self.ros_manager.publish_current_state(self.current_state)
+
+            if self.current_state == 1:
+                '''
+                The goals of this state are:
+                    1. Nove to and begin processing B blocks.
+                    2. Move to the next B blocks processing location and continue processing.
+                    3. Continue going to B block waypoints until all blocks are processed.
+                    4. Generate Arm Waypoints
+                '''
+                print "=== STATE 1 ==="
+                # Load the first waypoint and make sure we put the camera at 50cm from the wall.
+                observation_point = self.control_unit.find_next_waypoint()
+                observation_point[1] = self.ros_manager.block_wall_y - (.5 + np.abs(self.cam1.get_tf()[1]))
+                self.ros_manager.set_nav_waypoint(observation_point)
+                
+                self.cam1.activate()
+                
+                # Create a new block server to create a tree of blocks that will be used to process on.
+                self.block_server = BlockServer([self.cam1])
+                self.qr_detector.match_templates(self.cam1, *self.block_checker_status())
+                b_tree = self.block_server.k
+
+                # Generate waypoints for two arms, picking up all possible blocks.
+                b_tree, arm_waypoints = self.waypoint_generator.generate_arm_waypoints(b_tree, -1)
+
+                print "> Waypoints Generated."
+
+                self.current_state += 1
+
+            elif self.current_state == 2:
+                '''
+                The goals of this state are:
+                    1. Move to pick up blocks with first end effector
+                    2. Do this again for the second end effector
+
+                When we move in close, we are moving to an esimated position of a block. When we get in close, we try again to identify qr codes
+                but this time they will be more accurate. We only want the one qr code infront of the camera.
+                '''
+                print "=== STATE 3 ==="
+                print "> Executing waypoints."
+
+                # Used to determine if we need to rotate or naw.
+                last_ee = None
+                # Go through each waypoint and make sure we dont hit anything
+                for gripper, waypoint, grippers_to_acutate, qr_rotation in arm_waypoints:
+                    # We don't want to move and rotate here (unless we arent rotating) - so just rotate and get lined up away from the wall.
+                    # Should move this to be part of the controller, but for now it can just go here.
+                    this_ee = [ee for ee in self.ee_list if ee.frame_id == ("EE"+gripper[:1])]
+                    if this_ee != last_ee:
+                        # We need to back up slighly in order to rotate
+                        backup_movement = np.copy(self.ros_manager.pose)
+                        backup_movement[1] = self.ros_manager.block_wall_y - self.qr_distances[0] #m
+                        self.ros_manager.set_nav_waypoint(backup_movement)
+
+                        # Then rotate in place
+                        rotate_waypoint = np.copy(waypoint)
+                        rotate_waypoint[1] = self.ros_manager.block_wall_y - self.qr_distances[0] #m
+                        print "Lining Up"
+                        self.ros_manager.set_arm_waypoint(gripper,rotate_waypoint)
+
+                    # Now move in close to the wall. We move so that the edge of the robot is some distance from the wall.
+                    # .1524m is 6 inches, or half the robot size
+                    distance_off_wall = .0116 #m
+                    base_link_to_edge = .1524 #m
+                    print "Moving Close"
+                    waypoint[1] = self.ros_manager.block_wall_y - (base_link_to_edge + distance_off_wall)
+                    self.ros_manager.set_arm_waypoint(gripper,waypoint)
+
+                    # Move elevator to est height
+
+                    # Get a more accurate position estimate where to put the gripper
+                    if qr_rotation:
+                        print "Correcting Position"
+                        camera_gripper = this_ee.gripper_positions[this_ee.cam_position]
+                        updated_position = self.qr_detector.visual_servo((base_link_to_edge + distance_off_wall), camera_gripper.block.color, qr_rotation)
+                        waypoint[1] = np.copy(self.ros_manager.pose)[1]
+                        # We want to line the camera gripper up with the block in the frame
+                        self.ros_manager.set_arm_waypoint(camera_gripper, updated_position)
+
+
+                    # Move dynamixle in
+
+                    # Pick up the blocks IRL somehow
+                    print "Picking up with:",grippers_to_acutate
+
+                    # Pull ee back in
+
+                    time.sleep(1)
+
+                    # Used to determine if we need to rotate or naw.
+                    last_ee = this_ee
+
+                # Regenerate point cloud - for simulation only
+                self.point_cloud_generator.publish_points(b_tree,self.point_cloud_generator.point_cloud_pub)
+                #self.point_cloud_generator.b_blocks = np.array(b_blocks, dtype=object)
+                #self.point_cloud_generator.generate_b_camera_view()
+
+                self.current_state += 1
+
+            elif self.current_state == 3:
+                '''
+                The goals of this state are:
+                    1. Move to train box_4.
+                    2. Release that color on the first end effector.
+                    3. Move to next box with a color that we have. Repeat until at the last box.
+                    4. Turn around and repeat with the other end effector - starting from box 1.
+                    5. If there are still blocks we haven't gotten, move back to reprocess B blocks.
+                '''
+                print "=== STATE 4 ==="
+                # We are going to iterate over 2 directions and to the 4 boxes. The first direction drops off ee1 and the second drops off ee2.
+                # Right now we have to stop at each box, it would be good if we didnt have to.
+                print "Blocks:",self.ee1
+                print "Blocks:",self.ee2
+                for direction,ee in enumerate(self.ee_list):
+                    # First make sure the gripper has blocks in it.
+                    if ee.holding == 0:
+                        continue
+                    # When direction is 0, we will be pointing one way, when it is 1, we will rotate to face the other way.
+                    rotational_offset = direction*np.pi
+                    print rotational_offset
+                    box_number = 1
+                    while box_number <= 4:
+                        # Run through before we move and make sure the next box is the color of a block we are holding
+                        holding_color = False
+                        while not holding_color:
+                            if direction == 0:
+                                box = 'box_'+str(5-box_number)
+                            else:
+                                box = 'box_'+str(box_number)
+
+                            grippers_to_drop = ee.which_gripper(train_box_colors[box])
+                            if len(grippers_to_drop) is not 0:
+                                # If there are blocks that match the color of the box, we can break from this loop and go to that box.
+                                holding_color = True
+                                break
+                            print "No %s blocks detected - skipping that box."%(train_box_colors[box])
+                            box_number += 1
+
+                        print "This color:",train_box_colors[box],box
+                        # Where should we go and what direction should we point
+                        curr_waypoint = np.copy(self.waypoints[box])
+                        curr_waypoint[2] += rotational_offset
+
+                        # Move and then when we get there drop off the associated color blocks
+                        self.ros_manager.set_nav_waypoint(curr_waypoint)
+                        
+                        print "Dropping blocks grippers:",grippers_to_drop
+                        ee.drop(grippers_to_drop)
+                        time.sleep(1)
+                        if ee.holding == 0:
+                            print "Empty gripper!"
+                            break
+                        box_number += 1
+
+                if self.waypoint_generator.picked_up == 20:
+                    self.waypoint_generator.picked_up = 0
+                    break
+                else:
+                    # Go back and reprocess B blocks
+                    self.current_state = 2
+
+            else:
+                break
+
+            #if self.current_state > 50: self.current_state = 0
+            rate.sleep()
+
+
 
 class RosManager():
     def __init__(self,s):
@@ -713,4 +972,5 @@ class RosManager():
 
 if __name__ == "__main__":
     os.system("clear")
-    ShiaStateMachine()
+    #ShiaStateMachine()
+    TestingStateMachine()

@@ -102,11 +102,6 @@ class TFPublisher():
         #                 tf.transformations.quaternion_from_euler(0,0,0),
         #                 rospy.Time.now(), "imu", "base_link")
 
-        # base_link -> elevator 
-        self.tf_broad.sendTransform((0,0,.07112), 
-                tf.transformations.quaternion_from_euler(0,0,1.5707),
-                rospy.Time.now(), "elevator", "base_link")
-
         # elevator -> Each End Effector
         self.tf_broad.sendTransform((0,.02667,-.06925), 
                 tf.transformations.quaternion_from_euler(0,0,0),
@@ -115,7 +110,12 @@ class TFPublisher():
                 tf.transformations.quaternion_from_euler(0,0,3.1416),
                 rospy.Time.now(), "EE2", "elevator")
 
+        # base_link -> elevator 
+        self.tf_broad.sendTransform((0,0,.07112), 
+                tf.transformations.quaternion_from_euler(0,0,1.5707),
+                rospy.Time.now(), "elevator", "base_link")
 
+        # base_footprint -> base_link
         self.tf_broad.sendTransform((0,0,.119), 
                 tf.transformations.quaternion_from_euler(0,0,0),
                 rospy.Time.now(), "base_link", "base_footprint")
@@ -125,9 +125,9 @@ class TFPublisher():
         #         tf.transformations.quaternion_from_euler(0,0,0),
         #         rospy.Time.now(), "base_footprint", "odom")
 
-        self.tf_broad.sendTransform((.241,1.608,0), 
-                tf.transformations.quaternion_from_euler(0,0,0),
-                rospy.Time.now(), "base_footprint", "map")
+        # self.tf_broad.sendTransform((.241,1.608,0), 
+        #         tf.transformations.quaternion_from_euler(0,0,0),
+        #         rospy.Time.now(), "base_footprint", "map")
 
 if __name__ == "__main__":
     rospy.init_node('tf_broadcaster')
