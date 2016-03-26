@@ -87,8 +87,9 @@ class Camera():
     def __repr__(self):
         return self.name
 
-    def activate(self):
-        default_timeout = 2
+    def activate(self, default_timeout = 2):
+        # Timeout is in seconds.
+
         ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data = self.name))
         self.proj_mat = np.array([ret.cam_info.P]).reshape((3, 4))
         self.proj_mat_pinv = np.linalg.pinv(self.proj_mat)
@@ -104,6 +105,7 @@ class Camera():
         '''
         Doesn't do anything, activate a different camera if you need it.
         '''
+        raise NotImplementedError
         if True:
             return None
         else:
@@ -194,11 +196,15 @@ class Camera():
             print e
 
 class CameraManager():
+    '''
+    The greatest implementation of a camera manager that has ever existed.
+    Don't listen to Anthony.
+    '''
     def __init__(self):
         # ROS inits
-        # self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 1)
-        # self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 1)
-        self.cam_pub = rospy.Publisher("/camera/cam_stream", Image, queue_size = 1)
+        self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 2)
+        self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 2)
+        #self.cam_pub = rospy.Publisher("/camera/cam_stream", Image, queue_size = 1)
         
         rospy.init_node("camera_manager")
         br = CvBridge()
@@ -221,28 +227,31 @@ class CameraManager():
         rate = rospy.Rate(rospy.get_param("~fps"))  # hz
         while not rospy.is_shutdown():
             try:
-                if self.cam:
-                    self.cam_pub.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
-                rate.sleep()
+                self.cam_1.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
+                self.cam_2.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
             except:
-                print "> Error opening Camera:", self.cam
+                print "> Error opening one of the Cameras."
                 rate.sleep()
 
     def set_camera(self, srv):
-        cam_name = srv.cam_name.data
-        self.cam = None
-        if cam_name == "cam_1":
-            print "> Publishing Camera 1."
-            self.cam = self.cam_1
-        elif cam_name == "cam_2":
-            print "> Publishing Camera 2."
-            self.cam = self.cam_2
-        elif cam_name == "STOP":
-            print "> Stopping Publishing."
-            self.cam = None
-            return CameraInfo()
+        '''
+        Calling this function will only return that camera's calibration.
+        Activating a camera doesn't do anything - though this might change.
+        '''
+        # cam_name = srv.cam_name.data
+        # self.cam = None
+        # if cam_name == "cam_1":
+        #     print "> Publishing Camera 1."
+        #     self.cam = self.cam_1
+        # elif cam_name == "cam_2":
+        #     print "> Publishing Camera 2."
+        #     self.cam = self.cam_2
+        # elif cam_name == "STOP":
+        #     print "> Stopping Publishing."
+        #     self.cam = None
+        #     return CameraInfo()
 
-        return self.get_cam_info(cam_name)
+        return self.get_cam_info(srv.cam_name.data)
 
     def get_cam_info(self, cam_name):
         cam_name = "calibrations/" + cam_name + ".yaml"
