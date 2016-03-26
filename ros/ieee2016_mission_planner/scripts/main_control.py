@@ -558,24 +558,24 @@ class ControlUnit():
     '''
     def __init__(self, waypoints):
         self.waypoints = waypoints
-        self.current_block_zone = 'B'
+        self.current_block_zone = 'b'
         self.current_block_stage = 1
         self.processing_waypoint = None
 
     def find_next_waypoint(self):
-        test_waypoint_name = "process_%s_%i"%(self.current_block_stage.lower(), self.current_block_stage)
-        waypoint = [value for value in self.waypoints.iteritems() if key.startswith(test_waypoint_name)]
+        test_waypoint_name = "process_%s_%i"%(self.current_block_stage, self.current_block_stage)
+        waypoint = [value for key in self.waypoints.iteritems() if key.startswith(test_waypoint_name)]
         self.current_block_stage += 1
         return waypoint
 
     def next_stage(self):
-        if self.current_block_zone == 'A':
-            self.current_block_zone = 'C'
+        if self.current_block_zone == 'a':
+            self.current_block_zone = 'c'
             self.current_block_stage = 1
-        elif self.current_block_zone == 'B':
-            self.current_block_zone = 'A'
+        elif self.current_block_zone == 'b':
+            self.current_block_zone = 'a'
             self.current_block_stage = 1
-        elif self.current_block_zone == 'C':
+        elif self.current_block_zone == 'c':
             self.current_block_zone = None
 
 class TestingStateMachine():
@@ -590,16 +590,15 @@ class TestingStateMachine():
         print "> ========= Creating Limbs ========="
         # Defining Shia's limbs. 
         # 1 is on the right, 2 is on the left
-        self.ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=2)
-        self.ee_list = [self.ee1]
+        self.ee2 = EndEffector(gripper_count=4, ee_number=2, cam_position=2)
+        self.ee_list = [self.ee2]
 
-        self.cam1 = Camera(cam_number=1)
+        self.cam2 = Camera(cam_number=2)
 
         print "> ========= Creating Detection Objects ========="
         # Objects for detecting and returning location of QR codes. Parameters are the set distances from the codes (cm).
         self.qr_distances = [50]
-        self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
-        self.waypoint_generator = WaypointGenerator(self.ee1)#, self.ee2)
+        self.waypoint_generator = WaypointGenerator(self.ee2)#, self.ee2)
         #self.arm_controller = ArmController()
 
         #self.point_cloud_generator = temp_GenerateBlockPoints(16)
@@ -629,10 +628,11 @@ class TestingStateMachine():
         self.load_waypoints()
         # This needs to be here since it requires the waypoints.
         self.control = ControlUnit(self.waypoints) # Note that Ken does not have any self.control.
+        self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
 
         #self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
 
-        self.current_state += 0
+        self.current_state += 1
 
         self.running = True
         rate = rospy.Rate(25) #hz
@@ -650,15 +650,15 @@ class TestingStateMachine():
                 '''
                 print "=== STATE 1 ==="
                 # Load the first waypoint and make sure we put the camera at 50cm from the wall.
-                observation_point = self.control_unit.find_next_waypoint()
-                observation_point[1] = self.ros_manager.block_wall_y - (.5 + np.abs(self.cam1.get_tf()[1]))
+                observation_point = self.waypoints['process_b_1']
+                observation_point[1] = self.ros_manager.block_wall_y - (.5 + np.abs(self.cam2.get_tf()[1]))
                 self.ros_manager.set_nav_waypoint(observation_point)
                 
                 self.cam1.activate()
                 
                 # Create a new block server to create a tree of blocks that will be used to process on.
-                self.block_server = BlockServer([self.cam1])
-                self.qr_detector.match_templates(self.cam1, *self.block_checker_status())
+                self.block_server = BlockServer([self.cam2])
+                self.qr_detector.match_templates(self.cam2, *self.block_checker_status())
                 b_tree = self.block_server.k
 
                 # Generate waypoints for two arms, picking up all possible blocks.
@@ -701,7 +701,7 @@ class TestingStateMachine():
 
                     # Now move in close to the wall. We move so that the edge of the robot is some distance from the wall.
                     # .1524m is 6 inches, or half the robot size
-                    distance_off_wall = .0116 #m
+                    distance_off_wall = .04 #m
                     base_link_to_edge = .1524 #m
                     print "Moving Close"
                     waypoint[1] = self.ros_manager.block_wall_y - (base_link_to_edge + distance_off_wall)
@@ -750,7 +750,7 @@ class TestingStateMachine():
                 print "=== STATE 4 ==="
                 # We are going to iterate over 2 directions and to the 4 boxes. The first direction drops off ee1 and the second drops off ee2.
                 # Right now we have to stop at each box, it would be good if we didnt have to.
-                print "Blocks:",self.ee1
+                #print "Blocks:",self.ee1
                 print "Blocks:",self.ee2
                 for direction,ee in enumerate(self.ee_list):
                     # First make sure the gripper has blocks in it.
@@ -846,7 +846,7 @@ class RosManager():
                 # 1 is the map configuration where we start on the left, 2 is on the right.
                     #self.state_machine.begin_1()
                 if self.state_machine.map_version == 1:
-                    self.pose = np.array([.24,.48,1.57])
+                    self.pose = np.array([.2,1.7,1.57])
                     nav_start.init_pose = self.pose
                     self.nav_start_pub.publish(nav_start)
                     self.state_machine.begin()
@@ -966,9 +966,9 @@ class RosManager():
         map_2 = map_2.T.flatten()
 
         if self.state_machine.map_version == 1:
-            return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_2
-        elif self.state_machine.map_version == 2:
             return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_1
+        elif self.state_machine.map_version == 2:
+            return self.state_machine.map_version, self.block_wall_y, self.far_wall_x, map_2
 
 if __name__ == "__main__":
     os.system("clear")
