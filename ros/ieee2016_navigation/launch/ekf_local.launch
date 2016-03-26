@@ -120,7 +120,7 @@
            this is acceptable. For orientation variables, it can lead to trouble. Users should make sure that all orientation
            variables have at least one source of absolute measurement. -->
 <!--       <param name="imu0_differential" value="false"/> -->
-      <param name="twist0_differential" value="false"/>
+      <param name="twist0_differential" value="true"/>
       <param name="pose0_differential" value="false"/>
 <!--       <param name="pose1_differential" value="false"/> -->
 
@@ -146,8 +146,8 @@
       <!-- By default, the subscription queue size for each message type is 1. If you wish to increase that so as not
            miss any messages (even if your frequency is set to a relatively small value), increase these. -->
 <!--       <param name="imu0_queue_size" value="3"/> -->
-      <param name="twist0_queue_size" value="3"/>
-      <param name="pose0_queue_size" value="1"/>
+      <param name="twist0_queue_size" value="2"/>
+      <param name="pose0_queue_size" value="2"/>
       <!-- <param name="pose1_queue_size" value="3"/> -->
       <!-- If your data is subject to outliers -->
 <!--       <param name="imu0_pose_rejection_threshold" value="0.3"/>

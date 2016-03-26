@@ -205,8 +205,7 @@ class Controller(object):
                 odom_srv.wheel3,
                 -odom_srv.wheel4,
             ])
-            print wheel_odom
-            vehicle_twist = np.dot(self.mecanum_matrix, wheel_odom).A1
+            vehicle_twist = np.dot(self.mecanum_matrix, wheel_odom).A1*10
 
             rot_mat = self.make_2D_rotation(self.pose[2])
             x, y = np.dot(rot_mat, [vehicle_twist[0], vehicle_twist[1]]).A1

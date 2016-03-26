@@ -121,9 +121,9 @@ class TFPublisher():
                 rospy.Time.now(), "base_link", "base_footprint")
 
         #Temp
-        # self.tf_broad.sendTransform((0,0,0), 
-        #         tf.transformations.quaternion_from_euler(0,0,0),
-        #         rospy.Time.now(), "base_footprint", "odom")
+        self.tf_broad.sendTransform((0,0,0), 
+                tf.transformations.quaternion_from_euler(0,0,0),
+                rospy.Time.now(), "base_footprint", "odom")
 
         # self.tf_broad.sendTransform((.241,1.608,0), 
         #         tf.transformations.quaternion_from_euler(0,0,0),

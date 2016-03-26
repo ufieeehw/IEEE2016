@@ -199,7 +199,7 @@ class GPUAccFilter():
         self.pose_est_pub = rospy.Publisher('/robot/navigation/pf_pose_vis', PoseStamped, queue_size=2)
         self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/pf_pose', PoseWithCovarianceStamped, queue_size=10)
 
-        self.odom_sub = rospy.Subscriber('/robot/navigation/odom_twist', TwistWithCovarianceStamped, self.got_twist)
+        self.odom_sub = rospy.Subscriber('/odometry/filtered', Odometry, self.got_odom)
         self.laser_scan_sub = rospy.Subscriber('/robot/navigation/lidar/scan_fused', LaserScan, self.got_laserscan)
 
         self.br = tf.TransformBroadcaster()
@@ -279,7 +279,7 @@ class GPUAccFilter():
                 time.sleep(.5)
                 continue
 
-            self.particles += self.pose_update
+            #self.particles += self.pose_update
             
             # Reset the pose update so that the next run will contain the pose update from this point
             self.pose_update = np.array([0,0,0], np.float32)

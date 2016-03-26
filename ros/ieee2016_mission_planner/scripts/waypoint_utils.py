@@ -64,7 +64,8 @@ def load_waypoints():
 		return load_dict	
 
 def callback(data):
-	pos = (data.pose.position.x, data.pose.position.y)
+	position = data.pose.pose
+	pos = (position.x, position.y)
 	#Converts quaternion coordinates to euler
 	quaternion = (data.pose.orientation.x, data.pose.orientation.y, data.pose.orientation.z, data.pose.orientation.w)
 	euler = tf.transformations.euler_from_quaternion(quaternion)
@@ -81,5 +82,5 @@ if __name__ == "__main__":
 	# when you call this script from the command line, it will save the current position as the first arguemnt of the call
 	rospy.init_node('listener', anonymous=True)
 	#print "listneing"
-	sub = rospy.Subscriber("/robot/navigation/pf_pose_vis", PoseStamped, callback)
+	sub = rospy.Subscriber("/odometry/filtered", Odometry, callback)
 	rospy.spin()

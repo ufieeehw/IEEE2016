@@ -15,11 +15,11 @@ from ieee2016_msgs.srv import StopController, NavWaypoint
 from nav_msgs.msg import Odometry
 
 # max_linear_vel = 1 # m/s
-max_linear_vel = 0.5
+max_linear_vel = 0.3
 max_linear_acc = max_linear_vel # m/s^2
 
 # max_angular_vel = 2 # rad/s
-max_angular_vel = 0.7 # rad/s
+max_angular_vel = 0.3 # rad/s
 max_angular_acc = max_angular_vel # rad/s^2 
 
 # (Jason says this is just called angular acceleration, # I call it angcelleration)
@@ -75,7 +75,7 @@ class Controller(object):
 
         # Current pose sub
         #self.pose_sub = rospy.Subscriber('/robot/navigation/pf_pose', PoseWithCovarianceStamped, self.got_pose)
-        self.odom_sub = rospy.Subscriber('/odometery/filtered', Odometry, self.got_odom)
+        self.odom_sub = rospy.Subscriber('/odometry/filtered', Odometry, self.got_odom)
         #self.desired_pose_sub = rospy.Subscriber('/robot/waypoint', PoseStamped, self.got_desired_pose)
 
         rospy.Service('controller/stop', StopController, self.stop)
@@ -254,6 +254,7 @@ class Controller(object):
             self.tf_listener.waitForTransform(msg.header.frame_id,"/map", rospy.Time.now(), rospy.Duration(1.0))
             msg = self.tf_listener.transformPose("/map",msg)
         except:
+            print "No TF link found."
             return False
 
         self.des_position = np.array([msg.pose.position.x, msg.pose.position.y])
