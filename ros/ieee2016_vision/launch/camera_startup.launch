@@ -6,7 +6,7 @@
     <param name="cam_1_width" value="1920"/>
     <param name="cam_1_heigth" value="1080"/>
 
-    <param name="cam_2_index" value="1"/>
+    <param name="cam_2_index" value="0"/>
     <param name="cam_2_width" value="1920"/>
     <param name="cam_2_heigth" value="1080"/>
   </node>

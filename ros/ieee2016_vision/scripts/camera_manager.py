@@ -211,27 +211,30 @@ class CameraManager():
         rospy.Service('/camera/camera_set', CameraSet, self.set_camera)
 
         #Find the cameras with the given parameters
-        self.cam_1 = cv2.VideoCapture(rospy.get_param("~cam_1_index"))
-        self.cam_1.set(3, rospy.get_param("~cam_1_width"))   # CV_CAP_PROP_FRAME_WIDTH
-        self.cam_1.set(4, rospy.get_param("~cam_1_heigth"))  # CV_CAP_PROP_FRAME_HEIGHT
-        self.cam_1.set(5, rospy.get_param("~fps"))           # FPS
+        # self.cam_1 = cv2.VideoCapture(rospy.get_param("~cam_1_index"))
+        # self.cam_1.set(3, rospy.get_param("~cam_1_width"))   # CV_CAP_PROP_FRAME_WIDTH
+        # self.cam_1.set(4, rospy.get_param("~cam_1_heigth"))  # CV_CAP_PROP_FRAME_HEIGHT
+        # self.cam_1.set(5, rospy.get_param("~fps"))           # FPS
 
         self.cam_2 = cv2.VideoCapture(rospy.get_param("~cam_2_index"))
         self.cam_2.set(3, rospy.get_param("~cam_2_width"))   # CV_CAP_PROP_FRAME_WIDTH
         self.cam_2.set(4, rospy.get_param("~cam_2_heigth"))  # CV_CAP_PROP_FRAME_HEIGHT
         self.cam_2.set(5, rospy.get_param("~fps"))           # FPS
 
+        time.sleep(1)
+
         self.cam = None
 
         print "> Initialization Complete."
         rate = rospy.Rate(rospy.get_param("~fps"))  # hz
         while not rospy.is_shutdown():
-            try:
-                self.cam_1.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
-                self.cam_2.publish(br.cv2_to_imgmsg(self.cam.read()[1], "bgr8"))
-            except:
-                print "> Error opening one of the Cameras."
-                rate.sleep()
+            #try:
+            #self.cam_1_pub.publish(br.cv2_to_imgmsg(self.cam_1.read()[1], "bgr8"))
+            self.cam_2_pub.publish(br.cv2_to_imgmsg(self.cam_2.read()[1], "bgr8"))
+            rate.sleep()
+            # except:
+            #     print "> Error opening one of the Cameras."
+            #     rate.sleep()
 
     def set_camera(self, srv):
         '''
