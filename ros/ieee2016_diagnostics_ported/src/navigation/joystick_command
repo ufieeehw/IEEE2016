@@ -23,7 +23,7 @@ map_version = rospy.Publisher('/settings/map_version', Int8, queue_size=3)
 stop_proxy = rospy.ServiceProxy('/robot/mecanum/stop', StopMecanum)
 
 def got_joy_msg(joy_msg):
-    global twist_stamped_msg, active
+    global twist_stamped_msg, active, pub
 
     if joy_msg.buttons[0]:
        active = not active
@@ -67,6 +67,7 @@ def got_joy_msg(joy_msg):
     twist_stamped_msg.header.frame_id = '/robot'
     twist_stamped_msg.header.stamp = joy_msg.header.stamp
 
+    pub.publish(twist_stamped_msg)
 
 # These values are hardcoded for now.
 max_linear_velocity = 1 # rospy.get_param('max_linear_velocity')
@@ -76,11 +77,6 @@ twist_stamped_msg = TwistStamped()
 active = False
 
 rospy.Subscriber('/joy', Joy, got_joy_msg)
-
-rate = rospy.Rate(25) #hz
-while not rospy.is_shutdown():
-    if active: pub.publish(twist_stamped_msg)
-    rate.sleep()
 
 rospy.spin()    
 

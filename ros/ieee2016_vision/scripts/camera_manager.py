@@ -72,7 +72,7 @@ class Camera():
         self.perspective_frame_id = self.name + "_vision"
         self.position_frame_id = self.name + "_pose"
 
-        image_topic = "/camera/cam_stream"
+        image_topic = "/camera/"+self.name
 
         rospy.Subscriber(image_topic, Image, self.got_image)
         self.tf_listener = tf.TransformListener()
@@ -202,8 +202,8 @@ class CameraManager():
     '''
     def __init__(self):
         # ROS inits
-        self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 2)
-        self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 2)
+        self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 1)
+        self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 1)
         #self.cam_pub = rospy.Publisher("/camera/cam_stream", Image, queue_size = 1)
         
         rospy.init_node("camera_manager")

@@ -17,6 +17,8 @@ from ieee2016_msgs.msg import Mecanum
 from ieee2016_msgs.srv import StopMecanum, StopMecanumResponse, ResetOdom, ResetOdomResponse
 from ieee2016_xmega_connector_ported.srv import * #Echo, EchoRequest, EchoResponse, SetWheelSpeeds
 
+import time
+
 class Controller(object):
     def __init__(self):
         '''Initialize Controller Object'''
@@ -33,7 +35,7 @@ class Controller(object):
             [ang_scale * +1, ang_scale * +1, ang_scale * -1, ang_scale * -1],  # Unitless! Shooting for rad/s
         ], dtype=np.float32) / 4.0  # All of the rows are divided by 4
 
-        self.pose = np.array([0.2, 0.2, 1.57])
+        self.pose = np.array([0, 0, .001])
         self.odom_pub = rospy.Publisher('/robot/navigation/odom', Odometry, queue_size=10)    
         self.odom_twist_pub = rospy.Publisher('/robot/navigation/odom_twist', TwistWithCovarianceStamped, queue_size=10)  
 
@@ -53,7 +55,10 @@ class Controller(object):
         rospy.Service('mecanum/stop', StopMecanum, self.stop)
         stop_proxy = rospy.ServiceProxy('/mecanum/stop', StopMecanum)
         rospy.Service('reset_odom', ResetOdom, self.reset)
-
+        
+        np.set_printoptions(precision=4)
+        np.set_printoptions(suppress=True)
+        
         self.on = True
         self.get_odom()
   
@@ -191,6 +196,7 @@ class Controller(object):
         '''
         freq = 10 #hz
         r = rospy.Rate(freq)
+        start = time.time()
         while not rospy.is_shutdown():
             odom_srv = self.odometry_proxy()
             wheel_odom = np.array([
@@ -199,8 +205,9 @@ class Controller(object):
                 odom_srv.wheel3,
                 -odom_srv.wheel4,
             ])
+            print wheel_odom
             vehicle_twist = np.dot(self.mecanum_matrix, wheel_odom).A1
-            
+
             rot_mat = self.make_2D_rotation(self.pose[2])
             x, y = np.dot(rot_mat, [vehicle_twist[0], vehicle_twist[1]]).A1
 
@@ -210,7 +217,7 @@ class Controller(object):
                     stamp=rospy.Time.now(),
                     frame_id='base_link',
                 )
-            orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
+
             t_c =TwistWithCovariance(
                 twist=Twist(
                     linear=Vector3(
@@ -226,6 +233,8 @@ class Controller(object):
                 ),
                 covariance=np.diag([0.03**2] * 6).flatten()
             )
+
+            orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
             odom_msg = Odometry(
                 header=Header(
                     stamp=rospy.Time.now(),
@@ -241,7 +250,7 @@ class Controller(object):
                         ),
                         orientation=Quaternion(*orientation),
                     ),
-                    covariance=np.diag([0.3**2] * 6).flatten(), # No real covariance, just uncertainty
+                    covariance=np.diag([.03**2] * 6).flatten(), # No real covariance, just uncertainty
                 ),
                 twist=t_c
             )
