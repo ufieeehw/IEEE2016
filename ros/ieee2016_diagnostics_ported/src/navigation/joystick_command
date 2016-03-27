@@ -29,11 +29,11 @@ def got_joy_msg(joy_msg):
        active = not active
 
     if joy_msg.buttons[3]:
-       map_version.publish(Int8(data=2))
+       map_version.publish(Int8(data=1))
        time.sleep(.2)
        start.publish(Bool(data=True))
     if joy_msg.buttons[1]:
-       map_version.publish(Int8(data=1))
+       map_version.publish(Int8(data=2))
        time.sleep(.2)
        start.publish(Bool(data=True))
 
