@@ -3,7 +3,7 @@ import rospy
 import roslib
 from std_msgs.msg import Bool, Int8, Header
 from geometry_msgs.msg import Pose, Point32, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, PointStamped, Point
-from sensor_msgs.msg import PointCloud,ChannelFloat32
+from sensor_msgs.msg import PointCloud, ChannelFloat32
 import tf
 
 roslib.load_manifest('ieee2016_vision')
@@ -14,6 +14,7 @@ from ieee2016_msgs.srv import ArmWaypoint
 
 import numpy as np
 from kd_tree import KDTree
+import time
 
 class Block():
     def __init__(self, color, coordinate = 'na'):
@@ -103,32 +104,6 @@ class EndEffector():
         # How the object prints
         return str(self.gripper_positions)
 
-class BlockFitter():
-    def __init__(self):
-        # All distance measurements are in meters
-        self.dx = .0635
-        self.dy = .0635 
-        self.dz = .0381 
-
-    def construct_zone_frame(self, stage_letter):
-        '''
-        Build an empty frame to populate the blocks into
-        Stage A is the middle height blue only block area.
-        Stage B is the tallest multicolor multisize block zone.
-        Stage C is the shortest multicolor block zone.
-        '''
-        if stage_letter == 'A':
-            base_x = 0.373 #abritrary right now
-            base_z = 0.1778 
-        if stage_letter == 'B':
-            base_x = 1.008 #abritrary right now
-            base_z = 0.254
-        if stage_letter == 'C':
-            base_x = 1.9304 #abritrary right now
-            base_z = 0.127
-
-        
-
 class WaypointGenerator():
     '''
     The arm waypoints generator. (Anything relating to simulation_blocks can be removed for competition)
@@ -147,7 +122,7 @@ class WaypointGenerator():
         self.tf_listener = tf.TransformListener()
         print "> Waypoint Generator Online."
 
-    def generate_arm_waypoints(self, block_tree, pickup, simulation_blocks):
+    def generate_arm_waypoints(self, block_tree, pickup):
         '''
         Given some block_tree, try to pick up 'pickup' number of blocks with all the end effectors. Starting
         If pickup is -1, we will try to pick up as many blocks as the end effector can.
@@ -179,8 +154,7 @@ class WaypointGenerator():
             # Loop through this until our gripper is full.
             while ee.holding < pickup and len(block_tree.nodes) != 0:
 
-                # Sort by order of largest z then smallest x, also remove any none blocks.
-                # None blocks can be globally changed but we need them for simulation.
+                # Sort by order of largest z then smallest x.
                 sorted_blocks = sorted(block_tree.nodes, key=lambda node:(-node.point[2],node.point[0]))
 
                 # Find the base gripper.
@@ -195,13 +169,13 @@ class WaypointGenerator():
                 ee.pickup(Block(sorted_blocks[0].linked_object[0]),base_gripper)
                 self.picked_up += 1
 
-                #print "Gripper:",base_gripper,"to:",sorted_blocks[0]
-                #print "Grippers to Actuate:",grippers_to_actuate
+                print "Gripper:",base_gripper,"to:",sorted_blocks[0]
+                print "Grippers to Actuate:",grippers_to_actuate
 
                 block_tree = self.make_temp_tree(sorted_blocks[1:])
 
                 #print simulation_blocks
-                simulation_blocks[simulation_blocks.index([sorted_blocks[0].point.tolist(),sorted_blocks[0].linked_object[0]])][1] = "none"
+                #simulation_blocks[simulation_blocks.index([sorted_blocks[0].point.tolist(),sorted_blocks[0].linked_object[0]])][1] = "none"
 
                 # Loop through the remaining grippers and check if they can pick up and blocks.
                 block_tolerance = .0375 # m
@@ -226,7 +200,7 @@ class WaypointGenerator():
                         grippers_to_actuate.append(i)
                         self.picked_up += 1
 
-                        simulation_blocks[simulation_blocks.index([closest_block[1].point.tolist(),closest_block[1].linked_object[0]])][1] = "none"
+                        #simulation_blocks[simulation_blocks.index([closest_block[1].point.tolist(),closest_block[1].linked_object[0]])][1] = "none"
 
                         # Now that we have saved it to the gripper, remove it and search for the next gripper block.
                         block_tree.nodes.remove(closest_block[1])
@@ -255,6 +229,93 @@ class WaypointGenerator():
         for l in new_list:
             temp_tree.insert(l.point,linked_object=l.linked_object)
         return temp_tree
+
+class BlockFitter():
+    '''
+    NOTE: All measurements are in meters.
+    '''
+    def __init__(self):
+        self.point_publisher = rospy.Publisher("/estimated_block_positions", PointCloud, queue_size=5)
+
+        self.dx = .0635
+        self.dy = .0635 
+        self.dz = .0381 
+        self.base_y = 2.174
+
+    def construct_zone_frame(self, stage_letter):
+        '''
+        Build an empty frame to populate the blocks into
+        Stage A is the middle height blue only block area.
+        Stage B is the tallest multicolor multisize block zone.
+        Stage C is the shortest multicolor block zone.
+        '''
+        self.blocks = []
+
+        if stage_letter == 'A':
+            base_x = 0.373 #abritrary right now
+            base_z = 0.1778 
+        if stage_letter == 'B':
+            base_x = 1.008 #abritrary right now
+            base_z = 0.254
+        if stage_letter == 'C':
+            base_x = 1.9304 #abritrary right now
+            base_z = 0.127
+
+        for row in range(2):
+            for col in range(8):
+                block_x = base_x + col * self.dx
+                block_y = self.base_y
+                block_z = base_z + row * self.dz
+                self.blocks.append([block_x,block_y,block_z])
+
+        self.publish_points()
+
+    def correct_position(self, block_index, measured_x):
+        '''
+        When we register a block with a camera, update the entire block array position to match with that data.
+        '''
+        return
+
+    def publish_points(self):
+        points = []
+        channels = [[],[],[]]
+        # for p in self.blocks:
+        #     #print p.linked_object
+        #     if p.linked_object[] == "blue":
+        #         channels[0].append(0) #R
+        #         channels[1].append(0) #G
+        #         channels[2].append(1) #B
+        #     elif p.linked_object  == "red":
+        #         channels[0].append(1) #R
+        #         channels[1].append(0) #G
+        #         channels[2].append(0) #B
+        #     elif p.linked_object  == "green":
+        #         channels[0].append(0) #R
+        #         channels[1].append(1) #G
+        #         channels[2].append(0) #B
+        #     elif p.linked_object  == "yellow":
+        #         channels[0].append(1) #R
+        #         channels[1].append(1) #G
+        #         channels[2].append(0) #B
+        #     elif p.linked_object  == "none":
+        #         channels[0].append(0) #R
+        #         channels[1].append(0) #G
+        #         channels[2].append(0) #B
+
+        #     points.append(Point32(*p.point))
+
+        #rgb_channels = [ChannelFloat32(name="r", values=channels[0]),ChannelFloat32(name="g", values=channels[1]),ChannelFloat32(name="b", values=channels[2])]
+        time.sleep(.25)
+        self.point_publisher.publish(PointCloud(
+                header=Header(
+                    stamp=rospy.Time.now(),
+                    frame_id="map"
+                    ),
+                points=points,
+                #channels=rgb_channels
+            )
+        )
+
 
 class BlockServer():
     '''
@@ -296,266 +357,8 @@ class BlockServer():
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
-    c1 = Camera("1")
-    c1.activate()
-    b_s = BlockServer(c1)
+    b = BlockFitter()
+    b.construct_zone_frame('A')
     # ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
     # ProcessBlocks(ee1)
     rospy.spin()
-
-
-class ProcessBlocks():
-    '''
-    ****Depreciated****
-
-    Take detected blocks from a kd-tree populated with blocks, try to find missing blocks, generate a position for the 
-    grippers to move to based on how many blocks are left, then deal with dropping off the blocks into the appropriate bins.
-
-    This needs to be modified to work in all cases, with half blocks namely.
-    '''
-    def __init__(self, *end_effectors):
-        self.ee_pose_pub = rospy.Publisher("/arm/waypoint", PoseStamped, queue_size=1)
-        #self.point_sub = rospy.Subscriber("/camera/block_point_cloud", PointCloud, self.got_points, queue_size=1)
-
-        self.move_arm = rospy.ServiceProxy('/robot/arms/set_waypoint', ArmWaypoint)
-
-        self.expected_blocks = 16
-        
-        self.end_effectors = end_effectors
-
-        print "Waiting for message..."
-
-    def got_points(self,msg):
-        '''
-        Depreciated, now we are just passing a kd_tree of blocks in rather then sending them as a ros point cloud.
-        '''
-
-        #if len(self.points) < 1:
-        #print msg.channels[0].values
-        for i,p in enumerate(msg.points):
-            color_rgb = (msg.channels[0].values[i],msg.channels[1].values[i],msg.channels[2].values[i])
-
-            # Colors are given as floats for each channel: RGB
-            if color_rgb == (1.,0.,0.):
-                color = "red"
-            elif color_rgb == (0.,1.,0.):
-                color = "green"
-            elif color_rgb == (0.,0.,1.):
-                color = "blue"
-            elif color_rgb == (1.,1.,0.):
-                color = "yellow"
-            elif color_rgb == (1.,1.,1.):
-                color = "white"
-            else:
-                color = "none"
-
-            b = Block(color,p)
-            self.blocks = np.append(self.blocks,b)
-
-        print "Blocks found."
-        # Unsubscribe from the point cloud subscriber and start analysis of points
-        self.point_sub.unregister()
-        self.find_missing_blocks()
-
-    def find_missing_blocks(self, block_tree):
-        # Go through the tree we were given and extract block information.
-        self.blocks = np.array([])
-        for b in block_tree:
-            block = Block(b[1].point,b[1].linked_object)
-            self.blocks = np.append(self.blocks,block)
-
-        # Find out how many missing blocks there are and identify where they should be
-        missing = self.expected_blocks-len(self.blocks)
-        print "Detected",missing,"blocks missing."
-        
-        # If too many are missing, just redo the intial search
-        if missing > 4:
-            print "There are too many missing blocks!"
-            #self.redetect_blocks()
-
-        # Try to find out which are missing (move this to the gpu later)
-        """
-        This whole thing is kind of sketchy so beware....
-        Sort blocks in order of x position. Then go through and detect if each pair of detected points are in the same x column.
-        Then find which of the two is on top and which is on bottom. Add blocks to the sorted list appropriately.
-
-        There are a lot of functions to catch extranious cases, and it should be tested with as many cases as possible.
-        """
-
-        # Where to hold the final output
-        blocks_sorted = [[[],[],[],[],[],[],[],[]],
-                         [[],[],[],[],[],[],[],[]]]
-
-        # Preset paramters
-        variance = .05 #m
-        max_expected_dx = .075 #m, used to detect missing columns
-        normal_dx = .0635 #m, used to fill in missing columns
-        normal_dz = .0381 #m, used to fill in missing row elements
-        
-        # Calculate the threshold for a top block or a bottom block, will be used for columns with missing elements
-        threshold_z = (max(self.blocks, key=lambda b: b.coordinate[2]).coordinate[2] + 
-                       min(self.blocks, key=lambda b: b.coordinate[2]).coordinate[2])/2.0
-
-        # This assumes the first blocks are both there, fix it so that doesnt have to be an assumption
-        # It'll be alittle faster to use a local copy of the array
-        blocks = sorted(self.blocks,key=lambda b: b.coordinate[0])
-        for i in range(self.expected_blocks/2):
-            # Check if we are at the end of the block list
-            if i*2 >= len(blocks): 
-                print "Error, first or last columns missing."
-                break
-
-            if i*2 == len(blocks)-1: 
-                if blocks[i*2].coordinate[2] > threshold_z:
-                    # missing block is a bottom block
-                    block = Block("none",[blocks[i*2-1].coordinate[0]+normal_dx,
-                                          blocks[i*2-1].coordinate[1],
-                                          blocks_sorted[1][i-1].coordinate[2]])
-                    blocks.insert(2*i+1, block)
-                else:
-                    # missing block is a top block
-                    block = Block("none",[blocks[i*2-1].coordinate[0]+normal_dx,
-                                          blocks[i*2-1].coordinate[1],
-                                          blocks_sorted[0][i-1].coordinate[2]])
-                    blocks.insert(2*i+1, block)
-            
-            # Check to see if a whole column is missing
-            if abs(blocks[2*i].coordinate[0] - blocks[2*i-1].coordinate[0]) > max_expected_dx and i is not 0:
-                top_block = Block("none",[blocks[i*2-1].coordinate[0]+normal_dx,
-                                          blocks[i*2-1].coordinate[1],
-                                          blocks_sorted[0][i-1].coordinate[2]])
-                bot_block = Block("none",[blocks[i*2-1].coordinate[0]+normal_dx,
-                                          blocks[i*2-1].coordinate[1],
-                                          blocks_sorted[1][i-1].coordinate[2]])
-                blocks.insert(2*i, top_block)
-                blocks.insert(2*i+1, bot_block)
-
-            # Make sure the two blocks are in the same column
-            if abs(blocks[i*2].coordinate[0] - blocks[i*2+1].coordinate[0]) < variance:                
-                if blocks[i*2].coordinate[2] > blocks[i*2+1].coordinate[2]:
-                    blocks_sorted[0][i] = blocks[i*2]
-                    blocks_sorted[1][i] = blocks[i*2+1]
-                else:
-                    blocks_sorted[0][i] = blocks[i*2+1]
-                    blocks_sorted[1][i] = blocks[i*2]
-            else:
-                # Handles if any arbitrary element is missing
-                if blocks[i*2].coordinate[2] > threshold_z:
-                    # the missing block is a bottom block
-                    blocks_sorted[0][i] = blocks[2*i]
-                    blank = Block("none", [blocks[i*2].coordinate[0],
-                                           blocks[i*2].coordinate[1],
-                                           blocks[i*2].coordinate[2]-normal_dz])
-                    blocks.insert(2*i+1, blank)
-                    blocks_sorted[1][i] = blocks[2*i+1]
-                else:
-                    # the missing block is a top block
-                    blocks_sorted[1][i] = blocks[2*i]
-                    blank = Block("none", [blocks[i*2].coordinate[0],
-                                           blocks[i*2].coordinate[1],
-                                           blocks[i*2].coordinate[2]+normal_dz])
-                    blocks.insert(2*i+1, blank)
-                    blocks_sorted[0][i] = blocks[2*i+1]
-                
-        # Just for debugging
-        print "Detected Blocks:"
-        for b in blocks_sorted:
-            print b
-        print
-        # Make class wide copy of the sorted blocks (pickup_blocks should be called from the main program)
-        self.blocks_sorted = blocks_sorted
-        self.pickup_blocks()
-
-    def make_arm_waypoints(self):
-        # Pick up blocks and keep track of the order they are in
-
-        arm_waypoints = []
-
-        # One-by-one, move each end effector in position to pick up certain sets of blocks, then pick up blocks and register the locations.
-        temp_planner_blocks = self.blocks_sorted
-        for ee in self.end_effectors:
-            # Find the group of blocks to pick up. We're looking for the largest group of topmost blocks
-            valid_counter_top = 0
-            valid_counter_bottom = 0
-            # Holds block groupings for top and bottom as [ending_index,length]
-            groups = [[],[]]
-            index = 0
-            for upper_b,lower_b in zip(self.blocks_sorted[0],self.blocks_sorted[1]):
-                if upper_b.color != "none":
-                    valid_counter_top += 1 
-
-                    # If there is a block on top, that means that there isnt one on the bottom 
-                    groups[1].append([index-valid_counter_bottom,valid_counter_bottom])
-                    valid_counter_bottom = 0
-                else:
-                    # Check for bottom row blocks same way as top
-                    if lower_b.color != "none": 
-                        valid_counter_bottom += 1
-                    else:
-                        groups[1].append([index-valid_counter_bottom,valid_counter_bottom])
-                        valid_counter_bottom = 0
-
-                    groups[0].append([index - valid_counter_top, valid_counter_top])
-                    valid_counter_top = 0
-                
-                # Save max sized groupings
-                if valid_counter_top == ee.gripper_count:
-                    groups[0].append([index - valid_counter_top + 1, valid_counter_top])
-                    valid_counter_top = 0
-                if valid_counter_bottom == ee.gripper_count:
-                    groups[1].append([index-valid_counter_bottom + 1,valid_counter_bottom])
-                    valid_counter_bottom = 0
-                
-                index += 1
-            groups[0].append([8 - valid_counter_top, valid_counter_top])
-            groups[1].append([8 - valid_counter_bottom,valid_counter_bottom])
-
-            # Pick best grouping for end effector
-            largest_group = max(groups[0], key=lambda g:g[1])
-            waypoint = np.array([0,0,0]).astype(np.float64)
-
-            # Should we pick up blocks in row 0 or row 1
-            row = 0
-            if largest_group[1] == 0: 
-                largest_group = max(groups[1], key=lambda g:g[1])
-                row = 1
-                if largest_group[1] == 0: print "Nothing left"
-            
-
-            # The waypoint is set so that the gripper with the camera above it will move to
-            # the grouping of blocks. This may not be nessicary, but it can't hurt.
-            waypoint = self.blocks_sorted[row][largest_group[0]+1].coordinate
-            # We dont want the point to be exactly on the block, instead we want it a safe buffer
-            # distance out infront of the block.
-            buffer_distance = .2 #m
-            waypoint -= np.array([0,buffer_distance,0])
-
-            # Even though the gripper isnt actually holding the block, we assume it will be
-            self.set_gripper_blocks(self.blocks_sorted[row][largest_group[0]:largest_group[0]+largest_group[1]])
-
-            arm_waypoints.append([ee.gripper_positions[ee.cam_position],waypoint])
-
-        return arm_waypoints
-
-    def set_gripper_blocks(self, ee, blocks):
-        for gripper,block in zip(ee.block_positions,blocks):
-            gripper.block = block
-
-    def drop_color(self, ee):
-        pass
-
-    def pub_ee_pose(self,gripper,point):
-        q = tf.transformations.quaternion_from_euler(0, 0, 1.5707)
-        pose_stamped = PoseStamped(
-                header=Header(
-                        stamp=rospy.Time.now(),
-                        frame_id="map"
-                    ),
-                pose=Pose(
-                        position=Point(*point),
-                        orientation=Quaternion(*q)
-                    )
-            )
-        print point
-        self.ee_pose_pub.publish(pose_stamped)
-        self.move_arm(str(gripper),pose_stamped)
