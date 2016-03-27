@@ -29,11 +29,11 @@ def got_joy_msg(joy_msg):
        active = not active
 
     if joy_msg.buttons[3]:
-       map_version.publish(Int8(data=2))
+       map_version.publish(Int8(data=1))
        time.sleep(.2)
        start.publish(Bool(data=True))
     if joy_msg.buttons[1]:
-       map_version.publish(Int8(data=1))
+       map_version.publish(Int8(data=2))
        time.sleep(.2)
        start.publish(Bool(data=True))
 
@@ -54,7 +54,7 @@ def got_joy_msg(joy_msg):
     twist_stamped_msg.twist.linear = Vector3()
     twist_stamped_msg.twist.angular = Vector3()
 
-    speed = .25
+    speed = .1
     twist_stamped_msg.twist.linear.x = linear_x * speed
     twist_stamped_msg.twist.linear.y = linear_y * speed
     twist_stamped_msg.twist.linear.z = 0

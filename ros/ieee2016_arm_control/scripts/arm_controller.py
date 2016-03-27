@@ -67,8 +67,6 @@ class ArmController():
         self.tf_broad = tf.TransformBroadcaster()
         self.tf_listener = tf.TransformListener()
 
-        rospy.spin()
-
     def move_arm(self,srv):
         # Find the position of the Gripper in the base_link frame
         t = self.tf_listener.getLatestCommonTime(srv.gripper, "/base_link")

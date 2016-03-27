@@ -599,7 +599,7 @@ class TestingStateMachine():
         # Objects for detecting and returning location of QR codes. Parameters are the set distances from the codes (cm).
         self.qr_distances = [50]
         self.waypoint_generator = WaypointGenerator(self.ee2)#, self.ee2)
-        #self.arm_controller = ArmController()
+        self.arm_controller = ArmController()
 
         #self.point_cloud_generator = temp_GenerateBlockPoints(16)
         #self.point_cloud_generator.generate_b_blocks()
@@ -631,7 +631,7 @@ class TestingStateMachine():
         self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
 
         #self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
-
+        time.sleep(5)
         self.current_state += 1
 
         self.running = True
@@ -654,11 +654,11 @@ class TestingStateMachine():
                 observation_point[1] = self.ros_manager.block_wall_y - (.5 + np.abs(self.cam2.get_tf()[1]))
                 self.ros_manager.set_nav_waypoint(observation_point)
                 
-                self.cam1.activate()
+                self.cam2.activate()
                 
                 # Create a new block server to create a tree of blocks that will be used to process on.
-                self.block_server = BlockServer([self.cam2])
-                self.qr_detector.match_templates(self.cam2, *self.block_checker_status())
+                self.block_server = BlockServer(self.cam2)
+                self.qr_detector.match_templates(self.cam2, "inital_scan", 50)
                 b_tree = self.block_server.k
 
                 # Generate waypoints for two arms, picking up all possible blocks.
@@ -681,7 +681,7 @@ class TestingStateMachine():
                 print "> Executing waypoints."
 
                 # Used to determine if we need to rotate or naw.
-                last_ee = None
+                last_ee = ee[0]
                 # Go through each waypoint and make sure we dont hit anything
                 for gripper, waypoint, grippers_to_acutate, qr_rotation in arm_waypoints:
                     # We don't want to move and rotate here (unless we arent rotating) - so just rotate and get lined up away from the wall.
@@ -690,12 +690,12 @@ class TestingStateMachine():
                     if this_ee != last_ee:
                         # We need to back up slighly in order to rotate
                         backup_movement = np.copy(self.ros_manager.pose)
-                        backup_movement[1] = self.ros_manager.block_wall_y - self.qr_distances[0] #m
+                        backup_movement[1] = self.ros_manager.block_wall_y - self.qr_distances[0]/100.0 #m
                         self.ros_manager.set_nav_waypoint(backup_movement)
 
                         # Then rotate in place
                         rotate_waypoint = np.copy(waypoint)
-                        rotate_waypoint[1] = self.ros_manager.block_wall_y - self.qr_distances[0] #m
+                        rotate_waypoint[1] = self.ros_manager.block_wall_y - self.qr_distances[0]/100.0 #m
                         print "Lining Up"
                         self.ros_manager.set_arm_waypoint(gripper,rotate_waypoint)
 
@@ -732,7 +732,7 @@ class TestingStateMachine():
                     last_ee = this_ee
 
                 # Regenerate point cloud - for simulation only
-                self.point_cloud_generator.publish_points(b_tree,self.point_cloud_generator.point_cloud_pub)
+                #self.point_cloud_generator.publish_points(b_tree,self.point_cloud_generator.point_cloud_pub)
                 #self.point_cloud_generator.b_blocks = np.array(b_blocks, dtype=object)
                 #self.point_cloud_generator.generate_b_camera_view()
 
@@ -806,8 +806,6 @@ class TestingStateMachine():
             #if self.current_state > 50: self.current_state = 0
             rate.sleep()
 
-
-
 class RosManager():
     def __init__(self,s):
         self.state_machine = s
@@ -837,7 +835,7 @@ class RosManager():
         self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
 
     def recieve_start_command(self,msg):
-        if msg.data: #and not self.state_machine.running:
+        if msg.data and not self.state_machine.running:
             if self.state_machine.map_version:
                 print "> State Machine Starting..."
                 nav_start = StartNavigation()
@@ -846,7 +844,7 @@ class RosManager():
                 # 1 is the map configuration where we start on the left, 2 is on the right.
                     #self.state_machine.begin_1()
                 if self.state_machine.map_version == 1:
-                    self.pose = np.array([.2,1.7,1.57])
+                    self.pose = np.array([.2,1.7,3.14])
                     nav_start.init_pose = self.pose
                     self.nav_start_pub.publish(nav_start)
                     self.state_machine.begin()

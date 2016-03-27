@@ -25,7 +25,9 @@
     </node>  
     <node pkg="ieee2016_navigation" type="laser_fuser.py" name="laser_fuser" output="screen"/>
   </group>
-
+  
+  <include file="$(find ieee2016_navigation)/launch/ekf_local.launch"/>
+  
   <group ns="robot">
       <node name="particle_filter" pkg="ieee2016_navigation" type="particle_filter.py"/>
       <node name="tf_broadcaster" pkg="ieee2016_tf_broadcaster" type="tf_broadcaster.py" />

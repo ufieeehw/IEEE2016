@@ -152,9 +152,9 @@ class Camera():
         # Given two planar points [u,v] and the real life distance between them (m), return the 3d camera frame coordiantes of those points.
         # Returns [[x_1,y_1,z_1],[x_2,y_2,z_2]] in whatever the output_frame is
 
-        # Genereate projection rays through points 1 and 2
-        ray_1 = self.make_3d_ray(point_1)
-        ray_2 = self.make_3d_ray(point_2)
+        # Genereate projection rays through points 1 and 2. 
+        ray_1 = self.make_3d_vector(point_1)
+        ray_2 = self.make_3d_vector(point_2)
 
         if ray_1 == False: return False
 

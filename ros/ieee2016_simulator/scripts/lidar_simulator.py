@@ -272,7 +272,8 @@ class GPUAccMap():
 class Simulator():
     def __init__(self, starting_point, m, m_a):
         # ROS inits
-        #rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose)        
+        #rospy.Subscriber('/robot/pf_pose_est', PoseStamped, self.got_pose)       
+        rospy.Subscriber('/odometry/filtered', Odometry, self.got_odom)       
         self.tf_broad = tf.TransformBroadcaster()
         self.tf_listener = tf.TransformListener()
 
@@ -303,6 +304,11 @@ class Simulator():
     def got_pose(self, msg):
         yaw = tf.transformations.euler_from_quaternion([msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z,msg.pose.orientation.w])[2]
         self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
+
+    def got_odom(self, msg):
+        pose = msg.pose.pose
+        yaw = tf.transformations.euler_from_quaternion([pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w])[2]
+        self.pose = np.array([pose.position.x,pose.position.y,yaw])
 
 
 def start_navigation(msg):

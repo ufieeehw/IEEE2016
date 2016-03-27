@@ -197,7 +197,11 @@ class Controller(object):
         freq = 10 #hz
         r = rospy.Rate(freq)
         start = time.time()
+        r.sleep()
         while not rospy.is_shutdown():
+            # Calculate the acutal frequency
+            act_freq = 1.0/(time.time() - start)
+            start = time.time()
             odom_srv = self.odometry_proxy()
             wheel_odom = np.array([
                 -odom_srv.wheel1,
@@ -205,12 +209,12 @@ class Controller(object):
                 odom_srv.wheel3,
                 -odom_srv.wheel4,
             ])
-            vehicle_twist = np.dot(self.mecanum_matrix, wheel_odom).A1*10
+            vehicle_twist = np.dot(self.mecanum_matrix, wheel_odom).A1*act_freq
 
             rot_mat = self.make_2D_rotation(self.pose[2])
             x, y = np.dot(rot_mat, [vehicle_twist[0], vehicle_twist[1]]).A1
 
-            self.pose += [x, y, vehicle_twist[2]]
+            self.pose += [x/act_freq, y/act_freq, vehicle_twist[2]/act_freq]
 
             header = Header(
                     stamp=rospy.Time.now(),
@@ -230,8 +234,13 @@ class Controller(object):
                         z=vehicle_twist[2],
                     )
                 ),
-                covariance=np.diag([0.03**2] * 6).flatten()
-            )
+                covariance = np.array([   1,   0,   0,   0,   0,   0,
+                                          0,   1,   0,   0,   0,   0,
+                                          0,   0,   0,   0,   0,   0,
+                                          0,   0,   0,   0,   0,   0,
+                                          0,   0,   0,   0,   0,   0,
+                                          0,   0,   0,   0,   0,  1])**2
+            ) 
 
             orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
             odom_msg = Odometry(
@@ -259,6 +268,7 @@ class Controller(object):
             )
             self.odom_pub.publish(odom_msg)
             self.odom_twist_pub.publish(t_c_s)
+            
             r.sleep()
 
 
