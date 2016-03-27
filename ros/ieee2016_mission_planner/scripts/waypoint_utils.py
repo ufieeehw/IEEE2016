@@ -64,16 +64,17 @@ def load_waypoints():
 		return load_dict	
 
 def callback(data):
-	position = data.pose.pose
-	pos = (position.x, position.y)
+	pose = data.pose.pose
+	print(pose)
+	pos = (pose.position.x, pose.position.y)
 	#Converts quaternion coordinates to euler
-	quaternion = (data.pose.orientation.x, data.pose.orientation.y, data.pose.orientation.z, data.pose.orientation.w)
+	quaternion = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
 	euler = tf.transformations.euler_from_quaternion(quaternion)
 	yaw = euler[2]
 
-	save_waypoint(sys.argv[1], data.pose.position.x, data.pose.position.y, yaw)
+	save_waypoint(sys.argv[1], pose.position.x, pose.position.y, yaw)
 	sub.unregister()
-	print("Waypoint Saved:",sys.argv[1],data.pose.position.x,data.pose.position.y,yaw)
+	print("Waypoint Saved:",sys.argv[1],pose.position.x, pose.position.y,yaw)
 	rospy.signal_shutdown("Message saved")
 	exit()
 

@@ -86,16 +86,22 @@ class TFPublisher():
         # elevator -> main cameras
         self.tf_broad.sendTransform((.072,.0584,.0354), 
                         tf.transformations.quaternion_from_euler(1.57,3.1415,1.57),
-                        rospy.Time.now(), "cam_1_vision", "cam_1_adjust")
+                        rospy.Time.now(), "cam_1_vision", "elevator")
         self.tf_broad.sendTransform((-.072,-.0584,.0354), 
                         tf.transformations.quaternion_from_euler(1.57,3.1415,-1.57),
-                        rospy.Time.now(), "cam_2_vision", "elevator")
+                        rospy.Time.now(), "cam_2_vision", "cam_2_adjust")
         self.tf_broad.sendTransform((.072,.0584,.0354), 
                         tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "cam_1_pose", "cam_1_adjust")
+                        rospy.Time.now(), "cam_1_pose", "elevator")
         self.tf_broad.sendTransform((-.072,-.0584,.0354), 
                         tf.transformations.quaternion_from_euler(0,0,3.1415),
-                        rospy.Time.now(), "cam_2_pose", "elevator")
+                        rospy.Time.now(), "cam_2_pose", "cam_2_adjust")
+        
+        self.tf_broad.sendTransform((0,.004,.006), 
+                        tf.transformations.quaternion_from_euler(0,0,0),
+                        rospy.Time.now(), "cam_2_adjust", "elevator")
+
+
 
         # # base_link -> imu
         # self.tf_broad.sendTransform((0,0,0), 
@@ -120,13 +126,12 @@ class TFPublisher():
                 tf.transformations.quaternion_from_euler(0,0,0),
                 rospy.Time.now(), "base_link", "base_footprint")
 
-        #Temp
         self.tf_broad.sendTransform((0,0,0), 
                 tf.transformations.quaternion_from_euler(0,0,0),
                 rospy.Time.now(), "base_footprint", "odom")
 
-        # self.tf_broad.sendTransform((.241,1.608,0), 
-        #         tf.transformations.quaternion_from_euler(0,0,0),
+        # self.tf_broad.sendTransform((.4,1.5940000000000003,0), 
+        #         tf.transformations.quaternion_from_euler(0,0,3.1416),
         #         rospy.Time.now(), "base_footprint", "map")
 
 if __name__ == "__main__":

@@ -115,7 +115,6 @@ class MagnetometerManager():
         # Get the raw heading from the service (but do it locally, not over ros.)
         heading = self.service_manager.get_heading_service(None)
         corrected_point = self.correct_mag_data(heading.xData,heading.yData)
-        #print (corrected_point).astype(np.int32)
         angle = np.arctan2(corrected_point[1],corrected_point[0])
         self.generate_pose(angle)
 
@@ -148,12 +147,12 @@ class MagnetometerManager():
         # Publish pose with covariance stamped.
         p_c_s = PoseWithCovarianceStamped()
         p_c = PoseWithCovariance()
-        covariance = np.array([.05,   0,   0,   0,   0,   0,
-                                 0, .05,   0,   0,   0,   0,
-                                 0,   0, .05,   0,   0,   0,
-                                 0,   0,   0, .05,   0,   0,
-                                 0,   0,   0,   0, .05,   0,
-                                 0,   0,   0,   0,   0, .05])**2
+        covariance = np.array([.0005,   0,   0,   0,   0,   0,
+                                 0, .0005,   0,   0,   0,   0,
+                                 0,     0, .0005, 0,   0,   0,
+                                 0,     0,   0, .0005, 0,   0,
+                                 0,     0,   0,   0, .0005, 0,
+                                 0,     0,   0,   0,   0,   1])**2
         p_c.pose = pose
         p_c.covariance = covariance
         p_c_s.header = header
@@ -303,4 +302,5 @@ if __name__ == "__main__":
     while not rospy.is_shutdown():
         rate.sleep()
         magnetometer.publish_mag_data()
+
     rospy.spin()

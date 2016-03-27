@@ -218,7 +218,7 @@ class WaypointGenerator():
             # see if we can fit any more blocks onto the gripper.
 
         # Returning the new tree, the waypoints for the gripper, and the temp simulation block list
-        return block_tree, waypoints_list, simulation_blocks
+        return block_tree, waypoints_list
 
     def make_temp_tree(self, new_list):
         '''
@@ -325,14 +325,15 @@ class BlockServer():
     '''
     def __init__(self, *cameras):
         self.point_pub = rospy.Publisher("/block_test", PointStamped, queue_size=10)
-        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=1)
 
         self.cameras = cameras
 
         # Make kd-tree with a tolerance when trying to add duplicated blocks
         self.k = KDTree(.02) #m
         self.intersector = PointIntersector()
-
+        time.sleep(1)
+        rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=1)
+    
     def got_block(self,msg):
         # Find the camera that this image was taken in and transform points appropriately.
         camera = [c for c in self.cameras if c.name == msg.header.frame_id][0]
@@ -344,11 +345,10 @@ class BlockServer():
 
         #     rospy.logwarn("An ERROR was found and excepted.")
 
-        print self.k
-        print
+        print len(self.k.nodes)
+        # print
 
     def publish_point(self,point):
-        
         p = Point(x=point[0], y=point[1], z=point[2])
         h = Header(stamp=rospy.Time.now(), frame_id="map")
         self.point_pub.publish(header=h, point=p)
@@ -357,8 +357,9 @@ class BlockServer():
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
-    b = BlockFitter()
-    b.construct_zone_frame('A')
+    c = Camera(2)
+    c.activate()
+    b = BlockServer(c)
     # ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
     # ProcessBlocks(ee1)
     rospy.spin()

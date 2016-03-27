@@ -13,6 +13,8 @@ from geometry_msgs.msg import Pose, PoseStamped, Point32, PointStamped, Point, Q
 from sensor_msgs.msg import PointCloud, LaserScan
 from ieee2016_msgs.msg import UltraSonicStamped, UltraSonicActivator
 
+from ieee2016_msgs.srv import RequestMap
+
 
 def make_2D_rotation(angle):
     c, s = np.cos(angle), np.sin(angle)
@@ -102,27 +104,6 @@ class LidarPositionEstimator():
             position=Point(x=pose[0], y=pose[1], z=0),
             orientation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
         )
-        self.pose_est_pub.publish(
-            PoseStamped(
-                header=header,
-                pose=pose
-            )
-        )
-
-    def polar_to_cart(self, r_theta, translation, frame=None):
-        # Convert (r,theta) into (x,y)
-        # Since the LIDAR are flipped and rotated in different directions, you have to change the signs of x and y based on the scan
-        if frame == "laser_front" or frame == "laser_back":
-            x = (r_theta[0] * np.cos(r_theta[1]) + translation[0])
-            y = -(r_theta[0] * np.sin(r_theta[1]) + translation[1])
-        else:
-            x = -(r_theta[0] * np.cos(r_theta[1])) + translation[0]
-            y = (r_theta[0] * np.sin(r_theta[1])) + translation[1]
-
-        return x,y
-
-
-
 
 class UltraSonicSensor():
     '''
@@ -153,6 +134,8 @@ class UltraSonicSensor():
 
 class USPoseEstimator():
     '''
+    Probably wont use due to not having Ultrasonic sensors.
+
     Given some number of ultrasonic sensors, generate a pose estimation. The estimation will only be accurate
     for the y position and the yaw.
     '''
@@ -309,5 +292,10 @@ class USPoseEstimator():
 
 if __name__ == "__main__":
     rospy.init_node("ultrasonic_listener")
+<<<<<<< HEAD
     l = LidarPositionEstimator()
+=======
+
+    l = LidarPoseEstimator()
+>>>>>>> 837346ad2990225503a324ce1df0476e70493547
     rospy.spin()

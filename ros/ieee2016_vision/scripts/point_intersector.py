@@ -37,6 +37,7 @@ class PointIntersector():
 
         self.offset = offset
         dist = self.simulate_scan(point, theta)
+
         return camera.make_3d_point(raw_ray, dist, output_frame = "map", time = time)
 
     def simulate_scan(self, point, theta):

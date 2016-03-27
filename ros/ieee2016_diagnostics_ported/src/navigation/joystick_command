@@ -54,7 +54,7 @@ def got_joy_msg(joy_msg):
     twist_stamped_msg.twist.linear = Vector3()
     twist_stamped_msg.twist.angular = Vector3()
 
-    speed = .25
+    speed = .1
     twist_stamped_msg.twist.linear.x = linear_x * speed
     twist_stamped_msg.twist.linear.y = linear_y * speed
     twist_stamped_msg.twist.linear.z = 0

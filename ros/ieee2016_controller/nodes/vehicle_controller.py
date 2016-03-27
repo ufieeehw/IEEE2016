@@ -171,7 +171,7 @@ class Controller(object):
         Velocity calcluation should be done in a separate thread
          this thread should have an independent information "watchdog" timing method
         '''
-        if (self.position is None) or (self.yaw is None) or (self.on is False): return
+        if (self.position is None) or (self.yaw is None) or (self.on is False): return False
         
         r = rospy.Rate(40) #hz
         # Loop until there is no command being sent out.
@@ -203,8 +203,8 @@ class Controller(object):
                 self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .1
                 print "MV_ERR",self.starting_move_error
 
-            linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc)# * \
-                               #math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
+            linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc) * \
+                               math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
             # Determines the linear speed necessary to maintain a consant backward acceleration
             linear_speed = min(
                                 .6*linear_speed_raw, max_linear_vel
@@ -212,7 +212,7 @@ class Controller(object):
             # Determines the angular speed necessary to maintain a constant angular acceleration 
             #  opposite the direction of motion
             angular_speed = min(
-                                .6*math.sqrt(abs(yaw_error) * max_angular_acc), 
+                                .4*math.sqrt(abs(yaw_error) * max_angular_acc), 
                                 max_angular_vel
                             )
 
@@ -235,7 +235,8 @@ class Controller(object):
             self.send_twist(target_vel, target_angvel)
             if not command:
                 # Break when we are finished moving
-                break
+                print "Movement Complete!"
+                return True
             r.sleep()
 
 
@@ -261,9 +262,7 @@ class Controller(object):
         self.des_yaw = tf_trans.euler_from_quaternion(xyzw_array(msg.pose.orientation))[2]
 
         # Only do this when we have a desired pose
-        self.control()
-        print "Movement Complete!"
-        return True
+        return self.control()
 
 if __name__ == '__main__':
     rospy.logwarn("Starting")
