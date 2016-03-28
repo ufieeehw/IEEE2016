@@ -99,7 +99,7 @@ class CalibrateServos():
                 self.exit(True)
 
             elif command == 'exit':
-                self.exit(False)
+                self.exit(True)
 
             elif command == 'help':
                 print "Current implemented commands:\n",\
