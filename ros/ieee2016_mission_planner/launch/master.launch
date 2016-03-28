@@ -25,9 +25,9 @@
     </node>  
     <node pkg="ieee2016_navigation" type="laser_fuser.py" name="laser_fuser" output="screen"/>
   </group>
-  
+  <!-- 
   <include file="$(find ieee2016_navigation)/launch/ekf_local.launch"/>
-  
+ -->  
   <group ns="robot">
       <node name="particle_filter" pkg="ieee2016_navigation" type="particle_filter.py"/>
       <node name="tf_broadcaster" pkg="ieee2016_tf_broadcaster" type="tf_broadcaster.py" />
@@ -40,6 +40,19 @@
       </node>
   </group>
 
+<!--   <node pkg="ieee2016_vision" type="camera_manager.py" name="camera_manager" output="screen">
+    <param name="fps" value="17"/>
+
+    <param name="cam_1_index" value="0"/>
+    <param name="cam_1_width" value="1920"/>
+    <param name="cam_1_heigth" value="1080"/>
+
+    <param name="cam_2_index" value="0"/>
+    <param name="cam_2_width" value="1920"/>
+    <param name="cam_2_heigth" value="1080"/>
+  </node> -->
+
   <!-- For remote control -->
   <node name="joystick_control" pkg="ieee2016_diagnostics_ported" type="joystick_command" output="screen"/>
+  <node name="joystick" pkg="joy" type="joy_node" output="screen"/>
 </launch>

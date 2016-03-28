@@ -3,7 +3,7 @@ import rospy
 import roslib
 from std_msgs.msg import Bool, Int8, Header
 from sensor_msgs.msg import PointCloud, ChannelFloat32
-from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, Point32, PointStamped
+from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, Point32, PointStamped, PoseWithCovarianceStamped, PoseWithCovariance
 from ieee2016_msgs.srv import NavWaypoint, ArmWaypoint, RequestMap
 from ieee2016_msgs.msg import StartNavigation
 from rospy.numpy_msg import numpy_msg
@@ -632,7 +632,7 @@ class TestingStateMachine():
 
         #self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
         time.sleep(5)
-        self.current_state += 1
+        #self.current_state += 1
 
         self.running = True
         rate = rospy.Rate(25) #hz
@@ -819,7 +819,8 @@ class RosManager():
         self.nav_start_pub = rospy.Publisher("/robot/start_navigation", StartNavigation, queue_size=1)
 
         request_map = rospy.Service('/robot/request_map', RequestMap, self.get_map)
-
+        
+        #self.set_init_pose = rospy.ServiceProxy('/set_pose', PoseWithCovarianceStamped)
         self.nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
         self.arm_waypoint = rospy.ServiceProxy('/robot/arm_waypoint', ArmWaypoint)
 
@@ -835,7 +836,7 @@ class RosManager():
         self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
 
     def recieve_start_command(self,msg):
-        if msg.data and not self.state_machine.running:
+        if msg.data: #and not self.state_machine.running:
             if self.state_machine.map_version:
                 print "> State Machine Starting..."
                 nav_start = StartNavigation()
@@ -844,7 +845,9 @@ class RosManager():
                 # 1 is the map configuration where we start on the left, 2 is on the right.
                     #self.state_machine.begin_1()
                 if self.state_machine.map_version == 1:
-                    self.pose = np.array([.2,1.7,3.14])
+                    self.pose = np.array([.25,1.5,3.1415])
+
+                    #self.start_ekf(self.pose)
                     nav_start.init_pose = self.pose
                     self.nav_start_pub.publish(nav_start)
                     self.state_machine.begin()
@@ -855,6 +858,43 @@ class RosManager():
                     self.nav_start_pub.publish(nav_start)
             else:
                 print "Error, no map version set."
+
+    def start_ekf(self, position):
+        q = tf.transformations.quaternion_from_euler(0, 0, position[2])
+        header = Header(
+            stamp=rospy.Time.now(),
+            frame_id="map"
+        )
+        pose = Pose(
+            position=Point(
+                x=position[0],
+                y=position[1],
+                z=0
+            ),
+            orientation=Quaternion(
+                x=q[0],
+                y=q[1],
+                z=q[2],
+                w=q[3],
+            )
+        )
+        # Publish pose with covariance stamped.
+        p_c_s = PoseWithCovarianceStamped()
+        p_c = PoseWithCovariance()
+        # These don't matter
+        covariance = np.array([.01,   0,  0,   0,   0,   0,
+                                 0, .01,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   .0001])**2
+        p_c.pose = pose
+        p_c.covariance = covariance
+        p_c_s.header = header
+        p_c_s.header.frame_id = "map"
+        p_c_s.pose = p_c
+        print p_c_s
+        self.set_init_pose(p_c_s)
 
     def determine_map_version(self,msg):
         self.state_machine.map_version = msg.data
