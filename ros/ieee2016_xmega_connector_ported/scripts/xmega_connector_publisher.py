@@ -147,12 +147,12 @@ class MagnetometerManager():
         # Publish pose with covariance stamped.
         p_c_s = PoseWithCovarianceStamped()
         p_c = PoseWithCovariance()
-        covariance = np.array([.0005,   0,   0,   0,   0,   0,
-                                 0, .0005,   0,   0,   0,   0,
-                                 0,     0, .0005, 0,   0,   0,
-                                 0,     0,   0, .0005, 0,   0,
-                                 0,     0,   0,   0, .0005, 0,
-                                 0,     0,   0,   0,   0,   1])**2
+        covariance = np.array([1,   0,   0,   0,   0,   0,
+                               0,   1,   0,   0,   0,   0,
+                               0,   0,   1,   0,   0,   0,
+                               0,   0,   0,   1,   0,   0,
+                               0,   0,   0,   0,   1,   0,
+                               0,   0,   0,   0,   0,   .7])**2
         p_c.pose = pose
         p_c.covariance = covariance
         p_c_s.header = header

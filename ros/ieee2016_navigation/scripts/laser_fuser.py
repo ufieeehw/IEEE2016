@@ -32,7 +32,7 @@ class LaserFuser():
         front_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_front',LaserScan) 
         right_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_right',LaserScan)
         back_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_back',LaserScan) 
-        mf_ts = message_filters.ApproximateTimeSynchronizer([left_sub,front_sub,right_sub,back_sub], 10, .1)
+        mf_ts = message_filters.ApproximateTimeSynchronizer([left_sub,front_sub,right_sub,back_sub], 10, .5)
         mf_ts.registerCallback(self.got_scans)
 
         # Define new laserscan

@@ -19,7 +19,7 @@ max_linear_vel = 0.3
 max_linear_acc = max_linear_vel # m/s^2
 
 # max_angular_vel = 2 # rad/s
-max_angular_vel = 0.3 # rad/s
+max_angular_vel = 0.7 # rad/s
 max_angular_acc = max_angular_vel # rad/s^2 
 
 # (Jason says this is just called angular acceleration, # I call it angcelleration)
@@ -188,7 +188,7 @@ class Controller(object):
             position_error = np.dot(position_error,rot_mat)
             print "ERR:",position_error,yaw_error
 
-            nav_tolerance = (.005,.001) #m, rads
+            nav_tolerance = (.003,.0005) #m, rads
             command = [] # 'X' means move in x, 'Y' move in y, 'R' means rotate
 
             # Determine which commands to send based on how close we are to target
@@ -203,7 +203,7 @@ class Controller(object):
                 self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .1
                 print "MV_ERR",self.starting_move_error
 
-            linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc) * \
+            linear_speed_raw = math.pow(np.linalg.norm(position_error) * max_linear_acc,(1/2.20)) * \
                                math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
             # Determines the linear speed necessary to maintain a consant backward acceleration
             linear_speed = min(

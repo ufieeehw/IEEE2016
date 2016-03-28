@@ -64,7 +64,7 @@ class GPUAccMap():
         self.min_angle = -3.14159274101 #rads
         self.max_angle = 3.14159274101
         self.max_range = 5.0 #m
-        self.min_range = 0.1
+        self.min_range = 0.02
 
         self.index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
 
@@ -197,7 +197,7 @@ class GPUAccFilter():
 
         self.test_points_pub = rospy.Publisher('/test_points', PoseArray, queue_size=2)
         self.pose_est_pub = rospy.Publisher('/robot/navigation/pf_pose_vis', PoseStamped, queue_size=2)
-        self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/pf_pose', PoseWithCovarianceStamped, queue_size=10)
+        self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/pf_pose', PoseWithCovarianceStamped, queue_size=2)
 
         self.odom_sub = rospy.Subscriber('/odometry/filtered', Odometry, self.got_odom)
         self.laser_scan_sub = rospy.Subscriber('/robot/navigation/lidar/scan_fused', LaserScan, self.got_laserscan)
@@ -205,7 +205,7 @@ class GPUAccFilter():
         self.br = tf.TransformBroadcaster()
 
         self.m = m
-        self.INIT_PARTICLES = 2048
+        self.INIT_PARTICLES = 5096
         self.MAX_PARTICLES = 2048
 
         # We start at our esitmated starting position
@@ -268,9 +268,8 @@ class GPUAccFilter():
         '''
         This function deals with actually running the filter.
         '''
-        print "running"
         r = rospy.Rate(10) #hz
-        start_time = time.time()
+        self.start_time = time.time()
         while not rospy.is_shutdown():
             r.sleep()
 
@@ -292,7 +291,7 @@ class GPUAccFilter():
                 break
 
             # # # Remove low weights from particle and weights list
-            weight_percentile = 95 #percent
+            weight_percentile = 98 #percent
             weights_indicies_to_keep = weights_raw > np.percentile(weights_raw,weight_percentile)
             weights = np.repeat(weights_raw,3).reshape(len(weights_raw),3)
             #weighted_particles = self.particles*weights/np.mean(weights_raw)
@@ -314,7 +313,7 @@ class GPUAccFilter():
             # Update Pose
             self.publish_pose(new_pose)
 
-            cov = np.eye(3)*.1**2
+            #cov = np.eye(3)*.1**2
             translation_vairance = .1  #m  #.1
             rotational_vairance = .5 #rads #.5
             #self.gen_guass_particles(self.MAX_PARTICLES,new_pose,cov)
@@ -361,25 +360,24 @@ class GPUAccFilter():
             )
         )
 
-        # self.br.sendTransform((self.pose_est[0], self.pose_est[1], .125), q,
-        #          rospy.Time.now(),
-        #          "base_link",
-        #          "map")
-
         # Publish pose with covariance stamped.
         p_c_s = PoseWithCovarianceStamped()
         p_c = PoseWithCovariance()
-        covariance = np.array([0.1,   0,   0,   0,   0,   0,
-                                 0, 0.1,   0,   0,   0,   0,
-                                 0,   0, 0.1,   0,   0,   0,
-                                 0,   0,   0, 0.1,   0,   0,
-                                 0,   0,   0,   0, 0.1,   0,
-                                 0,   0,   0,   0,   0, 0.1])**2
+        # These don't matter
+        covariance = np.array([.01,   0,  0,   0,   0,   0,
+                                 0, .01,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,  .075])**2
         p_c.pose = pose
         p_c.covariance = covariance
         p_c_s.header = header
         p_c_s.header.frame_id = "map"
         p_c_s.pose = p_c
+        # if time.time() - self.start_time < 5:
+        #     self.p_c_s_init_pub.publish(p_c_s)
+        # else:
         self.p_c_s_est_pub.publish(p_c_s)
 
 
@@ -473,14 +471,16 @@ class GPUAccFilter():
         #print "PUBLISHED PARTICLES"
 
 def start_navigation(msg):
+    global start_sub
+    print "Starting."
     m = GPUAccMap(msg.map)
     init_pose = msg.init_pose
-    f = GPUAccFilter(init_pose[:2], .5, (.5+init_pose[2],-.5+init_pose[2]), m)
-    
+    f = GPUAccFilter(init_pose[:2], 2, (.5+init_pose[2],-.5+init_pose[2]), m)
+    start_sub.unregister()
 
 # Set up start command subscriber and wait until we get that signal
 rospy.init_node('particle_filter')
-rospy.Subscriber("/robot/start_navigation", StartNavigation, start_navigation)
+start_sub = rospy.Subscriber("/robot/start_navigation", StartNavigation, start_navigation)
 print "> Waiting for navigation start command..."
 
 rospy.spin()

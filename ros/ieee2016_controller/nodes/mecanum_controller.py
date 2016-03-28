@@ -234,12 +234,12 @@ class Controller(object):
                         z=vehicle_twist[2],
                     )
                 ),
-                covariance = np.array([   1,   0,   0,   0,   0,   0,
-                                          0,   1,   0,   0,   0,   0,
-                                          0,   0,   0,   0,   0,   0,
-                                          0,   0,   0,   0,   0,   0,
-                                          0,   0,   0,   0,   0,   0,
-                                          0,   0,   0,   0,   0,  1])**2
+                covariance = np.array([ .01,   0,   0,   0,   0,   0,
+                                          0, 1,   0,   0,   0,   0,
+                                          0,   0,   1,   0,   0,   0,
+                                          0,   0,   0,   1,   0,   0,
+                                          0,   0,   0,   0,   1,   0,
+                                          0,   0,   0,   0,   0,  .09])**2
             ) 
 
             orientation = tf_trans.quaternion_from_euler(0, 0, self.pose[2])
