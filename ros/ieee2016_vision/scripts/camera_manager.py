@@ -204,6 +204,7 @@ class CameraManager():
         # ROS inits
         self.cam_1_pub = rospy.Publisher("/camera/cam_1", Image, queue_size = 1)
         self.cam_2_pub = rospy.Publisher("/camera/cam_2", Image, queue_size = 1)
+        self.cam_2_pub_small = rospy.Publisher("/camera/cam_2_small", Image, queue_size = 1)
         #self.cam_pub = rospy.Publisher("/camera/cam_stream", Image, queue_size = 1)
         
         rospy.init_node("camera_manager")
@@ -225,12 +226,15 @@ class CameraManager():
 
         self.cam = None
 
-        print "> Initialization Complete."
+        print "> Camera Manager Initialization Complete."
         rate = rospy.Rate(rospy.get_param("~fps"))  # hz
         while not rospy.is_shutdown():
             #try:
             #self.cam_1_pub.publish(br.cv2_to_imgmsg(self.cam_1.read()[1], "bgr8"))
-            self.cam_2_pub.publish(br.cv2_to_imgmsg(self.cam_2.read()[1], "bgr8"))
+            cam_2_image = self.cam_2.read()[1]
+            small = cv2.resize(cam_2_image, (0,0), fx=0.3, fy=0.3) 
+            self.cam_2_pub.publish(br.cv2_to_imgmsg(cam_2_image, "bgr8"))
+            self.cam_2_pub_small.publish(br.cv2_to_imgmsg(small, "bgr8"))
             rate.sleep()
             # except:
             #     print "> Error opening one of the Cameras."
