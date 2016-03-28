@@ -21,9 +21,9 @@ start = rospy.Publisher('/settings/start_command', Bool, queue_size=3)
 map_version = rospy.Publisher('/settings/map_version', Int8, queue_size=3)
 
 stop_proxy = rospy.ServiceProxy('/robot/mecanum/stop', StopMecanum)
-
+speed = .1
 def got_joy_msg(joy_msg):
-    global twist_stamped_msg, active, pub
+    global twist_stamped_msg, active, pub, speed
 
     if joy_msg.buttons[0]:
        active = not active
@@ -37,11 +37,15 @@ def got_joy_msg(joy_msg):
        time.sleep(.2)
        start.publish(Bool(data=True))
 
-    #6 start, 7 stop
-    if joy_msg.buttons[6]:
-        stop_proxy(True)
-    elif joy_msg.buttons[7]:
+    if joy_msg.buttons[5]:
         stop_proxy(False)
+    if joy_msg.buttons[4]:
+        stop_proxy(True)
+
+    if joy_msg.buttons[13]:
+        speed += .02
+    if joy_msg.buttons[14]:
+        speed -= .02
 
 
     linear_x = joy_msg.axes[1] * max_linear_velocity
@@ -54,14 +58,23 @@ def got_joy_msg(joy_msg):
     twist_stamped_msg.twist.linear = Vector3()
     twist_stamped_msg.twist.angular = Vector3()
 
-    speed = .1
-    twist_stamped_msg.twist.linear.x = linear_x * speed
-    twist_stamped_msg.twist.linear.y = linear_y * speed
+    twist_stamped_msg.twist.linear.x = 0
+    twist_stamped_msg.twist.linear.y = 0
+    twist_stamped_msg.twist.angular.z = 0
+
+    dead_zone = .5
+    if abs(linear_x) > dead_zone:
+      twist_stamped_msg.twist.linear.x = linear_x * speed
+    if abs(linear_y) > dead_zone:
+      twist_stamped_msg.twist.linear.y = linear_y * speed
     twist_stamped_msg.twist.linear.z = 0
     
     twist_stamped_msg.twist.angular.x = 0
     twist_stamped_msg.twist.angular.y = 0
-    twist_stamped_msg.twist.angular.z = angular_z * speed
+    
+    #print angular_z,dead_zone*100
+    if abs(angular_z) > dead_zone:
+      twist_stamped_msg.twist.angular.z = angular_z * speed
 
     twist_stamped_msg.header.seq = seq
     twist_stamped_msg.header.frame_id = '/robot'
