@@ -18,7 +18,7 @@ import os
 
 rospack = rospkg.RosPack()
 TEMPLATES_FOLDER = os.path.join(rospack.get_path('ieee2016_vision'), 'scripts/templates/')
-QR_DISTANCES = [57]
+QR_DISTANCES = [30]
 
 def nothing(x):
     pass
@@ -198,7 +198,7 @@ class DetectQRCodeTemplateMethod(object):
         self.colors = []
 
         # Used for visual servoing
-        self.point_intersector = PointIntersector()
+        #self.point_intersector = PointIntersector()
 
         # Make sure distances are [full block, back half block, full block, ....]
         self.load_templates(distances)
@@ -278,7 +278,7 @@ class DetectQRCodeTemplateMethod(object):
 
         self.threshold = .66
         self.camera = camera
-        cam_to_base_link = np.abs(camera.get_tf()[1])
+        cam_to_base_link = 0#np.abs(camera.get_tf()[1])
 
         if directive == "inital_scan":
             #distance_to_wall = args - cam_to_base_link
@@ -323,7 +323,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"blue",offset,rotation)
-                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
+                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
 
                 elif frame_count == 1:
                     mid_point = np.array(reds[0].shape[::-1])/2
@@ -333,7 +333,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"red",offset,rotation)
-                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
+                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
 
                 elif frame_count == 2:
                     mid_point = np.array(greens[0].shape[::-1])/2
@@ -343,7 +343,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"green",offset,rotation)
-                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
+                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
 
                 elif frame_count == 3:
                     mid_point = np.array(yellows[0].shape[::-1])/2
@@ -353,10 +353,10 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"yellow",offset,rotation)
-                            #cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
+                            cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
                 # Only for displaying
-                #cv2.imshow("found",image)
-                #cv2.waitKey(1)
+                cv2.imshow("found",image)
+                cv2.waitKey(1)
 
     def visual_servo(self, dist, block_color, orientation):
         '''
@@ -418,10 +418,10 @@ if __name__ == "__main__":
     cam = Camera(2)
     cam.activate()
     print cam.image
-    d = DetectQRCodeTemplateMethod([50,56.25])
+    d = DetectQRCodeTemplateMethod([29,50,56.25])
     r = rospy.Rate(10)
     while not rospy.is_shutdown():
-        d.match_templates(cam, "inital_scan", 50)
+        d.match_templates(cam, "inital_scan", 29)
 
         rospy.loginfo("beep")
         r.sleep()
