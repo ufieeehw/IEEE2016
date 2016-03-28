@@ -97,10 +97,12 @@ class TFPublisher():
                         tf.transformations.quaternion_from_euler(0,0,3.1415),
                         rospy.Time.now(), "cam_2_pose", "cam_2_adjust")
         
-        self.tf_broad.sendTransform((0,.004,.006), 
+        # self.tf_broad.sendTransform((0,.004,.006), 
+        #                 tf.transformations.quaternion_from_euler(0,0,0),
+        #                 rospy.Time.now(), "cam_2_adjust", "elevator")
+        self.tf_broad.sendTransform((0,0,0), 
                         tf.transformations.quaternion_from_euler(0,0,0),
                         rospy.Time.now(), "cam_2_adjust", "elevator")
-
 
 
         # # base_link -> imu

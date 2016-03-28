@@ -217,7 +217,7 @@ class DetectQRCodeTemplateMethod(object):
             self.base_path = os.path.join(TEMPLATES_FOLDER, str(dist)) #str(min(QR_DISTANCES, key=lambda x:abs(x-dist))))
 
             colors = {"/blue":blues,"/red":reds,"/green":greens,"/yellow":yellows}
-            thetas = [0,90,180,270]
+            thetas = [0,2,88,90,92,178,180,182,268,270,272,358]
 
             # Save raw image for manually getting templates from. Need to specify a camera for this.
             #cv2.imwrite(self.base_path+"/raw.jpg",self.camera.image)
@@ -276,7 +276,7 @@ class DetectQRCodeTemplateMethod(object):
                 args: [distance_to_wall, block_color, qr_rotation]. These are specified so we don't have to search every color and every rotation.
         '''
 
-        self.threshold = .66
+        self.threshold = .6
         self.camera = camera
         cam_to_base_link = 0#np.abs(camera.get_tf()[1])
 
@@ -323,7 +323,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"blue",offset,rotation)
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)
 
                 elif frame_count == 1:
                     mid_point = np.array(reds[0].shape[::-1])/2
@@ -333,7 +333,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"red",offset,rotation)
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,0,255), -1)
 
                 elif frame_count == 2:
                     mid_point = np.array(greens[0].shape[::-1])/2
@@ -343,7 +343,7 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"green",offset,rotation)
-                            cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
+                            #cv2.circle(image, (pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (0,255,0), -1)
 
                 elif frame_count == 3:
                     mid_point = np.array(yellows[0].shape[::-1])/2
@@ -353,10 +353,10 @@ class DetectQRCodeTemplateMethod(object):
                         loc = np.where( res >= self.threshold)
                         for pt in zip(*loc[::-1]):
                             self.publish_block(pt+mid_point,"yellow",offset,rotation)
-                            cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
+                            #cv2.circle(image, tuple(pt+mid_point), 15, (0,255,255), -1)
                 # Only for displaying
-                cv2.imshow("found",image)
-                cv2.waitKey(1)
+                #cv2.imshow("found",image)
+                #cv2.waitKey(1)
 
     def visual_servo(self, dist, block_color, orientation):
         '''
