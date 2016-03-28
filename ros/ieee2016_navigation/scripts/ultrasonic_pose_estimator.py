@@ -29,22 +29,24 @@ class LidarPositionEstimator():
     '''
     With one of the lidars, estimate the position and rotation of the robot
     '''
-    def __init__(self, wall_y = 0):
+    def __init__(self, wall_y = 2.172):
+        self.tf_listener = tf.TransformListener()
         self.wall_y = wall_y
-        self.pose_est_pub = rospy.Publisher("/robot/navigation/us_pose_est_vis", PoseStamped, queue_size=2) 
-        self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/us_pose_est', PoseWithCovarianceStamped, queue_size=10)
-        self.scan_pub = rospy.Publisher('/scan_pub', LaserScan, queue_size=10)
-        rospy.Subscriber("/scan", LaserScan, self.got_scan, queue_size=10)
+        self.pose_est_pub = rospy.Publisher("/robot/navigation/us_pose_vis", PoseStamped, queue_size=2) 
+        self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/us_pose', PoseWithCovarianceStamped, queue_size=10)
+        self.scan_pub = rospy.Publisher('/scan_trimmed', LaserScan, queue_size=10)
+        rospy.Subscriber("/robot/navigation/lidar/scan_right", LaserScan, self.got_scan, queue_size=10)
         
         self.map_y = None
 
-        self.FOV = 20
+        self.FOV = 40
 
     def got_scan(self,msg):
         # Take all three scans, trim to a new FOV, convert them to cartesian, apply transformations, pub pointcloud, tranform back to cart, and pub laserscan
         angle_increment = msg.angle_increment
         ranges = np.array(msg.ranges)
         ranges_size = ranges.size
+        self.frame_id = msg.header.frame_id
 
         # Trim to FOV
         new_FOV = math.radians(self.FOV)
@@ -58,24 +60,24 @@ class LidarPositionEstimator():
         msg.ranges = ranges
         self.scan_pub.publish(msg)
         # Get TF data about the LIDAR position
-        (trans,q_rot) = ([0,0,0],[0,0,0,1])#self.tf_listener.lookupTransform('base_link',self.frames[i], rospy.Time(0))
-        rot = [0,0,-1.57]#tf.transformations.euler_from_quaternion(q_rot)
+        trans = self.get_tf_link(time=rospy.Time(0))
 
         # Generate list that maps indices of the ranges to radian angle measures
-        thetas = np.linspace(angle_min, angle_max, ranges_size, endpoint=True) + rot[2]
-        cartesian_scan = np.apply_along_axis(self.polar_to_cart, 0, np.vstack((ranges,thetas)), trans).T# + np.array(trans[:2])
+        thetas = np.linspace(angle_min, angle_max, ranges_size, endpoint=True) + trans[2]
+        cartesian_scan = np.apply_along_axis(self.polar_to_cart, 0, np.vstack((ranges,thetas)), trans[:2]).T# + np.array(trans[:2])
 
         cartesian_scan = cartesian_scan[~np.isnan(cartesian_scan)]
         cartesian_scan = cartesian_scan[~np.isinf(cartesian_scan)].reshape((-1,2))
         #sprint cartesian_scan
         # Draw a line through the PointStamped
         slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(cartesian_scan)
-
+        self.std_err = std_err * 50
+        print self.std_err
         # Each group has different parameters that should requires the pose estimate to be different.
         # Invert yaw here and change map_y
         # if self.activated_group == "left":
-        map_y = self.wall_y - intercept
-        map_yaw = np.arctan(slope)
+        map_y = self.wall_y + intercept
+        map_yaw = np.arctan(-slope)+3.1416
 
         if not self.map_y:
             self.map_y = map_y
@@ -92,18 +94,78 @@ class LidarPositionEstimator():
         self.map_yaw = (1-yaw_factor)*self.map_yaw + (yaw_factor)*map_yaw
 
         print np.degrees(self.map_yaw), self.map_y
-        self.publish_pose_est(np.array([0,self.map_y,self.map_yaw]),rospy.Time.now())
+        self.publish_pose(np.array([0,self.map_y,self.map_yaw]),rospy.Time.now())
 
-    def publish_pose_est(self,pose,stamp):
+    def get_tf_link(self, target_frame="base_link", time=None):
+        # Returns the tf link between this sensor and the target frame as close as we can to 'time'
+        if time is None: time = self.tf_listener.getLatestCommonTime(target_frame, self.frame_id)
+        self.tf_listener.waitForTransform(target_frame, self.frame_id, time, rospy.Duration(1.0))
+        pos, quaternion = self.tf_listener.lookupTransform(target_frame, self.frame_id, time)
+        rot = tf.transformations.euler_from_quaternion(quaternion)
+
+        return np.array([pos[0], pos[1], rot[2]])
+
+    def publish_pose(self,pose,time):
+        #Generate pose
         q = tf.transformations.quaternion_from_euler(0, 0, pose[2])
         header = Header(
-            stamp=stamp,
-            frame_id="laser"
+            stamp=rospy.Time.now(),
+            frame_id="map"
         )
         pose = Pose(
-            position=Point(x=pose[0], y=pose[1], z=0),
-            orientation=Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+            position=Point(
+                x=pose[0],
+                y=pose[1],
+                z=0
+            ),
+            orientation=Quaternion(
+                x=q[0],
+                y=q[1],
+                z=q[2],
+                w=q[3],
+            )
         )
+
+        # Publish pose stamped
+        self.pose_est_pub.publish(
+            PoseStamped(
+                header=header,
+                pose=pose
+            )
+        )
+
+        # Publish pose with covariance stamped.
+        p_c_s = PoseWithCovarianceStamped()
+        p_c = PoseWithCovariance()
+        # These don't matter
+        covariance = np.array([  1,   0,  0,   0,   0,   0,
+                                 0,.01*self.std_err,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,   0,
+                                 0,   0,  0,   0,   0,  self.std_err])**2
+        p_c.pose = pose
+        p_c.covariance = covariance
+        p_c_s.header = header
+        p_c_s.header.frame_id = "map"
+        p_c_s.pose = p_c
+        # if time.time() - self.start_time < 5:
+        #     self.p_c_s_init_pub.publish(p_c_s)
+        # else:
+        self.p_c_s_est_pub.publish(p_c_s)
+
+    def polar_to_cart(self,r_theta,translation,frame=None):
+        # Convert (r,theta) into (x,y)
+        # Since the LIDAR are flipped and rotated in different directions, you have to change the signs of x and y based on the scan
+        if frame == "laser_front" or frame == "laser_back":
+            x = (r_theta[0] * np.cos(r_theta[1]) + translation[0])
+            y = -(r_theta[0] * np.sin(r_theta[1]) + translation[1])
+        else:
+            x = -(r_theta[0] * np.cos(r_theta[1])) + translation[0]
+            y = (r_theta[0] * np.sin(r_theta[1])) + translation[1]
+
+        return x,y
+
 
 class UltraSonicSensor():
     '''
@@ -292,10 +354,7 @@ class USPoseEstimator():
 
 if __name__ == "__main__":
     rospy.init_node("ultrasonic_listener")
-<<<<<<< HEAD
-    l = LidarPositionEstimator()
-=======
 
-    l = LidarPoseEstimator()
->>>>>>> 837346ad2990225503a324ce1df0476e70493547
+    l = LidarPositionEstimator()
+
     rospy.spin()
