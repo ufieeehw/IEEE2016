@@ -8,7 +8,7 @@ import scipy.stats
 import rospy
 import tf
 ## Ros msgs
-from std_msgs.msg import Header
+from std_msgs.msg import Header, String
 from geometry_msgs.msg import Pose, PoseStamped, Point32, PointStamped, Point, Quaternion, PoseWithCovarianceStamped, PoseWithCovariance
 from sensor_msgs.msg import PointCloud, LaserScan
 from ieee2016_msgs.msg import UltraSonicStamped, UltraSonicActivator
@@ -29,19 +29,42 @@ class LidarPositionEstimator():
     '''
     With one of the lidars, estimate the position and rotation of the robot
     '''
-    def __init__(self, wall_y = 2.172):
+    def __init__(self):
+        map_request = rospy.ServiceProxy('/robot/request_map',RequestMap)
+        self.wall_y = np.array(map_request().block_wall_y)
+
         self.tf_listener = tf.TransformListener()
-        self.wall_y = wall_y
+
         self.pose_est_pub = rospy.Publisher("/robot/navigation/us_pose_vis", PoseStamped, queue_size=2) 
         self.p_c_s_est_pub = rospy.Publisher('/robot/navigation/us_pose', PoseWithCovarianceStamped, queue_size=10)
-        self.scan_pub = rospy.Publisher('/scan_trimmed', LaserScan, queue_size=10)
+        #self.scan_pub = rospy.Publisher('/scan_trimmed', LaserScan, queue_size=10)
+
+        rospy.Subscriber("/robot/navigation/set_ultrasonic_side", String, self.set_side, queue_size=10)
+
         rospy.Subscriber("/robot/navigation/lidar/scan_right", LaserScan, self.got_scan, queue_size=10)
-        
+        rospy.Subscriber("/robot/navigation/lidar/scan_left", LaserScan, self.got_scan, queue_size=10)
+
+        self.active_sensor = None
         self.map_y = None
 
         self.FOV = 50
 
+    def set_side(self, msg):
+        if msg.data = "left":
+            self.active_sensor = "laser_left"
+        elif msg.data = "right":
+            self.active_sensor = "laser_right"
+        else:
+            self.active_sensor = None
+
     def got_scan(self,msg):
+        '''
+        Take the scan, convert it to cart, apply transformations, draw a line of best fit through the points and estimate the rotation and poition from the wall.
+
+        The covariance of the output pose esitmation comes from the standard deviation of that line of best fit.
+        '''
+        if msg.header.frame_id != self.active_sensor: return
+
         # Take all three scans, trim to a new FOV, convert them to cartesian, apply transformations, pub pointcloud, tranform back to cart, and pub laserscan
         angle_increment = msg.angle_increment
         ranges = np.array(msg.ranges)
@@ -58,7 +81,7 @@ class LidarPositionEstimator():
         msg.angle_min=angle_min
         msg.angle_max=angle_max
         msg.ranges = ranges
-        self.scan_pub.publish(msg)
+        #self.scan_pub.publish(msg)
         # Get TF data about the LIDAR position
         trans = self.get_tf_link(time=rospy.Time(0))
 
@@ -73,19 +96,20 @@ class LidarPositionEstimator():
         slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(cartesian_scan)
         self.std_err = std_err * 50
         print self.std_err
-        # Each group has different parameters that should requires the pose estimate to be different.
-        # Invert yaw here and change map_y
-        # if self.activated_group == "left":
-        map_y = self.wall_y + intercept
-        map_yaw = np.arctan(-slope)+3.1416
+
+        # Each sensor parameters that should requires the pose estimate to be different.
+        # Invert yaw here and change map_y. This could be done with tf data but nah.
+        if self.active_sensor == "laser_left":
+            map_y = self.wall_y + intercept
+            map_yaw = np.arctan(-slope)+3.1416
+        elif self.activated_group == "laser_right":
+            map_y = -self.wall_y - intercept
+            map_yaw = np.arctan(slope)
 
         if not self.map_y:
             self.map_y = map_y
             self.map_yaw = map_yaw
 
-        # elif self.activated_group == "right":
-        #     map_y = -self.wall_y - intercept
-        #     map_yaw = np.arctan(slope)
         
         # New data has these weights:
         yaw_factor = .2
