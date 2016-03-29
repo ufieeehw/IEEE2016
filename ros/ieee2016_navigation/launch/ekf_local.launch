@@ -139,7 +139,7 @@
 <!--       <param name="imu0_relative" value="false"/> -->
       <param name="twist0_relative" value="false"/>
       <param name="pose0_relative" value="false"/>
-      <param name="pose1_relative" value="true"/>
+      <param name="pose1_relative" value="false"/>
       <param name="pose2_relative" value="false"/>
 
       <!-- If you're having trouble, try setting this to true, and then echo the /diagnostics_agg topic to see

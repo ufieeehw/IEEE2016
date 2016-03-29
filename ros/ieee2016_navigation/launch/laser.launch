@@ -1,22 +1,29 @@
 <?xml version="1.0"?>
 <launch>
+  <group ns="lidar">
     <node name="hokuyo_left" pkg="hokuyo_node" type="hokuyo_node">
-        <param name="port" type="string" value="/dev/sensors/hokuyo_H1008999" />
-        <remap from="scan" to="scan_left" />
-	<param name="frame_id" type="string" value="laser_left" />
+      <param name="port" type="string" value="/dev/sensors/hokuyo_H1009061" />
+      <remap from="scan" to="/robot/navigation/lidar/scan_left" />
+      <param name="frame_id" type="string" value="laser_left" />
     </node>
     <node name="hokuyo_middle" pkg="hokuyo_node" type="hokuyo_node">
-        <param name="port" type="string" value="/dev/sensors/hokuyo_H1009001" />
-        <remap from="scan" to="scan_middle" />
-	<param name="frame_id" type="string" value="laser_middle" />
+      <param name="port" type="string" value="/dev/sensors/hokuyo_H1009001" />
+      <remap from="scan" to="/robot/navigation/lidar/scan_front" />
+      <param name="frame_id" type="string" value="laser_front" />
     </node>
     <node name="hokuyo_right" pkg="hokuyo_node" type="hokuyo_node">
-        <param name="port" type="string" value="/dev/sensors/hokuyo_H1009061" />
-        <remap from="scan" to="scan_right" />
-	<param name="frame_id" type="string" value="laser_right" />
+      <param name="port" type="string" value="/dev/sensors/hokuyo_H1008999" />
+      <remap from="scan" to="/robot/navigation/lidar/scan_right" />
+      <param name="frame_id" type="string" value="laser_right" />
     </node>  
-
-    <node pkg="ieee2016_navigation" type="laser_fuser.py" name="laser_fuser"/>
+    <node name="hokuyo_back" pkg="hokuyo_node" type="hokuyo_node">
+      <param name="port" type="string" value="/dev/sensors/hokuyo_H1009056" />
+      <remap from="scan" to="/robot/navigation/lidar/scan_back" />
+      <param name="frame_id" type="string" value="laser_back" />
+    </node>  
+<!--     <node pkg="ieee2016_navigation" type="laser_fuser.py" name="laser_fuser" output="screen"/> -->
+  </group>
+<!--     <node pkg="ieee2016_navigation" type="laser_fuser.py" name="laser_fuser"/> -->
     <!--node pkg="tf" type="static_transform_publisher" name="temp_odom_to_laser_comb" args="0 0 0 0 0 0 odom laser_comb 10"/-->
     <!--node pkg="ieee2016_navigation" type="laser_trimmer.py" name="laser_trimmer" args="125"/-->
 </launch>

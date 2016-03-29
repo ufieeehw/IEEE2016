@@ -39,7 +39,7 @@ class LidarPositionEstimator():
         
         self.map_y = None
 
-        self.FOV = 40
+        self.FOV = 50
 
     def got_scan(self,msg):
         # Take all three scans, trim to a new FOV, convert them to cartesian, apply transformations, pub pointcloud, tranform back to cart, and pub laserscan
@@ -139,7 +139,7 @@ class LidarPositionEstimator():
         p_c = PoseWithCovariance()
         # These don't matter
         covariance = np.array([  1,   0,  0,   0,   0,   0,
-                                 0,.01*self.std_err,  0,   0,   0,   0,
+                                 0,.2*self.std_err,  0,   0,   0,   0,
                                  0,   0,  0,   0,   0,   0,
                                  0,   0,  0,   0,   0,   0,
                                  0,   0,  0,   0,   0,   0,

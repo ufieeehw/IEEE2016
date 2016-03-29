@@ -3,10 +3,12 @@ import rospy
 import roslib
 from std_msgs.msg import Bool, Int8, Header
 from sensor_msgs.msg import PointCloud, ChannelFloat32
+from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, Point32, PointStamped, PoseWithCovarianceStamped, PoseWithCovariance
 from ieee2016_msgs.srv import NavWaypoint, ArmWaypoint, RequestMap
 from ieee2016_msgs.msg import StartNavigation
 from rospy.numpy_msg import numpy_msg
+from robot_localization.srv import SetPose
 import tf
 
 roslib.load_manifest('ieee2016_vision')
@@ -15,6 +17,7 @@ from arm_controller import ArmController, ServoController
 from block_manager import EndEffector, BlockServer, WaypointGenerator
 from waypoint_utils import load_waypoints, update_waypoints
 from qr_detector import DetectQRCodeTemplateMethod
+
 
 # Temp Imports
 roslib.load_manifest('ieee2016_simulator')
@@ -820,18 +823,19 @@ class RosManager():
 
         request_map = rospy.Service('/robot/request_map', RequestMap, self.get_map)
         
-        #self.set_init_pose = rospy.ServiceProxy('/set_pose', PoseWithCovarianceStamped)
+        self.set_init_pose = rospy.ServiceProxy('/set_pose', SetPose)
         self.nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
         self.arm_waypoint = rospy.ServiceProxy('/robot/arm_waypoint', ArmWaypoint)
 
-        rospy.Subscriber("/robot/pf_pose_est", PoseStamped, self.got_pose, queue_size=1)
+        rospy.Subscriber("/odometry/filtered", Odometry, self.got_odom, queue_size=1)
 
         rospy.init_node('main_control')
         
         rospy.Subscriber('/settings/start_command', Bool, self.recieve_start_command)
         rospy.Subscriber('/settings/map_version', Int8, self.determine_map_version)
 
-    def got_pose(self,msg):
+    def got_odom(self,msg):
+        msg = msg.pose
         yaw = tf.transformations.euler_from_quaternion([msg.pose.orientation.x,msg.pose.orientation.y,msg.pose.orientation.z,msg.pose.orientation.w])[2]
         self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
 
@@ -845,16 +849,16 @@ class RosManager():
                 # 1 is the map configuration where we start on the left, 2 is on the right.
                     #self.state_machine.begin_1()
                 if self.state_machine.map_version == 1:
-                    self.pose = np.array([.25,1.5,3.1415])
+                    start_pose = np.array([.2,2,3.1415])
 
-                    #self.start_ekf(self.pose)
-                    nav_start.init_pose = self.pose
+                    self.start_ekf(start_pose)
+                    nav_start.init_pose = start_pose
                     self.nav_start_pub.publish(nav_start)
                     self.state_machine.begin()
 
                 elif self.state_machine.map_version == 2:
-                    self.pose = np.array([self.far_wall_x - .2,.2,1.57])
-                    nav_start.init_pose = self.pose
+                    start_pose = np.array([self.far_wall_x - .2,.2,1.57])
+                    nav_start.init_pose = start_pose
                     self.nav_start_pub.publish(nav_start)
             else:
                 print "Error, no map version set."
@@ -893,7 +897,7 @@ class RosManager():
         p_c_s.header = header
         p_c_s.header.frame_id = "map"
         p_c_s.pose = p_c
-        print p_c_s
+
         self.set_init_pose(p_c_s)
 
     def determine_map_version(self,msg):
