@@ -102,16 +102,9 @@ class Camera():
         self.active = True
 
     def deactivate(self):
-        '''
-        Doesn't do anything, activate a different camera if you need it.
-        '''
-        raise NotImplementedError
-        if True:
-            return None
-        else:
-            ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data = "STOP"))
+        ret = rospy.ServiceProxy('/camera/camera_set', CameraSet)(String(data = "STOP"))
 
-            self.active = False
+        self.active = False
 
     def get_tf(self, mode = "pose", target_frame = "base_link", time = None):
         # Returns the relative [x,y,yaw] between the target_frame and the camera
@@ -224,17 +217,19 @@ class CameraManager():
 
         time.sleep(1)
 
-        self.cam = None
-
+        self.cams_to_publish = [False,False]
         print "> Camera Manager Initialization Complete."
         rate = rospy.Rate(rospy.get_param("~fps"))  # hz
         while not rospy.is_shutdown():
             #try:
-            #self.cam_1_pub.publish(br.cv2_to_imgmsg(self.cam_1.read()[1], "bgr8"))
-            cam_2_image = self.cam_2.read()[1]
-            small = cv2.resize(cam_2_image, (0,0), fx=0.3, fy=0.3) 
-            self.cam_2_pub.publish(br.cv2_to_imgmsg(cam_2_image, "bgr8"))
-            self.cam_2_pub_small.publish(br.cv2_to_imgmsg(small, "bgr8"))
+            if self.cams_to_publish[0]:
+                self.cam_1_pub.publish(br.cv2_to_imgmsg(self.cam_1.read()[1], "bgr8"))
+            if self.cams_to_publish[1]:
+                cam_2_image = self.cam_2.read()[1]
+                small = cv2.resize(cam_2_image, (0,0), fx=0.3, fy=0.3) 
+                self.cam_2_pub.publish(br.cv2_to_imgmsg(cam_2_image, "bgr8"))
+                self.cam_2_pub_small.publish(br.cv2_to_imgmsg(small, "bgr8"))
+            
             rate.sleep()
             # except:
             #     print "> Error opening one of the Cameras."
@@ -245,18 +240,18 @@ class CameraManager():
         Calling this function will only return that camera's calibration.
         Activating a camera doesn't do anything - though this might change.
         '''
-        # cam_name = srv.cam_name.data
-        # self.cam = None
-        # if cam_name == "cam_1":
-        #     print "> Publishing Camera 1."
-        #     self.cam = self.cam_1
-        # elif cam_name == "cam_2":
-        #     print "> Publishing Camera 2."
-        #     self.cam = self.cam_2
-        # elif cam_name == "STOP":
-        #     print "> Stopping Publishing."
-        #     self.cam = None
-        #     return CameraInfo()
+        cam_name = srv.cam_name.data
+        self.cam = None
+        if cam_name == "cam_1":
+            print "> Publishing Camera 1."
+            self.cams_to_publish[0] = True
+        elif cam_name == "cam_2":
+            print "> Publishing Camera 2."
+            self.cams_to_publish[1] = True
+        elif cam_name == "STOP":
+            print "> Stopping Publishing."
+            self.cams_to_publish = [False,False]
+            return CameraInfo()
 
         return self.get_cam_info(srv.cam_name.data)
 
