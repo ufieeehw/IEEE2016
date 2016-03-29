@@ -16,6 +16,7 @@ import numpy as np
 import scipy.stats
 from kd_tree import KDTree
 import time
+import copy
 
 class Block():
     def __init__(self, color, orientation = None, coordinate = 'na'):
@@ -370,8 +371,7 @@ class BlockServerV2():
 
         self.blocks = np.array([])
 
-        # Sort of a timeout, how many existing block detections until we stop looking for blocks and start processing.
-        self.timeout = 0
+        self.timeout = 10 #s
 
         # Used for half block detection
         self.top_left = None
@@ -391,7 +391,9 @@ class BlockServerV2():
         print
         print
 
-        if self.timeout >= 15:
+        print time.time() - self.start_time 
+        if time.time() - self.start_time > self.timeout:
+            print "timeout"
             self.block_sub.unregister()
             print self.get_block_locations()
 
@@ -403,6 +405,7 @@ class BlockServerV2():
 
         if len(self.blocks) == 0:
             self.blocks = [block]
+            self.start_time = time.time()
             return
 
         # Check for close matches will all other blocks, if there is one, average that block position with the new block's
@@ -415,10 +418,8 @@ class BlockServerV2():
                 self.blocks.remove(_block)
                 new_block.coordinate = b*(1-new_weight) + point*(new_weight)
                 self.blocks.append(new_block)
-                self.timeout += 1
                 return
 
-        self.timeout = 0
         self.blocks.append(block) 
 
     def get_block_locations(self):
@@ -454,11 +455,14 @@ class BlockServerV2():
 
         top_most_blocks = []
         for b in range(4):
-            for block in self.blocks:
+            for i,block in enumerate(self.blocks):
                 #print top_most_coordinates[b], block.coordinate
                 if (top_most_coordinates[b] == block.coordinate).all():
-                    top_most_blocks.append(block)
+                    top_most_blocks.append(copy.copy(block))
+                    self.blocks[i].color = 'None'
 
+        print self.blocks
+        print
         return top_most_blocks
 
 if __name__ == "__main__":
