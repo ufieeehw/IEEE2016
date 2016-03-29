@@ -173,7 +173,7 @@ class Controller(object):
         '''
         if (self.position is None) or (self.yaw is None) or (self.on is False): return False
         
-        r = rospy.Rate(40) #hz
+        r = rospy.Rate(25) #hz
         # Loop until there is no command being sent out.
         command = ['_']
         while command or not rospy.is_shutdown():
