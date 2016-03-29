@@ -556,17 +556,24 @@ class ControlUnit():
 
     I don't know if this is the best way to implement this.
     '''
-    def __init__(self, waypoints):
+    def __init__(self, r, waypoints):
         self.waypoints = waypoints
+        self.ros_manager = r
         self.current_block_zone = 'b'
-        self.current_block_stage = 1
         self.processing_waypoint = None
 
-    def find_next_waypoint(self):
-        test_waypoint_name = "process_%s_%i"%(self.current_block_stage, self.current_block_stage)
-        waypoint = [value for key in self.waypoints.iteritems() if key.startswith(test_waypoint_name)]
-        self.current_block_stage += 1
+    def move_to_vision_waypoint(self, ee_number):
+        waypoint_name = "vision_%s_%i"%(self.current_block_stage, ee_number)
+        waypoint = [value for key in self.waypoints.iteritems() if key.startswith(waypoint_name)]
+
         return waypoint
+
+    def move_to_pickup_block(self, ee_number, gripper_number):
+        waypoint_name = "vision_%s_%i"%(self.current_block_stage, ee_number)
+        waypoint = [value for key in self.waypoints.iteritems() if key.startswith(waypoint_name)]
+
+        return waypoint
+
 
     def next_stage(self):
         if self.current_block_zone == 'a':
@@ -598,7 +605,7 @@ class TestingStateMachine():
         print "> ========= Creating Detection Objects ========="
         # Objects for detecting and returning location of QR codes. Parameters are the set distances from the codes (cm).
         self.qr_distances = [50]
-        self.waypoint_generator = WaypointGenerator(self.ee2)#, self.ee2)
+        sel.fwaypoint_generator = WaypointGenerator(self.ee2)#, self.ee2)
         self.arm_controller = ArmController()
 
         #self.point_cloud_generator = temp_GenerateBlockPoints(16)
@@ -627,7 +634,7 @@ class TestingStateMachine():
         print
         self.load_waypoints()
         # This needs to be here since it requires the waypoints.
-        self.control = ControlUnit(self.waypoints) # Note that Ken does not have any self.control.
+        self.control = ControlUnit(self.ros_manager, self.waypoints) # Note that Ken does not have any self.control.
         self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
 
         #self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
