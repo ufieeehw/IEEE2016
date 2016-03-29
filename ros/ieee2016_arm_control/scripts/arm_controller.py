@@ -7,7 +7,7 @@ import tf
 from std_msgs.msg import Header, Float64
 from geometry_msgs.msg import TwistStamped, Twist, Vector3, Pose, PoseStamped, Quaternion, Point
 
-from ieee2016_msgs.srv import ArmWaypoint, NavWaypoint
+from ieee2016_msgs.srv import ArmWaypoint, NavWaypoint, DynamixelControl
 
 # For testing
 roslib.load_manifest('ieee2016_mission_planner')
@@ -56,10 +56,12 @@ class ArmController():
         self.nav_goal_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=2) #Just for visualization
         self.elevator = rospy.Publisher("/robot/arms/elevator", Float64, queue_size=2)
         self.rail = rospy.Publisher("/robot/arms/rail", Float64, queue_size=2)
-        
+
         # For this we will use a service. When the arm moves to the desired location,
         # the service will return True to the person who called it
         rospy.Service('/robot/arm_waypoint', ArmWaypoint, self.move_arm)
+        rospy.Service("/robot/arm/extension_target", DynamixelControl, self.set_rail)
+        rospy.Service("/robot/arm/elevator_target", DynamixelControl, self.set_elevator)
 
         # For actually moving to the desired location.
         self.goto_nav_goal = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
@@ -114,25 +116,26 @@ class ArmController():
         self.nav_goal_pub.publish(p_s)
         self.goto_nav_goal(p_s)
 
-    def set_elevator(self, des_height, frame="base_link"):
+    def set_elevator(self, srv):
         '''
         Set the elevator to some height in the tf frame: 'frame'.
 
         **These parameters needs to be set from the mech team.**
         
         '''
-        # Convert frame to base_link if it isn't already
-        t = self.tf_listener.getLatestCommonTime(frame, '/base_link')
-        trans,rot = self.tf_listener.lookupTransform(frame, '/base_link', t)
-        des_height -= trans[2]
+        des_height = srv.position - .119
 
         min_height = 0 #m
         max_height = .3 #m
+
+        radius = .007 #m
         print "Sending",des_height
         if min_height <= des_height <= max_height:
             self.elevator.publish(Float64(data=des_height))
+            return True
         else:
             print "Too high! Can not move to height:",des_height
+            return False
 
     def set_rail(self, des_extend, frame="base_link"):
         '''
@@ -147,7 +150,7 @@ class ArmController():
 
         min_dist = 0 #m
         max_dist = .3 #m
-        radius = .035 / 2 #m
+        radius = .015875 #m
         print "Sending",des_extend
         if min_dist <= des_extend <= max_dist:
             self.elevator.publish(Float64(data=des_extend/radius))

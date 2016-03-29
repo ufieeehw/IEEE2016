@@ -1,0 +1,4 @@
+float64 position 	# The target position of the servo from base_link (what this moves and how much the servo turns 
+			# relies on the service host to do some calculations).
+---
+bool success

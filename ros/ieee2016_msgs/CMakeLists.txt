@@ -66,6 +66,7 @@ add_service_files(
    CameraSet.srv
    LidarSelector.srv
    RequestMap.srv
+   DynamixelControl.srv
 )
 
 ## Generate actions in the 'action' folder
