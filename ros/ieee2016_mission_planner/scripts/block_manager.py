@@ -13,22 +13,23 @@ from ieee2016_msgs.msg import BlockStamped
 from ieee2016_msgs.srv import ArmWaypoint
 
 import numpy as np
+import scipy.stats
 from kd_tree import KDTree
 import time
 
 class Block():
-    def __init__(self, color, coordinate = 'na'):
+    def __init__(self, color, orientation = None, coordinate = 'na'):
         self.color = color
-        # Coordinates stored here are depreicated
+        self.orientation = orientation
         # This will allow the program to input a point message from ros or a list from python.
         try:
-            self.coordinate = [coordinate.x,coordinate.y,coordinate.z]
+            self.coordinate = np.array([coordinate.x,coordinate.y,coordinate.z])
         except:
-            self.coordinate = coordinate
+            self.coordinate = np.array(coordinate)
 
     def __repr__(self):
         # How the object prints
-        return "%06s" % self.color
+        return "%06s : %.2f,%.2f" % (self.color,self.coordinate[0],self.coordinate[1])
 
 class Gripper():
     '''
@@ -316,12 +317,12 @@ class BlockFitter():
             )
         )
 
-
 class BlockServer():
     '''
+    Not used anymore.
     BlockServer acts as a server to deal with block detection from the cameras. 
 
-    Given a BlockStamped message, the server will find the actual point in the map frame and keep an updated pointcloud as Shia moves.
+    Given a BlockStamped message, the server will group them into blocks.
     '''
     def __init__(self, *cameras):
         self.point_pub = rospy.Publisher("/block_test", PointStamped, queue_size=10)
@@ -345,7 +346,7 @@ class BlockServer():
 
         #     rospy.logwarn("An ERROR was found and excepted.")
 
-        print len(self.k.nodes)
+        print self.k.nodes
         # print
 
     def publish_point(self,point):
@@ -353,13 +354,116 @@ class BlockServer():
         h = Header(stamp=rospy.Time.now(), frame_id="map")
         self.point_pub.publish(header=h, point=p)
 
+class BlockServerV2():
+    '''
+    BlockServer acts as a server to deal with block detection from the cameras. 
 
+    Given a BlockStamped message, the server will group them into blocks.
+
+    Block tolerance is an experiementally calculated value - a circle of pixles around
+        the first detected block that all points within the circle will be grouped as that block.
+
+    '''
+    def __init__(self, block_tolerance):
+        self.block_tolerance = block_tolerance
+        self.block_sub = rospy.Subscriber("/camera/block_detection", BlockStamped, self.got_block, queue_size=1)
+
+        self.blocks = np.array([])
+
+        # Sort of a timeout, how many existing block detections until we stop looking for blocks and start processing.
+        self.timeout = 0
+
+        # Used for half block detection
+        self.top_left = None
+        self.delta_x = None
+
+    def got_block(self,msg):
+        '''
+        We got a new block, so check if it belongs to any other blocks.
+        '''
+        this_block = Block(msg.color, orientation = msg.rotation_index, coordinate = msg.point)
+        self.insert_unique(this_block)
+
+        print len(self.blocks), self.blocks
+        for b in self.blocks:
+            b = b.coordinate
+            print "(%.2f,%.2f),"%(b[0],-b[1]),
+        print
+        print
+
+        if self.timeout >= 15:
+            self.block_sub.unregister()
+            print self.get_block_locations()
+
+    def insert_unique(self, block, new_weight = .1):
+        '''
+        Insert a block into the list, unless there is already one close to it - then average them together.
+        '''
+        point = np.array(block.coordinate)
+
+        if len(self.blocks) == 0:
+            self.blocks = [block]
+            return
+
+        # Check for close matches will all other blocks, if there is one, average that block position with the new block's
+        # and add that to the list
+        for _block in self.blocks:
+            b = _block.coordinate
+            dist = np.sum((point-b)**2, axis=0)
+            if dist <= self.block_tolerance**2:
+                new_block = _block 
+                self.blocks.remove(_block)
+                new_block.coordinate = b*(1-new_weight) + point*(new_weight)
+                self.blocks.append(new_block)
+                self.timeout += 1
+                return
+
+        self.timeout = 0
+        self.blocks.append(block) 
+
+    def get_block_locations(self):
+        '''
+        Returns the top row of block in order for the gripper to pick up.
+
+        To do this, we sort blocks by height, calcuate the average height (this will be some point between all the blocks)
+            then find the topmost set of blocks and sort them in order. Then, find the average distance between them. This 
+            value will be saved for later as well as the topmost left block. Return colored blocks in these positions:
+            [left_block_color, 2nd_block_color, 3rd_block_color, 4th_block color].
+
+        One thing to note about the math: in an image, since UV coordinates work from the top left of the image, a higher
+            V coordinate is lower in the frame.
+
+        This needs to be modified for the half blocks.
+        Need an error detection system to command robot movement if not all blocks are detected.
+        '''
+        block_coordinates = []
+        for b in self.blocks:
+            block_coordinates.append(b.coordinate)
+
+        _, average_z, _, _, in_line = scipy.stats.linregress(block_coordinates)
+        #print average_z,in_line
+        if in_line > .01:
+            print "Multiple rows detected."
+            # Remove all the bottom blocks. Make sure you're only looking at the 8 leftmost blocks.
+            np_coordinates = np.array(block_coordinates)
+            top_most_coordinates = np_coordinates[np.lexsort((np_coordinates[:,1],np_coordinates[:,0]))]
+            top_most_coordinates = top_most_coordinates[top_most_coordinates[:,1] < average_z]
+
+        # print np_coordinates
+        # print top_most_coordinates
+
+        top_most_blocks = []
+        for b in range(4):
+            for block in self.blocks:
+                #print top_most_coordinates[b], block.coordinate
+                if (top_most_coordinates[b] == block.coordinate).all():
+                    top_most_blocks.append(block)
+
+        return top_most_blocks
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
-    c = Camera(2)
-    c.activate()
-    b = BlockServer(c)
+    b = BlockServerV2(50)
     # ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
     # ProcessBlocks(ee1)
     rospy.spin()

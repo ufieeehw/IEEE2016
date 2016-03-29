@@ -5,6 +5,7 @@ import rospy
 import rospkg
 
 from sensor_msgs.msg import MagneticField
+from ieee2016_xmega_connector_ported.srv import GetHeading
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -61,7 +62,7 @@ def ellipse_axis_length(a):
 
 class Calibrate():
     def __init__(self, topic_name, cache_length, calibration_file_name = "calibration.yaml"):
-        self.mag_sub = rospy.Subscriber(topic_name, MagneticField, self.got_mag_field)
+        self.mag_proxy = rospy.ServiceProxy('/robot/xmega_connector/get_heading', GetHeading)
         self.mag_field = None
 
         self.cache_length = cache_length
@@ -69,18 +70,27 @@ class Calibrate():
 
         self.x = np.array([])
         self.y = np.array([])
+        plt.ion()
+        self.get_mag_field()
 
-    def got_mag_field(self, msg):
+    def get_mag_field(self):
         # Get the field then make it a reasonable number. Not sure of units right now.
-        self.mag_field = np.array([msg.magnetic_field.x,msg.magnetic_field.y,msg.magnetic_field.z])/100.0
-
-        self.x = np.append(self.x,self.mag_field[0])
-        self.y = np.append(self.y,self.mag_field[1])
-        print len(self.x),self.mag_field
+        print "Running"
+        while len(self.x) < self.cache_length:
+            print "Running..."
+            magnetic_field = self.mag_proxy()
+            self.mag_field = np.array([magnetic_field.xData,magnetic_field.yData,magnetic_field.zData])
+            
+            print len(self.x),self.mag_field
+            self.x = np.append(self.x,self.mag_field[0])
+            self.y = np.append(self.y,self.mag_field[1])
+            plt.scatter(self.x, self.y)
+            plt.show()
+            plt.pause(.01)
+            
 
         # Once we have saved 'cache_length' many points, start calibrating
-        if len(self.x) == self.cache_length:
-            self.done_caching()
+        self.done_caching()
 
     def done_caching(self):
         # Once we are done caching, display the uncalibrated data and start the calibration.
@@ -88,9 +98,7 @@ class Calibrate():
         centroid = [np.mean(self.x),np.mean(self.y)]
         plt.plot(centroid[0], centroid[1], 'ro')
         plt.show()
-        self.mag_sub.unregister()
         self.generate_correction_matrix()
-
 
     def generate_correction_matrix(self):
         '''
@@ -217,5 +225,5 @@ class Calibrate():
 
 if __name__ == "__main__":
     rospy.init_node("magnetic_calibrator")
-    c = Calibrate("mag",10)
+    c = Calibrate("mag",100)
     rospy.spin()
