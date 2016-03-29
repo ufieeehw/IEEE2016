@@ -475,7 +475,7 @@ def start_navigation(msg):
     print "Starting."
     m = GPUAccMap(msg.map)
     init_pose = msg.init_pose
-    f = GPUAccFilter(init_pose[:2], 2, (.5+init_pose[2],-.5+init_pose[2]), m)
+    f = GPUAccFilter(init_pose[:2], 1, (.3+init_pose[2],-.3+init_pose[2]), m)
     start_sub.unregister()
 
 # Set up start command subscriber and wait until we get that signal

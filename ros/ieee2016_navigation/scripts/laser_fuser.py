@@ -29,13 +29,15 @@ class LaserFuser():
         self.FOVs = [80,80,80,80] #degrees
         print " > TF Found! Starting Fuser."
 
-        # Define our message filters - these will make sure the laserscans come in at the same time
-        left_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_left',LaserScan, queue_size=3)
-        front_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_front',LaserScan, queue_size=3) 
-        right_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_right',LaserScan, queue_size=3)
-        back_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_back',LaserScan, queue_size=3) 
-        mf_ts = message_filters.ApproximateTimeSynchronizer([left_sub,front_sub,right_sub,back_sub], 10, .5)
-        mf_ts.registerCallback(self.got_scans)
+        # # Define our message filters - these will make sure the laserscans come in at the same time
+        # left_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_left',LaserScan, queue_size=3)
+        # front_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_front',LaserScan, queue_size=3) 
+        # right_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_right',LaserScan, queue_size=3)
+        # back_sub = message_filters.Subscriber('/robot/navigation/lidar/scan_back',LaserScan, queue_size=3) 
+        # mf_ts = message_filters.ApproximateTimeSynchronizer([left_sub,front_sub,right_sub,back_sub], 50, 5)
+        # mf_ts.registerCallback(self.got_scans)
+
+        self.scans = [[],[],[],[]]
 
         # Define new laserscan
         self.fused_scan = LaserScan()
@@ -46,56 +48,80 @@ class LaserFuser():
         self.fused_scan.range_max = 5.0 #m
         self.fused_scan.range_min = 0.0002 #m
 
-        rospy.Subscriber('/robot/navigation/lidar/scan_left',LaserScan, queue_size=3)
-        rospy.Subscriber('/robot/navigation/lidar/scan_front',LaserScan, queue_size=3) 
-        rospy.Subscriber('/robot/navigation/lidar/scan_right',LaserScan, queue_size=3)
-        rospy.Subscriber('/robot/navigation/lidar/scan_back',LaserScan, queue_size=3) 
+        rospy.Subscriber('/robot/navigation/lidar/scan_left',LaserScan,self.got_scan, queue_size=3)
+        rospy.Subscriber('/robot/navigation/lidar/scan_front',LaserScan,self.got_scan, queue_size=3) 
+        rospy.Subscriber('/robot/navigation/lidar/scan_right',LaserScan,self.got_scan, queue_size=3)
+        rospy.Subscriber('/robot/navigation/lidar/scan_back',LaserScan,self.got_scan, queue_size=3) 
+
+        self.left,self.front,self.right,self.back = False, False, False, False
+
+        r = rospy.Rate(10)
+        while not rospy.is_shutdown():
+            # Since message filters don't work sometimes this is required.
+            if self.left and self.front and self.right and self.back:
+                self.got_scans()
+            r.sleep()
 
         rospy.spin()
-
+        
     def got_scan(self, msg):
         info = msg.header.frame_id,msg.header.stamp
         rospy.loginfo(info)
+        if msg.header.frame_id == 'laser_left':
+            self.left = True
+            self.scans[0] = msg
+        elif msg.header.frame_id == 'laser_front':
+            self.front = True
+            self.scans[1] = msg
+        elif msg.header.frame_id == 'laser_right':
+            self.right = True
+            self.scans[2] = msg
+        elif msg.header.frame_id == 'laser_back':
+            self.back = True
+            self.scans[3] = msg
 
-    def got_scans(self,*scans):
-        # Take all three scans, trim to a new FOV, convert them to cartesian, apply transformations, pub pointcloud, tranform back to cart, and pub laserscan
 
+    def got_scans(self):
+        # Take all four scans, trim to a new FOV, convert them to cartesian, apply transformations, pub pointcloud, tranform back to cart, and pub laserscan
+        rospy.loginfo("got")
         fused_cartesian = np.array([-1,-1])
-        for i,s in enumerate(scans):
+        for i,s in enumerate(self.scans):
             # Define parameters based on scan data
             angle_increment = s.angle_increment
             ranges = np.array(s.ranges)
             ranges_size = ranges.size
-
+            print 1
             # Trim to FOV
             new_FOV = math.radians(self.FOVs[i])
             angle_min = -(new_FOV/2.0)
             angle_max = (new_FOV/2.0)
             ranges = ranges[int(ranges_size/2 + angle_min/angle_increment): int(ranges_size/2 + angle_max/angle_increment)]
             ranges_size = ranges.size
-
+            print 2
             #self.pubish_scan(s,ranges,self.frames[i],angle_min,angle_max,angle_increment)
 
             # Get TF data about the LIDAR position
             (trans,q_rot) = self.tf_listener.lookupTransform('base_link',self.frames[i], rospy.Time(0))
             rot = tf.transformations.euler_from_quaternion(q_rot)
-
+            print 3
             # Generate list that maps indices of the ranges to radian angle measures
             thetas = np.linspace(angle_min, angle_max, ranges.size, endpoint=True) + rot[2]
             cartesian_scan = np.apply_along_axis(self.polar_to_cart,0,np.vstack((ranges,thetas)),trans,self.frames[i]).T# + np.array(trans[:2])
-            
+            print 4
             # Add this scan's points to the list of x,y points
             fused_cartesian = np.vstack((fused_cartesian,cartesian_scan))
 
         #print ranges_size*3
         self.fused_cartesian = fused_cartesian[1:]
         self.publish_pc(self.fused_cartesian)
+        print 5
 
         # Now we convert back to polar and publish
         # Steal a timestamp from one of the real laserscans so we are in the right timeframe
-        self.fused_scan.header.stamp = scans[1].header.stamp
+        self.fused_scan.header.stamp = self.scans[1].header.stamp
         self.fused_scan.ranges = self.cart_to_polar()
         self.scan_pub.publish(self.fused_scan)
+        print 6
 
     def polar_to_cart(self,r_theta,translation,frame):
         # Convert (r,theta) into (x,y)

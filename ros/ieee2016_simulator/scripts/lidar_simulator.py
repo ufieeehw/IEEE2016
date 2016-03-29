@@ -63,7 +63,7 @@ class GPUAccMap():
         self.min_angle = -3.14159274101 #rads
         self.max_angle = 3.14159274101
         self.max_range = 5.0 #m
-        self.min_range = 0.1
+        self.min_range = 0.02
 
         self.index_count = int((self.max_angle - self.min_angle)/self.angle_increment)
         # Set up pyopencl
