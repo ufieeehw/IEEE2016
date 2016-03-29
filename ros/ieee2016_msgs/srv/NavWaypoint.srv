@@ -1,5 +1,6 @@
-geometry_msgs/PoseStamped des_pose    #The new desired pose
-
+geometry_msgs/PoseStamped des_pose    # The new desired pose
+float64 position_accuracy	      # The tolerance for the position at the waypoint (m)
+float64 rotation_accuracy	      # The tolerance for the rotation at the waypoint (rads)
 ---
-bool success                          #Will return true when movement is complete
+bool success                          # Will return true when movement is complete
 

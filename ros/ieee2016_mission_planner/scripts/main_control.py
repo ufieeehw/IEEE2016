@@ -15,7 +15,7 @@ roslib.load_manifest('ieee2016_vision')
 from camera_manager import Camera
 from arm_controller import ArmController, ServoController
 from block_manager import EndEffector, BlockServer, WaypointGenerator
-from waypoint_utils import load_waypoints, update_waypoints
+from waypoint_utils import WaypointServer
 from qr_detector import DetectQRCodeTemplateMethod
 
 
@@ -27,264 +27,6 @@ from kd_tree import KDTree
 import numpy as np
 import time
 import os
-
-class temp_ProcessTrainBoxes():
-    '''
-    Just a placeholder for the train box assigner
-    '''
-    def __init__(self,waypoints):
-        self.point_cloud_pub = rospy.Publisher("/camera/train_boxes", PointCloud, queue_size=2) 
-        self.waypoints = waypoints
-        print "> Train Proessor Ready."
-
-    def process_train_blocks(self):
-        colors = ["red","blue","green","yellow"]
-        random.shuffle(colors)
-        raw_points = [self.waypoints['box_1'],self.waypoints['box_2'],self.waypoints['box_3'],self.waypoints['box_4']]
-        #print colors
-        self.train_points = []
-        for point,color in zip(raw_points,colors):
-            print color
-            self.train_points.append([color,point])
-
-        print "> Linking Train Waypoints"
-        self.publish_points()
-        #update_waypoints(['box_1','box_2','box_3','box_4'],colors)
-
-        train_colors = {'box_4':colors[3],'box_3':colors[2],'box_2':colors[1],'box_1':colors[0]}
-        return train_colors
-
-    def publish_points(self):
-        points = []
-        channels = [[],[],[]]
-        for p in self.train_points:
-            if p[0] == "blue":
-                #rgbs.append("FF0000")#struct.pack('i', 0x0000ff))
-                channels[0].append(0) #R
-                channels[1].append(0) #G
-                channels[2].append(1) #B
-            elif p[0] == "red":
-                #rgbs.append(struct.unpack('f', struct.pack('i', 0xff0000))[0])
-                channels[0].append(1) #R
-                channels[1].append(0) #G
-                channels[2].append(0) #B
-            elif p[0] == "green":
-                #rgbs.append(struct.unpack('f', struct.pack('i', 0x00ff00))[0])
-                channels[0].append(0) #R
-                channels[1].append(1) #G
-                channels[2].append(0) #B
-            elif p[0] == "yellow":
-                #rgbs.append(struct.unpack('f', struct.pack('i', 0xffff00))[0])
-                channels[0].append(1) #R
-                channels[1].append(1) #G
-                channels[2].append(0) #B
-
-            points.append(Point32(
-                    x=p[1][0],
-                    y=p[1][1],
-                    z=0
-                )
-            )
-        rgb_channels = [ChannelFloat32(name="r", values=channels[0]),ChannelFloat32(name="g", values=channels[1]),ChannelFloat32(name="b", values=channels[2])]
-        self.point_cloud_pub.publish(PointCloud(
-                header=Header(
-                    stamp=rospy.Time.now(),
-                    frame_id="map"
-                    ),
-                points=points,
-                channels=rgb_channels
-            )
-        )
-
-class temp_GenerateBlockPoints():
-    '''
-    Temp way of generating blocks.
-    Generate point cloud and a block_tree
-    '''
-    def __init__(self,inital_blocks):
-        self.point_cloud_pub = rospy.Publisher("/camera/block_point_cloud", PointCloud, queue_size=2) 
-        self.point_cloud_pub_diag = rospy.Publisher("/camera/diag_block_point_cloud", PointCloud, queue_size=2) 
-        self.initial_blocks = inital_blocks
-
-        self.dx = .0635
-        self.dy = .0629   # Used for half blocks
-        self.dz = .0381
-        
-        self.y = 2.153
-
-    def generate_c_blocks(self):
-        self.c_tree = KDTree(.0381/2)
-        base_x = .19
-        base_z = .20
-        colors = ["blue","blue","blue","blue",
-                  "red","red","red","red",
-                  "green","green","green","green",
-                  "yellow","yellow","yellow","yellow"]
-        
-        random.shuffle(colors)
-
-        for i in range(self.initial_blocks/2):
-            this_x = base_x + self.dx*i
-            self.c_tree.insert_unique([this_x,self.y,base_z],colors[i])
-            self.c_tree.insert_unique([this_x,self.y,base_z+self.dz],colors[i+self.initial_blocks/2])
-        
-        self.publish_points(self.c_tree,self.point_cloud_pub)
-        return self.c_tree
-
-    def generate_b_blocks(self):
-        '''
-        Block order (from front view)
-
-        (first front layer)
-            00 01 02 03 04 05 06 07
-            08 09 10 11 12 13 14 15
-
-        (second back layer)
-            16 17 18 19 20 21 22 23
-            24 25 26 27 28 29 30 31
-        '''
-        self.b_tree_diag = KDTree(.0381/2)
-        base_x = .90
-        base_z = .25
-
-        blocks = [["red","red","red","red",
-                   "blue","blue","blue","blue",
-                   "green","green","green","green",
-                   "yellow","yellow","yellow","yellow"],
-                  ["red","red","blue","blue",
-                   "green","green","yellow","yellow"]]
-        
-        random.shuffle(blocks[1])
-        random.shuffle(blocks[0])
-        
-        # At these indicies are where we are going to put the half blocks.
-        half_locations = np.array(random.sample(range(0, 16), 4))
-
-        # Populate blocks list with full and half blocks.
-        self.b_blocks = np.full(32,"none",dtype=object)
-        for i in range(16):
-            if i in half_locations:
-                self.b_blocks[i] = blocks[1][0]
-                del blocks[1][0]
-                self.b_blocks[i+16] = blocks[1][0]
-                del blocks[1][0]
-            else:
-                self.b_blocks[i] = blocks[0][0]
-                del blocks[0][0]
-
-        # Go through each dimension and add it to the tree. This is the diagnostics tree, not what's visible to the camera.
-        for i in range(8):
-            this_x = base_x + self.dx*i
-            self.b_tree_diag.insert_unique([this_x,self.y,base_z+self.dz],self.b_blocks[i])
-            self.b_blocks[i] = [[this_x,self.y,base_z+self.dz],self.b_blocks[i]]
-            #print ('%7s')%self.b_blocks[i],
-        #print
-        for i in range(8,16):
-            this_x = base_x + self.dx*(i-8)
-            self.b_tree_diag.insert_unique([this_x,self.y,base_z],self.b_blocks[i])
-            self.b_blocks[i] = [[this_x,self.y,base_z],self.b_blocks[i]]
-            #print ('%7s')%self.b_blocks[i],
-        #print
-        #print
-        for i in range(16,24):
-            this_x = base_x + self.dx*(i-16)
-            self.b_tree_diag.insert_unique([this_x,self.y+self.dy,base_z+self.dz],self.b_blocks[i])
-            self.b_blocks[i] = [[this_x,self.y+self.dy,base_z+self.dz],self.b_blocks[i]]
-            #print ('%7s')%self.b_blocks[i],
-        #print
-        for i in range(24,32):
-            this_x = base_x + self.dx*(i-24)
-            self.b_tree_diag.insert_unique([this_x,self.y+self.dy,base_z],self.b_blocks[i])
-            self.b_blocks[i] = [[this_x,self.y+self.dy,base_z],self.b_blocks[i]]
-            #print ('%7s')%self.b_blocks[i],
-        #print
-
-        self.publish_points(self.b_tree_diag,self.point_cloud_pub_diag)
-
-    def generate_b_camera_view(self):
-        # This will take the current list of points and generate the frontal view, i.e. what the camera can see.
-        self.b_tree = KDTree(.0381/2)
-        base_x = .90
-        base_z = .25
-
-
-        # Populates tree with the frontmost blocks
-        for i in range(8):
-            this_x = base_x + self.dx*i
-            if self.b_blocks[i][1] == "none":
-                self.b_tree.insert_unique([this_x, self.y+self.dy, base_z+self.dz],self.b_blocks[i+16][1])
-            else:
-                self.b_tree.insert_unique([this_x, self.y, base_z+self.dz],self.b_blocks[i][1])
-
-        for i in range(8,16):
-            this_x = base_x + self.dx*(i-8)
-            if self.b_blocks[i][1] == "none":
-                self.b_tree.insert_unique([this_x, self.y+self.dy, base_z],self.b_blocks[i+16][1])
-            else:
-                self.b_tree.insert_unique([this_x, self.y, base_z],self.b_blocks[i][1])
-
-        #print self.b_tree.nodes
-        self.publish_points(self.b_tree,self.point_cloud_pub)
-        return self.b_tree
-
-    def remove_b_blocks(self,indicies):
-        for i in indicies:
-            self.b_blocks[i] = "none"
-
-        return self.generate_b_camera_view()
-
-    def generate_a_blocks(self):
-        self.a_tree = KDTree(.0381/2)
-        base_x = 1.73
-        base_z = .14
-
-        for i in range(self.initial_blocks/2):
-            this_x = base_x + self.dx*i
-            self.a_tree.insert_unique([this_x,self.y,base_z],"blue")
-            self.a_tree.insert_unique([this_x,self.y,base_z+self.dz],"blue")
-        
-        self.publish_points(self.a_tree,self.point_cloud_pub)
-        return self.a_tree
-
-    def publish_points(self, tree, topic):
-        points = []
-        channels = [[],[],[]]
-        for p in tree.nodes:
-            #print p.linked_object
-            if p.linked_object == "blue":
-                channels[0].append(0) #R
-                channels[1].append(0) #G
-                channels[2].append(1) #B
-            elif p.linked_object  == "red":
-                channels[0].append(1) #R
-                channels[1].append(0) #G
-                channels[2].append(0) #B
-            elif p.linked_object  == "green":
-                channels[0].append(0) #R
-                channels[1].append(1) #G
-                channels[2].append(0) #B
-            elif p.linked_object  == "yellow":
-                channels[0].append(1) #R
-                channels[1].append(1) #G
-                channels[2].append(0) #B
-            elif p.linked_object  == "none":
-                channels[0].append(0) #R
-                channels[1].append(0) #G
-                channels[2].append(0) #B
-
-            points.append(Point32(*p.point))
-
-        rgb_channels = [ChannelFloat32(name="r", values=channels[0]),ChannelFloat32(name="g", values=channels[1]),ChannelFloat32(name="b", values=channels[2])]
-        time.sleep(.25)
-        topic.publish(PointCloud(
-                header=Header(
-                    stamp=rospy.Time.now(),
-                    frame_id="map"
-                    ),
-                points=points,
-                channels=rgb_channels
-            )
-        )
 
 class ShiaStateMachine():
     '''
@@ -360,7 +102,7 @@ class ShiaStateMachine():
                     3. Move to location to process B blocks.
                 '''
                 print "=== STATE 1 ==="
-                self.ros_manager.set_nav_waypoint(self.waypoints['through_box'])
+                self.ros_manager.set_nav_waypoint(self.waypoints['through_box'], )
                 train_box_colors = self.train_box_processor.process_train_blocks()
                 time.sleep(1)
                 print train_box_colors
@@ -565,18 +307,23 @@ class ControlUnit():
         self.current_block_zone = 'b'
         self.processing_waypoint = None
 
-    def move_to_vision_waypoint(self, ee_number):
+    def get_vision_waypoint(self, ee_number):
         waypoint_name = "vision_%s_%i"%(self.current_block_stage, ee_number)
         waypoint = [value for key in self.waypoints.iteritems() if key.startswith(waypoint_name)]
 
         return waypoint
 
-    def move_to_pickup_block(self, ee_number, gripper_number):
-        waypoint_name = "vision_%s_%i"%(self.current_block_stage, ee_number)
+    def get_block_waypoint(self, ee_number, gripper_number, block_number):
+        '''
+        We want to move a gripper on one of the end effectors to a certain block
+        Block positions are:
+            00  01  02  03  04  05  06  07
+            00  01  02  03  04  05  06  07
+        '''
+        actual_block = block_number - gripper
+        waypoint_name = "pickup_%s_ee%i_block%i"%(self.current_block_stage, ee_number, actual_block)
         waypoint = [value for key in self.waypoints.iteritems() if key.startswith(waypoint_name)]
-
         return waypoint
-
 
     def next_stage(self):
         if self.current_block_zone == 'a':
@@ -599,17 +346,16 @@ class TestingStateMachine():
 
         print "> ========= Creating Limbs ========="
         # Defining Shia's limbs. 
-        # 1 is on the right, 2 is on the left
+        # 1 is on the left, 2 is on the right
         self.ee2 = EndEffector(gripper_count=4, ee_number=2, cam_position=2)
         self.ee_list = [self.ee2]
 
         self.cam2 = Camera(cam_number=2)
 
-        print "> ========= Creating Detection Objects ========="
+        #print "> ========= Creating Detection Objects ========="
         # Objects for detecting and returning location of QR codes. Parameters are the set distances from the codes (cm).
-        self.qr_distances = [50]
-        sel.fwaypoint_generator = WaypointGenerator(self.ee2)#, self.ee2)
-        self.arm_controller = ArmController()
+        #self.waypoint_generator = WaypointGenerator(self.ee2)#, self.ee2)
+        #self.arm_controller = ArmController()
 
         #self.point_cloud_generator = temp_GenerateBlockPoints(16)
         #self.point_cloud_generator.generate_b_blocks()
@@ -620,17 +366,10 @@ class TestingStateMachine():
         rospy.spin()
 
     def load_waypoints(self):
-        waypoints_temp = load_waypoints()
-        if self.map_version == 2:
-            # If we are on the right side map configuration, switch all the waypoints 
-            for point in waypoints_temp:
-                waypoints_temp[key][0] = self.ros_manager.far_wall_x - waypoints_temp[key][0]  
-        self.waypoints = waypoints_temp
+        w = WaypointServer()
+        self.waypoints = w.load_waypoints()
 
     def begin(self):
-        '''
-        This will run the map configuration where we start on the left side of the map.
-        '''
         print
         print "> Running Test"
         print "> Map Version:",self.map_version
@@ -638,14 +377,14 @@ class TestingStateMachine():
         self.load_waypoints()
         # This needs to be here since it requires the waypoints.
         self.control = ControlUnit(self.ros_manager, self.waypoints) # Note that Ken does not have any self.control.
+        self.qr_distances = [29]#,35.25
         self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
 
-        #self.train_box_processor = temp_ProcessTrainBoxes(self.waypoints)
         time.sleep(5)
         #self.current_state += 1
 
         self.running = True
-        rate = rospy.Rate(25) #hz
+        rate = rospy.Rate(10) #hz
         while not rospy.is_shutdown():
             
             self.ros_manager.publish_current_state(self.current_state)
@@ -653,22 +392,20 @@ class TestingStateMachine():
             if self.current_state == 1:
                 '''
                 The goals of this state are:
-                    1. Nove to and begin processing B blocks.
-                    2. Move to the next B blocks processing location and continue processing.
-                    3. Continue going to B block waypoints until all blocks are processed.
-                    4. Generate Arm Waypoints
+                    1. Process first 4 b blocks.
+                    2. Move to pick those blocks up.
+
+
                 '''
                 print "=== STATE 1 ==="
-                # Load the first waypoint and make sure we put the camera at 50cm from the wall.
-                observation_point = self.waypoints['process_b_1']
-                observation_point[1] = self.ros_manager.block_wall_y - (.5 + np.abs(self.cam2.get_tf()[1]))
-                self.ros_manager.set_nav_waypoint(observation_point)
+                waypoint = self.control.get_vision_waypoint(1)
+                self.ros_manager.set_nav_waypoint(waypoint)
                 
-                self.cam2.activate()
+                self.cam1.activate()
                 
-                # Create a new block server to create a tree of blocks that will be used to process on.
-                self.block_server = BlockServer(self.cam2)
-                self.qr_detector.match_templates(self.cam2, "inital_scan", 50)
+                # Create a new block server to log block position and remove duplicates
+                self.block_server = BlockServer(self.cam1)
+                self.qr_detector.match_templates(self.cam1, "inital_scan", 50)
                 b_tree = self.block_server.k
 
                 # Generate waypoints for two arms, picking up all possible blocks.
@@ -913,7 +650,7 @@ class RosManager():
 
         print "> Map Version:",self.state_machine.map_version
 
-    def set_nav_waypoint(self,waypoint):
+    def set_nav_waypoint(self, waypoint, pos_acc = 0, rot_acc = 0):
         q = tf.transformations.quaternion_from_euler(0, 0, waypoint[2])
         p_s = PoseStamped(
                 header=Header(
@@ -937,7 +674,7 @@ class RosManager():
         self.nav_waypoint_pub.publish(p_s)
         print "> Nav Waypoint published:",waypoint
         print "> Moving..."
-        success = self.nav_waypoint(p_s)
+        success = self.nav_waypoint(p_s, pos_acc, rot_acc)
         print "> Movement Complete!"
 
     def set_arm_waypoint(self,gripper,waypoint):

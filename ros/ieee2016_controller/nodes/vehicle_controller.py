@@ -188,15 +188,14 @@ class Controller(object):
             position_error = np.dot(position_error,rot_mat)
             print "ERR:",position_error,yaw_error
 
-            nav_tolerance = (.003,.0005) #m, rads
             command = [] # 'X' means move in x, 'Y' move in y, 'R' means rotate
 
             # Determine which commands to send based on how close we are to target
-            if abs(position_error[0]) > nav_tolerance[0]:
+            if abs(position_error[0]) > self.nav_tolerance[0]:
                 command.append('X')
-            if abs(position_error[1]) > nav_tolerance[0]:
+            if abs(position_error[1]) > self.nav_tolerance[0]:
                 command.append('Y')
-            if abs(yaw_error) > nav_tolerance[1]:
+            if abs(yaw_error) > self.nav_tolerance[1]:
                 command.append('R')
 
             if self.starting_move_error is None: 
@@ -257,6 +256,11 @@ class Controller(object):
         except:
             print "No TF link found."
             return False
+
+        # Set our tolerances - if the requested ones are too unreasonable, use the smallest tolerance that works.
+        self.nav_tolerance = [.003,.0005] #m, rads
+        if srv.position_accuracy > self.nav_tolerance[0]: self.nav_tolerance[0] = srv.position_accuracy
+        if srv.rotation_accuracy > self.nav_tolerance[1]: self.nav_tolerance[1] = srv.rotation_accuracy
 
         self.des_position = np.array([msg.pose.position.x, msg.pose.position.y])
         self.des_yaw = tf_trans.euler_from_quaternion(xyzw_array(msg.pose.orientation))[2]
