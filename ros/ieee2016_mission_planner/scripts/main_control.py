@@ -316,45 +316,45 @@ class ControlUnit():
         Returns [qr_distance,top]. Top will be True if we need to look for top blocks. 
 
         Here are the returns for different stages:
-            b)  1st call => [29,True]
-                2nd call => [29,True]
+            b)  1st call => [full,True]
+                2nd call => [full,True]
 
-                3rd call => [35.25,True]
-                4th call => [35.25,True]
+                3rd call => [half,True]
+                4th call => [half,True]
                 
-                5th call => [29,False]
-                6th call => [29,False]
+                5th call => [full,False]
+                6th call => [full,False]
                 
-                7th call => [35.25,False]
-                8th call => [35.25,False]
+                7th call => [half,False]
+                8th call => [half,False]
             
-            c)  1st call => [29,True]
-                2nd call => [29,True]
+            c)  1st call => [full,True]
+                2nd call => [full,True]
                 
-                3nd call => [29,False]
-                4nd call => [29,False]
+                3nd call => [full,False]
+                4nd call => [full,False]
         '''
         full_distance = 29     #cm
         half_distance = 35.25  #cm
         
         if self.current_block_zone == 'b':
-            if   self.pickup_stage == 1: ret = [full_distance,True]
-            elif self.pickup_stage == 2: ret = [full_distance,True]
-            elif self.pickup_stage == 3: ret = [half_distance,True]
-            elif self.pickup_stage == 4: ret = [half_distance,True]
-            elif self.pickup_stage == 5: ret = [full_distance,False]
-            elif self.pickup_stage == 6: ret = [full_distance,False]
-            elif self.pickup_stage == 7: ret = [half_distance,False]
+            if   self.pickup_stage == 1: ret = ['full',True]
+            elif self.pickup_stage == 2: ret = ['full',True]
+            elif self.pickup_stage == 3: ret = ['half',True]
+            elif self.pickup_stage == 4: ret = ['half',True]
+            elif self.pickup_stage == 5: ret = ['full',False]
+            elif self.pickup_stage == 6: ret = ['full',False]
+            elif self.pickup_stage == 7: ret = ['half',False]
             elif self.pickup_stage == 8: 
-                ret = [half_distance,False]
+                ret = ['half',False]
                 self.pickup_stage = 0
 
         elif self.current_block_zone == 'c':
-            if   self.pickup_stage == 1: ret = [full_distance,True]
-            elif self.pickup_stage == 2: ret = [full_distance,True]
-            elif self.pickup_stage == 3: ret = [full_distance,False]
+            if   self.pickup_stage == 1: ret = ['full',True]
+            elif self.pickup_stage == 2: ret = ['full',True]
+            elif self.pickup_stage == 3: ret = ['full',False]
             elif self.pickup_stage == 4:
-                ret = [full_distance,False]
+                ret = ['full',False]
                 self.pickup_stage = 0
 
         if not stall:
@@ -503,7 +503,7 @@ class TestingStateMachine():
                     5. Generate waypoints
                 '''
                 print "=== STATE 1 ==="
-
+                
                 # For EE1
                 waypoint = self.control.get_vision_waypoint(ee_number=1)
                 self.ros_manager.set_nav_waypoint(waypoint)
@@ -513,7 +513,7 @@ class TestingStateMachine():
                 self.cam1.activate()
                 pickup_parameters = self.control.get_pickup_stage()
                 self.bs_b_1.active = True
-                self.qr_detector.normal_scan(self.cam1, "inital_scan", pickup_parameters[0])
+                self.qr_detector.normal_scan(self.cam1, pickup_parameters[0])
                 colors_b_1_top = self.bs_b_1.get_block_locations(top=True)[4:]
                 colors_b_1_bot = self.bs_b_1.get_block_locations(top=False)[4:]
                 self.cam1.deactivate()
@@ -527,7 +527,7 @@ class TestingStateMachine():
                 self.cam1.activate()
                 pickup_parameters = self.control.get_pickup_stage()
                 self.bs_b_2.active = True
-                self.qr_detector.normal_scan(self.cam1, "inital_scan", pickup_parameters[0])
+                self.qr_detector.normal_scan(self.cam1, pickup_parameters[0])
                 colors_b_2_top = self.bs_b_2.get_block_locations(top=True)[-4:]
                 colors_b_2_bot = self.bs_b_2.get_block_locations(top=False)[-4:]
                 self.cam1.deactivate()
@@ -564,10 +564,12 @@ class TestingStateMachine():
                         estimated_distance_to_wall = self.ros_manager.block_wall_y - self.ros_manager.pose[1]
                         print "Estimated Distance to Wall:",estimated_distance_to_wall
 
-                        # Extend the rail, grab the blocks, then pull it back in 
+                        # Extend the rail, grab the blocks, lift up slighly, then pull it back in
                         self.ros_manager.set_rail(get_distance_to_gripping_position(estimated_distance_to_wall, this_ee))
                         self.servo_controller.close_grippers(grippers_to_acutate)
+                        self.ros_manager.set_elevator(self.get_height_of_blocks()+.05)
                         self.ros_manager.set_rail(get_distance_to_gripping_position(0, this_ee))
+
 
                     # Go back to a point and then rotate for the other waypoint
                     self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,.2,0]), pos_acc = .1, rot_acc = .1, vel_profile=1)

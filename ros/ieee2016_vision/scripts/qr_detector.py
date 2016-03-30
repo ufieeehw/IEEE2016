@@ -302,11 +302,18 @@ class DetectQRCodeTemplateMethod(object):
         etc etc until we've reached the fourth frame, then we restart again until weve checked 'frames' frames. This was done to keep image
         up to date.
         '''
-        fixed_distance = 29
-        offset = dist - fixed_distance
+        self.threshold = .65
+        
+        if dist == "full":
+            dist = 29
+            offset = 0
+        elif dist == "half":
+            dist = 35.25
+            offset = .0625
+        
         self.camera = camera
 
-        colors = self.colors[self.distances.index(dist+offset)]
+        colors = self.colors[self.distances.index(dist)]
         blues = colors["/blue"]  
         reds = colors["/red"]
         greens = colors["/green"]
@@ -423,10 +430,10 @@ if __name__ == "__main__":
     print "starting"
     cam = Camera(2)
     cam.activate()
-    d = DetectQRCodeTemplateMethod([29,50,56.25])
+    d = DetectQRCodeTemplateMethod([29,35.25])#50,56.25])
     r = rospy.Rate(10)
     while not rospy.is_shutdown():
-        d.match_templates(cam, "inital_scan", 29)
+        d.normal_scan(cam, 'half')
 
         r.sleep()
     #sd.continuous_publish()
