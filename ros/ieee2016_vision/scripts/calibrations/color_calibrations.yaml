@@ -1,0 +1,23 @@
+hsv_ranges:
+  blue:
+  - [80, 80, 80]
+  - [150, 255, 255]
+  green:
+  - [50, 42, 42]
+  - [80, 255, 255]
+  red:
+  - [0, 100, 100]
+  - [20, 255, 255]
+  yellow:
+  - [20, 110, 110]
+  - [50, 255, 255]
+overlap_prevention_rules:
+  blue: [yellow, red, green]
+  green: [blue, red, yellow]
+  red: [green, yellow, blue]
+  yellow: [blue, green, red]
+selection_boxes:
+  blue: [160, 320, 90, 180]
+  green: [160, 320, 90, 180]
+  red: [160, 320, 90, 180]
+  yellow: [160, 320, 90, 180]

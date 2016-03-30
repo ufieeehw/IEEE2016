@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Color Calibrator</string>
   </property>
   <widget class="QWidget" name="central_widget">
    <layout class="QHBoxLayout" name="horizontalLayout_3">
@@ -523,7 +523,7 @@
         <item>
          <widget class="QGroupBox" name="color_ranges_group">
           <property name="title">
-           <string>Color HSV Ranges</string>
+           <string>Color HSV Range</string>
           </property>
           <layout class="QGridLayout" name="gridLayout_2">
            <item row="0" column="0">
