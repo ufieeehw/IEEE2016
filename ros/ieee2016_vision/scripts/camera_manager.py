@@ -106,6 +106,9 @@ class Camera():
 
         self.active = False
 
+    def get_frame(self):
+        return self.image
+
     def get_tf(self, mode = "pose", target_frame = "base_link", time = None):
         # Returns the relative [x,y,yaw] between the target_frame and the camera
         # Mode can be 'pose' for the pose tf frame, or 'vision' for the vision frame at 'time'. Default is 'pose'.

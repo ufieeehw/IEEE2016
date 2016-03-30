@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'color_calibrator_gui.ui'
+# Form implementation generated from reading ui file 'calibrator_gui.ui'
 #
-# Created: Mon Mar 21 14:05:44 2016
+# Created: Sun Mar 27 08:20:54 2016
 #      by: PyQt4 UI code generator 4.11.2
 #
 # WARNING! All changes made in this file will be lost!
@@ -303,7 +303,7 @@ class Ui_MainWindow(object):
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow", None))
+        MainWindow.setWindowTitle(_translate("MainWindow", "Color Calibrator", None))
         self.color_selection_group.setTitle(_translate("MainWindow", "Color Selection", None))
         self.selection_color_label.setText(_translate("MainWindow", "Selection Color:", None))
         self.new_color_name_setting.setText(_translate("MainWindow", "Input a name to generate a new calibration", None))
@@ -325,7 +325,7 @@ class Ui_MainWindow(object):
         self.display_unfiltered_button.setText(_translate("MainWindow", "Unfiltered Input", None))
         self.display_reduced_button.setText(_translate("MainWindow", "Reduced Color", None))
         self.display_extracted_button.setText(_translate("MainWindow", "Extracted Color", None))
-        self.color_ranges_group.setTitle(_translate("MainWindow", "Color HSV Ranges", None))
+        self.color_ranges_group.setTitle(_translate("MainWindow", "Color HSV Range", None))
         self.minimum_hsv_label.setText(_translate("MainWindow", "Minimum:", None))
         self.maximum_hsv_label.setText(_translate("MainWindow", "Maximum:", None))
         self.save_changes_button.setText(_translate("MainWindow", "Save to Memory Only", None))
