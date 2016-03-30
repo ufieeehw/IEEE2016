@@ -6,13 +6,14 @@ import os
 
 import rospy
 import tf
-from std_msgs.msg import Header
+from std_msgs.msg import Header, Int8
 from geometry_msgs.msg import Point32
 from sensor_msgs.msg import LaserScan, PointCloud
 import message_filters
 
 class LaserFuser():
     def __init__(self):
+        self.map_version_pub = rospy.Publisher('/settings/map_version', Int8, queue_size=3)
         self.scan_pub = rospy.Publisher('/robot/navigation/lidar/scan_fused', LaserScan, queue_size=3)
         #self.scan_pc_pub = rospy.Publisher('/robot/navigation/lidar/scan_fused_pc', PointCloud, queue_size=3)
         rospy.init_node('laser_fuser')
@@ -90,38 +91,46 @@ class LaserFuser():
             angle_increment = s.angle_increment
             ranges = np.array(s.ranges)
             ranges_size = ranges.size
-            print 1
+
             # Trim to FOV
             new_FOV = math.radians(self.FOVs[i])
             angle_min = -(new_FOV/2.0)
             angle_max = (new_FOV/2.0)
             ranges = ranges[int(ranges_size/2 + angle_min/angle_increment): int(ranges_size/2 + angle_max/angle_increment)]
             ranges_size = ranges.size
-            print 2
             #self.pubish_scan(s,ranges,self.frames[i],angle_min,angle_max,angle_increment)
+
+            # This function will publish the map version. If the left lidar data is closer then the right, assume we are in map 1. If not assume map_2.
+            # This NEEDS to be tested.
+            self.check_map_version()
 
             # Get TF data about the LIDAR position
             (trans,q_rot) = self.tf_listener.lookupTransform('base_link',self.frames[i], rospy.Time(0))
             rot = tf.transformations.euler_from_quaternion(q_rot)
-            print 3
+
             # Generate list that maps indices of the ranges to radian angle measures
             thetas = np.linspace(angle_min, angle_max, ranges.size, endpoint=True) + rot[2]
             cartesian_scan = np.apply_along_axis(self.polar_to_cart,0,np.vstack((ranges,thetas)),trans,self.frames[i]).T# + np.array(trans[:2])
-            print 4
+
             # Add this scan's points to the list of x,y points
             fused_cartesian = np.vstack((fused_cartesian,cartesian_scan))
 
         #print ranges_size*3
         self.fused_cartesian = fused_cartesian[1:]
         self.publish_pc(self.fused_cartesian)
-        print 5
+
 
         # Now we convert back to polar and publish
         # Steal a timestamp from one of the real laserscans so we are in the right timeframe
         self.fused_scan.header.stamp = self.scans[1].header.stamp
         self.fused_scan.ranges = self.cart_to_polar()
         self.scan_pub.publish(self.fused_scan)
-        print 6
+
+    def check_map_version(self):
+        if np.mean(self.scans[0]) < np.mean(self.scans[2]):
+            self.map_version_pub.publish(Int8(data=1))
+        else:
+            self.map_version_pub.publish(Int8(data=2))
 
     def polar_to_cart(self,r_theta,translation,frame):
         # Convert (r,theta) into (x,y)
