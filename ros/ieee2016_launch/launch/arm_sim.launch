@@ -1,6 +1,0 @@
-<launch>
-    <node name="arm_controller" pkg="ieee2016_controller" type="arm_controller.py"
-        output="screen" ns="/sim" />
-    <node name="arm_simulator" pkg="ieee2016_simulator" type="arm_simulator.py"
-        output="screen" ns="/sim" />
-</launch>
