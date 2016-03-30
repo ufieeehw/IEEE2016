@@ -28,7 +28,7 @@ class WaypointGenerator():
 		                     'pickup_b_ee2_block7','pickup_c_ee1_block0','pickup_c_ee1_block1','pickup_c_ee1_block2','pickup_c_ee1_block3',
 		                     'pickup_c_ee1_block4','pickup_c_ee1_block5','pickup_c_ee1_block6','pickup_c_ee1_block7','pickup_c_ee2_block0',
 		                     'pickup_c_ee2_block1','pickup_c_ee2_block2','pickup_c_ee2_block3','pickup_c_ee2_block4','pickup_c_ee2_block5',
-		                     'pickup_c_ee2_block6','pickup_c_ee2_block7','box_1','box_2','box_3','box_4', 'boat']
+		                     'pickup_c_ee2_block6','pickup_c_ee2_block7','safe_c_rotate', 'box_1','box_2','box_3','box_4', 'boat']
 
 		map_version = raw_input("Which map version? ")
 

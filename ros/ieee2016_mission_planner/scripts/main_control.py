@@ -316,6 +316,14 @@ class ControlUnit():
         Returns [qr_distance,top]. Top will be True if we need to look for top blocks. 
 
         Here are the returns for different stages:
+            a)  1st call => [None, True]
+                
+                2nd call => [None, False]
+                
+                3rd call => [None, True]
+                
+                4th call => [None, False]
+
             b)  1st call => [full,True]
                 2nd call => [full,True]
 
@@ -337,6 +345,14 @@ class ControlUnit():
         full_distance = 29     #cm
         half_distance = 35.25  #cm
         
+        if self.current_block_zone == 'a':
+            if   self.pickup_stage == 1: ret = [None, True]
+            elif self.pickup_stage == 2: ret = [None, False]
+            elif self.pickup_stage == 3: ret = [None, True]
+            elif self.pickup_stage == 4: 
+                ret = [None, False]
+                self.pickup_stage = 0
+
         if self.current_block_zone == 'b':
             if   self.pickup_stage == 1: ret = ['full',True]
             elif self.pickup_stage == 2: ret = ['full',True]
@@ -367,6 +383,8 @@ class ControlUnit():
         return ret 
 
     def get_height_of_blocks(self, camera=False):
+        # Camera will get the required height of the camera for good vision data.
+
         a_height = .1778  #m
         b_height = .254   #m
         c_height = .127   #m
@@ -496,13 +514,28 @@ class TestingStateMachine():
             if self.current_state == 1:
                 '''
                 The goals of this state are:
-                    1. Move to and look for the top left 4 blocks with the first camera.
+                    1. Drive through the box.
+                    2. Begin processing the location of train blocks.
+                    3. Move to location to process B blocks.
+                '''
+                print "=== STATE 1 ==="
+                self.ros_manager.set_nav_waypoint(self.waypoints['through_box'], pos_acc = .1, rot_acc = .1)
+                #train_box_colors = self.train_box_processor.process_train_blocks()
+                time.sleep(1)
+                #print train_box_colors
+
+                self.current_state += 1
+
+            elif self.current_state == 2:
+                '''
+                The goals of this state are:
+                    1. Move to and look for the top and bottom left 8 blocks with the first camera.
                     2. Get the colors that the grippers on ee1 will pick up.
-                    3. Move to and look for the top right 4 blocks with the first camera.
+                    3. Move to and look for the top and bottom right 8 blocks blocks with the first camera.
                     4. Get the colors that the grippers on ee2 will pickup.
                     5. Generate waypoints
                 '''
-                print "=== STATE 1 ==="
+                print "=== STATE 2 ==="
                 
                 # For EE1
                 waypoint = self.control.get_vision_waypoint(ee_number=1)
@@ -521,8 +554,8 @@ class TestingStateMachine():
                 print "> EE1 Colors Generated."
 
                 # For EE2
-                waypoint = self.control.get_vision_waypoint(ee_number=2, vel_profile=1)
-                self.ros_manager.set_nav_waypoint(waypoint)
+                waypoint = self.control.get_vision_waypoint(ee_number=2)
+                self.ros_manager.set_nav_waypoint(waypoint, vel_profile=1)
 
                 self.cam1.activate()
                 pickup_parameters = self.control.get_pickup_stage()
@@ -541,39 +574,29 @@ class TestingStateMachine():
 
                 self.current_state += 1
 
-            elif self.current_state == 2:
+            elif self.current_state == 3:
                 '''
                 The goals of this state are:
                     1. Move to pick up the first set of blocks with first end effector.
                     2. Do this again for the second end effector and the second set of blocks.
                 '''
-                print "=== STATE 2 ==="
+                print "=== STATE 3 ==="
+
                 print "> Executing waypoints."
 
                 # The arm waypoints list has 2 elements composed of each of the end effectors waypoints.
                 for ee,arm_waypoint in enumerate(arm_waypoints):
-                    this_ee = [_ee for _ee in self.ee_list if _ee.frame_id == ("EE"+str(ee+1))]
-                    
                     for gripper, block_position, grippers_to_acutate in arm_waypoint:
                         waypoint = self.waypoint_generator.get_block_waypoint(ee_number, gripper_number, block_number)
-
-                        # Set nav waypoint then move the elevator to the correct height.
-                        self.ros_manager.set_nav_waypoint(waypoint)
-                        self.ros_manager.set_elevator(self.get_height_of_blocks())
-
-                        estimated_distance_to_wall = self.ros_manager.block_wall_y - self.ros_manager.pose[1]
-                        print "Estimated Distance to Wall:",estimated_distance_to_wall
-
-                        # Extend the rail, grab the blocks, lift up slighly, then pull it back in
-                        self.ros_manager.set_rail(get_distance_to_gripping_position(estimated_distance_to_wall, this_ee))
-                        self.servo_controller.close_grippers(grippers_to_acutate)
-                        self.ros_manager.set_elevator(self.get_height_of_blocks()+.05)
-                        self.ros_manager.set_rail(get_distance_to_gripping_position(0, this_ee))
-
+                        self.perform_pickup(waypoint)
 
                     # Go back to a point and then rotate for the other waypoint
                     self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,.2,0]), pos_acc = .1, rot_acc = .1, vel_profile=1)
-                    self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,0,3.14]), pos_acc = .1, rot_acc = .1, vel_profile=1)
+                    self.ros_manager.ultrasonic_side_pub.publish(String(data="None"))
+                    if ee == 0:
+                        # This means we need to rotate so that our right side is now facing the wall.
+                        self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,0,3.14]), pos_acc = .1, rot_acc = .1, vel_profile=1)
+                        self.ros_manager.ultrasonic_side_pub.publish(String(data="right"))
 
             elif self.current_state == 3:
                 '''
@@ -585,6 +608,11 @@ class TestingStateMachine():
                     5. If there are still blocks we haven't gotten, move back to reprocess B blocks.
                 '''
                 print "=== STATE 3 ==="
+                self.ros_manager.ultrasonic_side_pub.publish(String(data="None"))
+
+                # The boxes are 6 inches off the ground (.17m = 6.69in)
+                self.ros_manager.set_elevator(.17)
+
                 # We are going to iterate over 2 directions and to the 4 boxes. The first direction drops off ee1 and the second drops off ee2.
                 # Right now we have to stop at each box, it would be good if we didnt have to.
                 print "Blocks:",self.ee1
@@ -620,7 +648,7 @@ class TestingStateMachine():
                         curr_waypoint[2] += rotational_offset
 
                         # Move and then when we get there drop off the associated color blocks
-                        self.ros_manager.set_nav_waypoint(curr_waypoint)
+                        self.ros_manager.set_nav_waypoint(curr_waypoint, vel_profile=1)
                         
                         print "Dropping blocks grippers:",grippers_to_drop
                         ee.drop(grippers_to_drop)
@@ -630,6 +658,7 @@ class TestingStateMachine():
                             break
                         box_number += 1
 
+                # If there are only a couple blocks left, it might not be worth going back.
                 if self.waypoint_generator.picked_up > 16:
                     self.waypoint_generator.picked_up = 0
                     break
@@ -637,11 +666,75 @@ class TestingStateMachine():
                     # Go back and reprocess B blocks
                     self.current_state = 2
 
+            elif self.current_state == 4:
+                '''
+                The goals of this state are:
+                    1. Move to pickup solid blue blocks.
+                    2. Pickup with both end effectors
+                    3. Move to boat.
+                    4. Drop blocks off.
+                '''
+                print "=== STATE 4 ==="
+                self.control.next_stage()
+                safe_space = self.waypoints['safe_c_rotate']
+
+                # Move to a place that we can move and rotate
+                self.ros_manager.set_nav_waypoint(safe_space, pos_acc = .1, rot_acc = .1, vel_profile=1)
+                self.ros_manager.ultrasonic_side_pub.publish(String(data="left"))
+
+                # Pick up with EE1
+                ee_1_waypoint = self.control.get_block_waypoint(ee_number=1, gripper_number=0, block_number=0)
+                self.control.get_pickup_stage()
+                self.perform_pickup(ee_1_waypoint)
+
+                # Go back to a point and then rotate for the other waypoint
+                self.ros_manager.set_nav_waypoint(safe_space, pos_acc = .1, rot_acc = .1, vel_profile=1)
+                self.ros_manager.ultrasonic_side_pub.publish(String(data="None"))
+                self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,0,3.14]), pos_acc = .1, rot_acc = .1, vel_profile=1)
+                self.ros_manager.ultrasonic_side_pub.publish(String(data="right"))
+
+                # Pick up with EE2
+                ee_2_waypoint = self.control.get_block_waypoint(ee_number=2, gripper_number=0, block_number=8)
+                self.control.get_pickup_stage()
+                self.perform_pickup(ee_2_waypoint)
+
+                self.ros_manager.set_nav_waypoint(safe_space, pos_acc = .1, rot_acc = .1, vel_profile=1)
+
+                self.ros_manager.ultrasonic_side_pub.publish(String(data="None"))
+
+                # Go over to the boat and drop all grippers
+                boat_point = self.waypoints['boat']
+                self.ros_manager.set_nav_waypoint(boat_point)
+                self.servo_controller.drop(self.ee_1)
+
+                self.ros_manager.set_nav_waypoint(self.ros_manager.pose + np.array([0,.2,3.14]), pos_acc = .1, rot_acc = .1, vel_profile=1)
+
+                self.ros_manager.set_nav_waypoint(boat_point+np.array([0,0,3.14]))
+                self.servo_controller.drop(self.ee_2)
+
             else:
                 break
 
             #if self.current_state > 50: self.current_state = 0
             rate.sleep()
+
+    def perform_pickup(self, waypoint):
+        '''
+        Performs a pickup maneuver given a position of a place to be.
+        This requires that the control flow has been maintained so that we are on the right stage and block zone.
+        '''
+        # Set nav waypoint then move the elevator to the correct height.
+        self.ros_manager.set_nav_waypoint(waypoint)
+        self.ros_manager.set_elevator(self.get_height_of_blocks())
+
+        estimated_distance_to_wall = self.ros_manager.block_wall_y - self.ros_manager.pose[1]
+        print "Estimated Distance to Wall:",estimated_distance_to_wall
+
+        # Extend the rail, grab the blocks, lift up slighly, then pull it back in
+        self.ros_manager.set_rail(get_distance_to_gripping_position(estimated_distance_to_wall))
+        self.servo_controller.close_grippers(grippers_to_acutate)
+        self.ros_manager.set_elevator(self.get_height_of_blocks()+.05)
+        self.ros_manager.set_rail(get_distance_to_gripping_position(0))
 
 class RosManager():
     def __init__(self,s):
@@ -651,25 +744,23 @@ class RosManager():
         self.pose = np.array([0,0,0])
 
         # ROS inits
-        self.nav_waypoint_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=1)
-        self.state_pub = rospy.Publisher("/robot/current_state", Int8, queue_size=1)
-        self.nav_start_pub = rospy.Publisher("/robot/start_navigation", StartNavigation, queue_size=1)
-        self.ultrasonic_side_pub = rospy.Publisher("/robot/navigation/set_ultrasonic_side", String, queue_size=1)
-        self.rail = rospy.Publisher("/robot/arms/rail", Float64, queue_size=2)
-
+        self.nav_waypoint_pub = rospy.Publisher(      "/robot/nav_waypoint", PoseStamped, queue_size=1)
+        self.state_pub = rospy.Publisher(             "/robot/current_state", Int8, queue_size=1)
+        self.nav_start_pub = rospy.Publisher(         "/robot/start_navigation", StartNavigation, queue_size=1)
+        self.ultrasonic_side_pub = rospy.Publisher(   "/robot/navigation/set_ultrasonic_side", String, queue_size=1)
 
         request_map = rospy.Service('/robot/request_map', RequestMap, self.get_map)
         
         self.set_init_pose = rospy.ServiceProxy('/set_pose', SetPose)
         self.nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
         self.arm_waypoint = rospy.ServiceProxy('/robot/arm_waypoint', ArmWaypoint)
+
         self.set_elevator = rospy.ServiceProxy('/robot/arm/elevator_target', DynamixelControl)
         self.set_rail = rospy.ServiceProxy('/robot/arm/rail_target', DynamixelControl)
 
-        rospy.Subscriber("/odometry/filtered", Odometry, self.got_odom, queue_size=1)
-
         rospy.init_node('main_control')
         
+        rospy.Subscriber("/odometry/filtered", Odometry, self.got_odom, queue_size=1)
         rospy.Subscriber('/settings/start_command', Bool, self.recieve_start_command)
         rospy.Subscriber('/settings/map_version', Int8, self.determine_map_version)
 
@@ -688,7 +779,7 @@ class RosManager():
                 # 1 is the map configuration where we start on the left, 2 is on the right.
                     #self.state_machine.begin_1()
                 if self.state_machine.map_version == 1:
-                    start_pose = np.array([.2,2,3.1415])
+                    start_pose = np.array([.2,2,1.57])
 
                     self.start_ekf(start_pose)
                     nav_start.init_pose = start_pose
@@ -696,9 +787,13 @@ class RosManager():
                     self.state_machine.begin()
 
                 elif self.state_machine.map_version == 2:
-                    start_pose = np.array([self.far_wall_x - .2,.2,1.57])
+
+                    start_pose = np.array([self.far_wall_x - .2,.4,1.57])
+
+                    self.start_ekf(start_pose)
                     nav_start.init_pose = start_pose
                     self.nav_start_pub.publish(nav_start)
+                    self.state_machine.begin()
             else:
                 print "Error, no map version set."
 
@@ -771,9 +866,6 @@ class RosManager():
         print "> Moving..."
         success = self.nav_waypoint(p_s, pos_acc, rot_acc, vel_profile)
         print "> Movement Complete!"
-
-    def set_elevator_height(self,height):
-        self.elevator = rospy.Publisher("/robot/arms/elevator", Float64, queue_size=2)
 
     def set_arm_waypoint(self,gripper,waypoint):
         q = tf.transformations.quaternion_from_euler(0, 0, 1.5707)
