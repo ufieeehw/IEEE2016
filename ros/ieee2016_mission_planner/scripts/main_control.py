@@ -513,7 +513,7 @@ class TestingStateMachine():
                 self.cam1.activate()
                 pickup_parameters = self.control.get_pickup_stage()
                 self.bs_b_1.active = True
-                self.qr_detector.match_templates(self.cam1, "inital_scan", pickup_parameters[0])
+                self.qr_detector.normal_scan(self.cam1, "inital_scan", pickup_parameters[0])
                 colors_b_1_top = self.bs_b_1.get_block_locations(top=True)[4:]
                 colors_b_1_bot = self.bs_b_1.get_block_locations(top=False)[4:]
                 self.cam1.deactivate()
@@ -521,13 +521,13 @@ class TestingStateMachine():
                 print "> EE1 Colors Generated."
 
                 # For EE2
-                waypoint = self.control.get_vision_waypoint(ee_number=2)
+                waypoint = self.control.get_vision_waypoint(ee_number=2, vel_profile=1)
                 self.ros_manager.set_nav_waypoint(waypoint)
 
                 self.cam1.activate()
                 pickup_parameters = self.control.get_pickup_stage()
                 self.bs_b_2.active = True
-                self.qr_detector.match_templates(self.cam1, "inital_scan", pickup_parameters[0])
+                self.qr_detector.normal_scan(self.cam1, "inital_scan", pickup_parameters[0])
                 colors_b_2_top = self.bs_b_2.get_block_locations(top=True)[-4:]
                 colors_b_2_bot = self.bs_b_2.get_block_locations(top=False)[-4:]
                 self.cam1.deactivate()
@@ -570,79 +570,8 @@ class TestingStateMachine():
                         self.ros_manager.set_rail(get_distance_to_gripping_position(0, this_ee))
 
                     # Go back to a point and then rotate for the other waypoint
-                    self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,.2,0]), pos_acc = .1, rot_acc = .1)
-                    self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,0,3.14]), pos_acc = .1, rot_acc = .1)
-
-
-
-
-            elif self.current_state == 2:
-                '''
-                The goals of this state are:
-                    1. Move to pick up the first set of blocks with first end effector.
-                    2. Do this again for the second end effector and the second set of blocks.
-                '''
-                print "=== STATE 3 ==="
-                print "> Executing waypoints."
-
-                # Used to determine if we need to rotate or naw.
-                last_ee = ee[0]
-                # Go through each waypoint and make sure we dont hit anything
-                for gripper, block, grippers_to_acutate in arm_waypoints:
-                    # We don't want to move and rotate here (unless we arent rotating) - so just rotate and get lined up away from the wall.
-                    # Should move this to be part of the controller, but for now it can just go here.
-                    this_ee = [ee for ee in self.ee_list if ee.frame_id == ("EE"+gripper[:1])]
-
-                    if this_ee != last_ee:
-                        # We need to back up slighly in order to rotate
-                        backup_movement = np.copy(self.ros_manager.pose)
-                        backup_movement[1] = self.ros_manager.block_wall_y - self.qr_distances[0]/100.0 #m
-                        self.ros_manager.set_nav_waypoint(backup_movement)
-
-                        # Then rotate in places
-                        rotate_waypoint = np.copy(waypoint)
-                        rotate_waypoint[1] = self.ros_manager.block_wall_y - self.qr_distances[0]/100.0 #m
-                        print "Lining Up"
-                        self.ros_manager.set_arm_waypoint(gripper,rotate_waypoint)
-
-                    # Now move in close to the wall. We move so that the edge of the robot is some distance from the wall.
-                    # .1524m is 6 inches, or half the robot size
-                    distance_off_wall = .04 #m
-                    base_link_to_edge = .1524 #m
-                    print "Moving Close"
-                    waypoint[1] = self.ros_manager.block_wall_y - (base_link_to_edge + distance_off_wall)
-                    self.ros_manager.set_arm_waypoint(gripper,waypoint)
-
-                    # Move elevator to est height
-
-                    # Get a more accurate position estimate where to put the gripper
-                    if qr_rotation:
-                        print "Correcting Position"
-                        camera_gripper = this_ee.gripper_positions[this_ee.cam_position]
-                        updated_position = self.qr_detector.visual_servo((base_link_to_edge + distance_off_wall), camera_gripper.block.color, qr_rotation)
-                        waypoint[1] = np.copy(self.ros_manager.pose)[1]
-                        # We want to line the camera gripper up with the block in the frame
-                        self.ros_manager.set_arm_waypoint(camera_gripper, updated_position)
-
-
-                    # Move dynamixle in
-
-                    # Pick up the blocks IRL somehow
-                    print "Picking up with:",grippers_to_acutate
-
-                    # Pull ee back in
-
-                    time.sleep(1)
-
-                    # Used to determine if we need to rotate or naw.
-                    last_ee = this_ee
-
-                # Regenerate point cloud - for simulation only
-                #self.point_cloud_generator.publish_points(b_tree,self.point_cloud_generator.point_cloud_pub)
-                #self.point_cloud_generator.b_blocks = np.array(b_blocks, dtype=object)
-                #self.point_cloud_generator.generate_b_camera_view()
-
-                self.current_state += 1
+                    self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,.2,0]), pos_acc = .1, rot_acc = .1, vel_profile=1)
+                    self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,0,3.14]), pos_acc = .1, rot_acc = .1, vel_profile=1)
 
             elif self.current_state == 3:
                 '''
@@ -653,10 +582,10 @@ class TestingStateMachine():
                     4. Turn around and repeat with the other end effector - starting from box 1.
                     5. If there are still blocks we haven't gotten, move back to reprocess B blocks.
                 '''
-                print "=== STATE 4 ==="
+                print "=== STATE 3 ==="
                 # We are going to iterate over 2 directions and to the 4 boxes. The first direction drops off ee1 and the second drops off ee2.
                 # Right now we have to stop at each box, it would be good if we didnt have to.
-                #print "Blocks:",self.ee1
+                print "Blocks:",self.ee1
                 print "Blocks:",self.ee2
                 for direction,ee in enumerate(self.ee_list):
                     # First make sure the gripper has blocks in it.
@@ -699,7 +628,7 @@ class TestingStateMachine():
                             break
                         box_number += 1
 
-                if self.waypoint_generator.picked_up == 20:
+                if self.waypoint_generator.picked_up > 16:
                     self.waypoint_generator.picked_up = 0
                     break
                 else:
@@ -814,7 +743,7 @@ class RosManager():
 
         print "> Map Version:",self.state_machine.map_version
 
-    def set_nav_waypoint(self, waypoint, pos_acc = 0, rot_acc = 0):
+    def set_nav_waypoint(self, waypoint, pos_acc = 0, rot_acc = 0, vel_profile = 2):
         q = tf.transformations.quaternion_from_euler(0, 0, waypoint[2])
         p_s = PoseStamped(
                 header=Header(
@@ -838,7 +767,7 @@ class RosManager():
         self.nav_waypoint_pub.publish(p_s)
         print "> Nav Waypoint published:",waypoint
         print "> Moving..."
-        success = self.nav_waypoint(p_s, pos_acc, rot_acc)
+        success = self.nav_waypoint(p_s, pos_acc, rot_acc, vel_profile)
         print "> Movement Complete!"
 
     def set_elevator_height(self,height):

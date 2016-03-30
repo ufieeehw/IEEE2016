@@ -1,6 +1,9 @@
 geometry_msgs/PoseStamped des_pose    # The new desired pose
 float64 position_accuracy	      # The tolerance for the position at the waypoint (m)
 float64 rotation_accuracy	      # The tolerance for the rotation at the waypoint (rads)
+int8 velocity_profile	  	      # Set's the velocity profile for traveling:
+				      #		0: No profile - use if moving small distances without high accuracy.
+				      #		1: Simple Square Root Error - use if moving short distances with high accuracy.
+				      #		2: Advanced Curve - Same as (1) but with a ramp up at the beginning. Useful for accurately moving long distances.
 ---
 bool success                          # Will return true when movement is complete
-

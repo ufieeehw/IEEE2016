@@ -150,26 +150,38 @@ class Controller(object):
         self.position = np.array([msg.pose.position.x, msg.pose.position.y])
         self.yaw = tf_trans.euler_from_quaternion(xyzw_array(msg.pose.orientation))[2]
 
+    def got_desired_pose(self, srv):
+        '''
+        Here we've gotten our request to move to a location so we interpret the message and package it for the control method.
+        '''
+        self.starting_move_error = None
+
+        msg = srv.des_pose
+        # Make sure the pose is in the map frame
+        try:
+            self.tf_listener.waitForTransform(msg.header.frame_id,"/map", rospy.Time.now(), rospy.Duration(1.0))
+            msg = self.tf_listener.transformPose("/map",msg)
+        except:
+            print "No TF link found."
+            return False
+
+        # Set our tolerances - if the requested ones are too unreasonable, use the smallest tolerance that works.
+        self.nav_tolerance = [.003,.0005] #m, rads
+        if srv.position_accuracy > self.nav_tolerance[0]: self.nav_tolerance[0] = srv.position_accuracy
+        if srv.rotation_accuracy > self.nav_tolerance[1]: self.nav_tolerance[1] = srv.rotation_accuracy
+
+        # Set our velocity profile
+        self.velocity_profile = srv.velocity_profile
+
+        self.des_position = np.array([msg.pose.position.x, msg.pose.position.y])
+        self.des_yaw = tf_trans.euler_from_quaternion(xyzw_array(msg.pose.orientation))[2]
+
+        # Only do this when we have a desired pose
+        return self.control()
+
     def control(self):
-        '''recieve current pose of robot
-
-        Function:
-            Attempts to construct a velocity solution using a k*sqrt(error) controller
-            This tries to guarantee a constant acceleration
-
-        Note:
-            Right now, this does not require velocity feedback, only pose
-            This SHOULD include velocity feedback, once we have it
-
-        Todo:
-            Add speed-drop for the case where position feedback is lost
-            This will probably have to be done in a separate thread
-
-        Changes from last year:
-            Enabled backwards and side to side motion. Added a different velocity profile.
-
-        Velocity calcluation should be done in a separate thread
-         this thread should have an independent information "watchdog" timing method
+        '''
+        When the nav_waypoint service is called, this will loop until we get to our location.
         '''
         if (self.position is None) or (self.yaw is None) or (self.on is False): return False
         
@@ -198,22 +210,26 @@ class Controller(object):
             if abs(yaw_error) > self.nav_tolerance[1]:
                 command.append('R')
 
-            if self.starting_move_error is None: 
-                self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .1
-                print "MV_ERR",self.starting_move_error
+            # Determine velocity profile to use.
+            if self.velocity_profile == 0:
+                # Constant velocity
+                linear_speed_raw = 1
+            elif self.velocity_profile == 1:
+                # Simple Square Root Error Method (same as last year)
+                linear_speed_raw = math.sqrt(np.linalg.norm(position_error) * max_linear_acc)
+            elif self.velocity_profile == 2:
+                # Fance advanced curve, ramp up to speed then square root error into the waypoint.
+                if self.starting_move_error is None: 
+                    self.starting_move_error = np.linalg.norm(position_error) * max_linear_acc + .1
+                    print "MV_ERR",self.starting_move_error
 
-            linear_speed_raw = math.pow(np.linalg.norm(position_error) * max_linear_acc,(1/2.20)) * \
-                               math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
-            # Determines the linear speed necessary to maintain a consant backward acceleration
-            linear_speed = min(
-                                .6*linear_speed_raw, max_linear_vel
-                            )
-            # Determines the angular speed necessary to maintain a constant angular acceleration 
-            #  opposite the direction of motion
-            angular_speed = min(
-                                .4*math.sqrt(abs(yaw_error) * max_angular_acc), 
-                                max_angular_vel
-                            )
+                linear_speed_raw = math.pow(np.linalg.norm(position_error) * max_linear_acc,(1/2.20)) * \
+                                   math.pow(self.starting_move_error - (np.linalg.norm(position_error) * max_linear_acc),(1/3.0))
+                
+
+            # Calculate magnitude of velocities
+            linear_speed = min(.6*linear_speed_raw, max_linear_vel)
+            angular_speed = min(.4*math.sqrt(abs(yaw_error) * max_angular_acc), max_angular_vel)
 
             # Provide direction for both linear and angular velocity
             desired_vel = linear_speed * self.unit_vec(position_error)
@@ -237,36 +253,6 @@ class Controller(object):
                 print "Movement Complete!"
                 return True
             r.sleep()
-
-
-    def got_desired_pose(self, srv):
-        '''Recieved desired pose message
-        Figure out how to do this in a separate thread
-        So we're not depending on a message to act
-        #LearnToThreading
-        (That's a hashtag)
-        '''
-        self.starting_move_error = None
-
-        msg = srv.des_pose
-        # Make sure the pose is in the map frame
-        try:
-            self.tf_listener.waitForTransform(msg.header.frame_id,"/map", rospy.Time.now(), rospy.Duration(1.0))
-            msg = self.tf_listener.transformPose("/map",msg)
-        except:
-            print "No TF link found."
-            return False
-
-        # Set our tolerances - if the requested ones are too unreasonable, use the smallest tolerance that works.
-        self.nav_tolerance = [.003,.0005] #m, rads
-        if srv.position_accuracy > self.nav_tolerance[0]: self.nav_tolerance[0] = srv.position_accuracy
-        if srv.rotation_accuracy > self.nav_tolerance[1]: self.nav_tolerance[1] = srv.rotation_accuracy
-
-        self.des_position = np.array([msg.pose.position.x, msg.pose.position.y])
-        self.des_yaw = tf_trans.euler_from_quaternion(xyzw_array(msg.pose.orientation))[2]
-
-        # Only do this when we have a desired pose
-        return self.control()
 
 if __name__ == '__main__':
     rospy.logwarn("Starting")
