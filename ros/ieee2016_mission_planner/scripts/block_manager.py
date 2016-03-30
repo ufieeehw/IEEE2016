@@ -43,6 +43,8 @@ class Gripper():
         self.servo_id = None
 
     def  __repr__(self):
+        if self.block.color is None:
+            return str(self.frame_id + ": None") 
         return str(self.frame_id + ":" + self.block.color)
 
     def get_tf(self,tf_listener,from_frame):
@@ -74,7 +76,7 @@ class EndEffector():
 
         for i in range(gripper_count):
             # Define new gripper and add it to the gripper list
-            self.gripper_positions.append( Gripper(ee_number, i, Block("none") ) )
+            self.gripper_positions.append( Gripper(ee_number, i, Block(None) ) )
 
         print self.gripper_positions
     
@@ -91,7 +93,7 @@ class EndEffector():
         for gripper in grippers:
             print gripper
             g = self.gripper_positions.index(gripper)
-            self.gripper_positions[g].block = Block("none")
+            self.gripper_positions[g].block = Block(None)
             self.holding -= 1
 
     def which_gripper(self,color):
@@ -121,8 +123,72 @@ class WaypointGenerator():
 
         self.picked_up = 0
 
-        self.tf_listener = tf.TransformListener()
+        #self.tf_listener = tf.TransformListener()
         print "> Waypoint Generator Online."
+
+    def generate_arm_waypointsV2(self, blocks_list):
+        '''
+        New waypoint generator since the data we will get is slightly different after some design changes.
+
+        Waypoints are returned as a list [[ee1_gripper, ee1_block_number_for_gripper, grippers_to_actuate],[ee2_gripper, ee2_block_number_for_gripper, grippers_to_actuate]]
+        '''
+        waypoints_list = [[],[]]
+
+        # Now we loop through the entire set of detected blocks.
+        base_gripper = 0                # Keeps track of the first gripper we are going to use.
+        this_gripper = 0                # Keeps track of which gripper we are testing for blocks.
+        ee_number = 1                   # Keeps track of which end effector we are working with.
+        grippers_to_actuate = []        # Keeps track of which grippers we need to close at this waypoint.
+        block_number = -1               # Keeps track of the block we are testing.
+
+        # Go through all sets of data that we have.
+        for row,blocks in enumerate(blocks_list):
+            # Go through each block in each block list checking for None blocks.
+            for block in blocks:
+                block_number += 1
+                # Define the end effector we are using
+                print "EE:", ee_number
+                this_ee = self.ee_list[ee_number-1]
+                if block.color is not None:
+                    # Add block to gripper and flag that we need to actuate that gripper
+                    print "GRIPPER:", this_gripper
+                    this_ee.gripper_positions[this_gripper] = block.color
+                    grippers_to_actuate.append(this_gripper)
+
+                    # If we are out of grippers on the end effector we need to make the waypoint and start looking for the blocks with the next end effector.
+                    if this_gripper+1 >= this_ee.gripper_count:
+                        print "END OF EE"
+                        waypoints_list[ee_number-1].append([this_gripper, block_number, grippers_to_actuate])
+                        grippers_to_actuate = [] 
+                        ee_number += 1                          
+                        this_gripper = 0 
+                        base_gripper = this_gripper
+                    else: this_gripper += 1
+                else:
+                    print "NONE"
+                    if this_gripper == base_gripper: continue
+                    # If the block is none, make a waypoint with the previous grippers.
+                    waypoints_list[ee_number-1].append([this_gripper-1, block_number-1, grippers_to_actuate])
+                    grippers_to_actuate = []  
+                    base_gripper = this_gripper
+
+                if ee_number > 2: 
+                    print "LAST EE"
+                    print self.ee_list
+                    return waypoints_list
+
+            if row == 1:
+                # This is the end of the row so we need to save that last set as a waypoint
+                print "END OF ROW"
+                if base_gripper == this_gripper: continue
+                waypoints_list[ee_number-1].append([this_gripper-1, block_number-1, grippers_to_actuate])
+                grippers_to_actuate = []
+                
+
+        waypoints_list[ee_number-1].append([this_gripper-1, block_number-1, grippers_to_actuate])
+
+        print self.ee_list
+        return waypoints_list
 
     def generate_arm_waypoints(self, block_tree, pickup):
         '''
@@ -371,16 +437,14 @@ class BlockServerV2():
 
         self.blocks = np.array([])
 
-        self.timeout = 10 #s
-
-        # Used for half block detection
-        self.top_left = None
-        self.delta_x = None
+        self.active = False
 
     def got_block(self,msg):
         '''
         We got a new block, so check if it belongs to any other blocks.
         '''
+        if not self.active: return
+
         this_block = Block(msg.color, orientation = msg.rotation_index, coordinate = msg.point)
         self.insert_unique(this_block)
 
@@ -390,12 +454,6 @@ class BlockServerV2():
             print "(%.2f,%.2f),"%(b[0],-b[1]),
         print
         print
-
-        print time.time() - self.start_time 
-        if time.time() - self.start_time > self.timeout:
-            print "timeout"
-            self.block_sub.unregister()
-            print self.get_block_locations()
 
     def insert_unique(self, block, new_weight = .1):
         '''
@@ -422,9 +480,9 @@ class BlockServerV2():
 
         self.blocks.append(block) 
 
-    def get_block_locations(self):
+    def get_block_locations(self, top = True):
         '''
-        Returns the top row of block in order for the gripper to pick up.
+        Returns the top row of blocks (unless top == False, then the bottom) in order for the gripper to pick up.
 
         To do this, we sort blocks by height, calcuate the average height (this will be some point between all the blocks)
             then find the topmost set of blocks and sort them in order. Then, find the average distance between them. This 
@@ -437,6 +495,7 @@ class BlockServerV2():
         This needs to be modified for the half blocks.
         Need an error detection system to command robot movement if not all blocks are detected.
         '''
+        self.active = False
         block_coordinates = []
         for b in self.blocks:
             block_coordinates.append(b.coordinate)
@@ -447,27 +506,45 @@ class BlockServerV2():
             print "Multiple rows detected."
             # Remove all the bottom blocks. Make sure you're only looking at the 8 leftmost blocks.
             np_coordinates = np.array(block_coordinates)
-            top_most_coordinates = np_coordinates[np.lexsort((np_coordinates[:,1],np_coordinates[:,0]))]
-            top_most_coordinates = top_most_coordinates[top_most_coordinates[:,1] < average_z]
+            sorted_np_coordinates = np_coordinates[np.lexsort((np_coordinates[:,1],np_coordinates[:,0]))]
+            if top:
+                extreme_coordinates = sorted_np_coordinates[sorted_np_coordinates[:,1] < average_z]
+            else:
+                extreme_coordinates = sorted_np_coordinates[sorted_np_coordinates[:,1] > average_z]
 
         # print np_coordinates
         # print top_most_coordinates
 
-        top_most_blocks = []
+        extreme_blocks = []
         for b in range(4):
             for i,block in enumerate(self.blocks):
                 #print top_most_coordinates[b], block.coordinate
-                if (top_most_coordinates[b] == block.coordinate).all():
-                    top_most_blocks.append(copy.copy(block))
-                    self.blocks[i].color = 'None'
+                if (extreme_coordinates[b] == block.coordinate).all():
+                    extreme_blocks.append(copy.copy(block))
+                    self.blocks[i].color = None
 
         print self.blocks
         print
-        return top_most_blocks
+        return extreme_blocks
 
 if __name__ == "__main__":
     rospy.init_node('block_manager')
-    b = BlockServerV2(50)
+    ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=2)
+    ee2 = EndEffector(gripper_count=4, ee_number=2, cam_position=2)
+    ee_list = [ee1,ee2]
+    w = WaypointGenerator(ee1,ee2)
+    blocks_1 = [Block(None),Block(None),Block(None),Block(None)]
+    blocks_2 = [Block('blue'),Block('red'),Block('green'),Block(None)]
+    blocks_3 = [Block('red'),Block('blue'),Block(None),Block('red')]
+    blocks_4 = [Block('green'),Block('red'),Block('blue'),Block('yellow')]
+    
+    waypoints = w.generate_arm_waypointsV2([blocks_1,blocks_2,blocks_3,blocks_4])
+    print waypoints
+
+    for ee_number in range(2):
+        for target in waypoints[ee_number]:
+            print w.get_block_waypoint(ee_number, target[0], target[1])
+
     # ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
     # ProcessBlocks(ee1)
-    rospy.spin()
+    #rospy.spin()

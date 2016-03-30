@@ -5,7 +5,7 @@ from std_msgs.msg import Bool, Int8, Header
 from sensor_msgs.msg import PointCloud, ChannelFloat32
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, Point32, PointStamped, PoseWithCovarianceStamped, PoseWithCovariance
-from ieee2016_msgs.srv import NavWaypoint, ArmWaypoint, RequestMap
+from ieee2016_msgs.srv import NavWaypoint, ArmWaypoint, RequestMap, DynamixelControl
 from ieee2016_msgs.msg import StartNavigation
 from rospy.numpy_msg import numpy_msg
 from robot_localization.srv import SetPose
@@ -14,7 +14,7 @@ import tf
 roslib.load_manifest('ieee2016_vision')
 from camera_manager import Camera
 from arm_controller import ArmController, ServoController
-from block_manager import EndEffector, BlockServer, WaypointGenerator
+from block_manager import EndEffector, BlockServerV2, WaypointGenerator
 from waypoint_utils import WaypointServer
 from qr_detector import DetectQRCodeTemplateMethod
 
@@ -306,6 +306,104 @@ class ControlUnit():
         self.ros_manager = r
         self.current_block_zone = 'b'
         self.processing_waypoint = None
+        self.pickup_stage = 1
+
+    def get_pickup_stage(self, stall = False, set_stage = None):
+        '''
+        Tells the main program what size blocks to look for or whether to look for top or bottom blocks.
+        If stall is True, it wont increment to the next stage when called, otherwise it will autoincrement.
+
+        Returns [qr_distance,top]. Top will be True if we need to look for top blocks. 
+
+        Here are the returns for different stages:
+            b)  1st call => [29,True]
+                2nd call => [29,True]
+
+                3rd call => [35.25,True]
+                4th call => [35.25,True]
+                
+                5th call => [29,False]
+                6th call => [29,False]
+                
+                7th call => [35.25,False]
+                8th call => [35.25,False]
+            
+            c)  1st call => [29,True]
+                2nd call => [29,True]
+                
+                3nd call => [29,False]
+                4nd call => [29,False]
+        '''
+        full_distance = 29     #cm
+        half_distance = 35.25  #cm
+        
+        if self.current_block_zone == 'b':
+            if   self.pickup_stage == 1: ret = [full_distance,True]
+            elif self.pickup_stage == 2: ret = [full_distance,True]
+            elif self.pickup_stage == 3: ret = [half_distance,True]
+            elif self.pickup_stage == 4: ret = [half_distance,True]
+            elif self.pickup_stage == 5: ret = [full_distance,False]
+            elif self.pickup_stage == 6: ret = [full_distance,False]
+            elif self.pickup_stage == 7: ret = [half_distance,False]
+            elif self.pickup_stage == 8: 
+                ret = [half_distance,False]
+                self.pickup_stage = 0
+
+        elif self.current_block_zone == 'c':
+            if   self.pickup_stage == 1: ret = [full_distance,True]
+            elif self.pickup_stage == 2: ret = [full_distance,True]
+            elif self.pickup_stage == 3: ret = [full_distance,False]
+            elif self.pickup_stage == 4:
+                ret = [full_distance,False]
+                self.pickup_stage = 0
+
+        if not stall:
+            if set_stage >= 0:
+                self.pickup_stage = set_stage
+                return ret
+
+            self.pickup_stage += 1
+
+        return ret 
+
+    def get_height_of_blocks(self, camera=False):
+        a_height = .1778  #m
+        b_height = .254   #m
+        c_height = .127   #m
+        block_size = .0381 #m
+
+        height = 0
+        if not camera:
+            height = block_size/2.0 #m (due to the fact the middle of the block is at some height)        
+            # Check if we are working with the top blocks and add that height.
+            if get_pickup_stage(stall=True)[1]:
+                height += block_size
+
+        if self.current_block_zone == 'a': height += a_height
+        if self.current_block_zone == 'b': height += b_height
+        if self.current_block_zone == 'c': height += c_height
+
+        return height
+
+    def get_distance_to_gripping_position(self, dist_to_wall):
+        '''
+        Get the distance to move the end effector out in order to grab the block in the right place.
+
+        In Zone B, we know that if we are in stages 3 or 7, we are gripping full blocks (stage 3 as opposed to stage 2 since the stage
+            will be incremented after the 2nd qr detection). When we are in stage 5 or 0, that means we just checked for half
+            blocks and therefore should be grabbing back half blocks.
+        '''
+        full_block = .0635 #m
+        half_block = .0635/2.0 #m
+        if self.current_block_zone == 'a': dist_to_wall += full_block
+        if self.current_block_zone == 'b':
+            if self.pickup_stage == 3 or self.pickup_stage == 7:
+                dist_to_wall += full_block
+            else:
+                dist_to_wall += 3*half_block
+
+        if self.current_block_zone == 'c': dist_to_wall += full_block
+
 
     def get_vision_waypoint(self, ee_number):
         waypoint_name = "vision_%s_%i"%(self.current_block_stage, ee_number)
@@ -318,9 +416,10 @@ class ControlUnit():
         We want to move a gripper on one of the end effectors to a certain block
         Block positions are:
             00  01  02  03  04  05  06  07
-            00  01  02  03  04  05  06  07
+            08  09  10  11  12  13  14  15
         '''
-        actual_block = block_number - gripper
+        if block_number >= 8: block_number -= 8
+        actual_block = block_number - gripper_number
         waypoint_name = "pickup_%s_ee%i_block%i"%(self.current_block_stage, ee_number, actual_block)
         waypoint = [value for key in self.waypoints.iteritems() if key.startswith(waypoint_name)]
         return waypoint
@@ -350,12 +449,20 @@ class TestingStateMachine():
         self.ee2 = EndEffector(gripper_count=4, ee_number=2, cam_position=2)
         self.ee_list = [self.ee2]
 
+        self.cam1 = Camera(cam_number=1)
         self.cam2 = Camera(cam_number=2)
+        self.cam_list = [self.cam1,self.cam2]
 
-        #print "> ========= Creating Detection Objects ========="
+        print "> ========= Creating Detection Objects ========="
+        # Each section has a different block server to listen to blocks.
+        self.bs_b_1 = BlockServerV2(self.cam1)
+        self.bs_b_2 = BlockServerV2(self.cam2)
+        self.bs_c_1 = BlockServerV2(self.cam1)
+        self.bs_c_2 = BlockServerV2(self.cam2)
+        
         # Objects for detecting and returning location of QR codes. Parameters are the set distances from the codes (cm).
-        #self.waypoint_generator = WaypointGenerator(self.ee2)#, self.ee2)
-        #self.arm_controller = ArmController()
+        self.waypoint_generator = WaypointGenerator(self.ee1, self.ee2)
+        self.servo_controller = ServoController(self.ee1, self.ee2)
 
         #self.point_cloud_generator = temp_GenerateBlockPoints(16)
         #self.point_cloud_generator.generate_b_blocks()
@@ -365,17 +472,14 @@ class TestingStateMachine():
 
         rospy.spin()
 
-    def load_waypoints(self):
-        w = WaypointServer()
-        self.waypoints = w.load_waypoints()
-
     def begin(self):
         print
         print "> Running Test"
         print "> Map Version:",self.map_version
         print
-        self.load_waypoints()
-        # This needs to be here since it requires the waypoints.
+        # These objects need the map version to work.
+        self.w = WaypointServer()
+        self.waypoints = self.w.load_waypoints()
         self.control = ControlUnit(self.ros_manager, self.waypoints) # Note that Ken does not have any self.control.
         self.qr_distances = [29]#,35.25
         self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
@@ -392,37 +496,91 @@ class TestingStateMachine():
             if self.current_state == 1:
                 '''
                 The goals of this state are:
-                    1. Process first 4 b blocks.
-                    2. Move to pick those blocks up.
-
-
+                    1. Move to and look for the top left 4 blocks with the first camera.
+                    2. Get the colors that the grippers on ee1 will pick up.
+                    3. Move to and look for the top right 4 blocks with the first camera.
+                    4. Get the colors that the grippers on ee2 will pickup.
+                    5. Generate waypoints
                 '''
                 print "=== STATE 1 ==="
-                waypoint = self.control.get_vision_waypoint(1)
+
+                # For EE1
+                waypoint = self.control.get_vision_waypoint(ee_number=1)
                 self.ros_manager.set_nav_waypoint(waypoint)
                 
-                self.cam1.activate()
+                self.ros_manager.ultrasonic_side_pub.publish(String(data="left"))
                 
-                # Create a new block server to log block position and remove duplicates
-                self.block_server = BlockServer(self.cam1)
-                self.qr_detector.match_templates(self.cam1, "inital_scan", 50)
-                b_tree = self.block_server.k
+                self.cam1.activate()
+                pickup_parameters = self.control.get_pickup_stage()
+                self.bs_b_1.active = True
+                self.qr_detector.match_templates(self.cam1, "inital_scan", pickup_parameters[0])
+                colors_b_1_top = self.bs_b_1.get_block_locations(top=True)[4:]
+                colors_b_1_bot = self.bs_b_1.get_block_locations(top=False)[4:]
+                self.cam1.deactivate()
 
-                # Generate waypoints for two arms, picking up all possible blocks.
-                b_tree, arm_waypoints = self.waypoint_generator.generate_arm_waypoints(b_tree, -1)
+                print "> EE1 Colors Generated."
 
-                print "> Waypoints Generated."
+                # For EE2
+                waypoint = self.control.get_vision_waypoint(ee_number=2)
+                self.ros_manager.set_nav_waypoint(waypoint)
+
+                self.cam1.activate()
+                pickup_parameters = self.control.get_pickup_stage()
+                self.bs_b_2.active = True
+                self.qr_detector.match_templates(self.cam1, "inital_scan", pickup_parameters[0])
+                colors_b_2_top = self.bs_b_2.get_block_locations(top=True)[-4:]
+                colors_b_2_bot = self.bs_b_2.get_block_locations(top=False)[-4:]
+                self.cam1.deactivate()
+
+                print "> EE2 Colors Generated."
+
+                arm_waypoints = self.waypoint_generator.generate_arm_waypointsV2([colors_b_1_top ,colors_b_2_top,colors_b_1_bot ,colors_b_2_bot])
+                self.ee_list = self.waypoint_generator.ee_list
+
+                print "> Arm Waypoints Created."
 
                 self.current_state += 1
 
             elif self.current_state == 2:
                 '''
                 The goals of this state are:
-                    1. Move to pick up blocks with first end effector
-                    2. Do this again for the second end effector
+                    1. Move to pick up the first set of blocks with first end effector.
+                    2. Do this again for the second end effector and the second set of blocks.
+                '''
+                print "=== STATE 2 ==="
+                print "> Executing waypoints."
 
-                When we move in close, we are moving to an esimated position of a block. When we get in close, we try again to identify qr codes
-                but this time they will be more accurate. We only want the one qr code infront of the camera.
+                # The arm waypoints list has 2 elements composed of each of the end effectors waypoints.
+                for ee,arm_waypoint in enumerate(arm_waypoints):
+                    this_ee = [_ee for _ee in self.ee_list if _ee.frame_id == ("EE"+str(ee+1))]
+                    
+                    for gripper, block_position, grippers_to_acutate in arm_waypoint:
+                        waypoint = self.waypoint_generator.get_block_waypoint(ee_number, gripper_number, block_number)
+
+                        # Set nav waypoint then move the elevator to the correct height.
+                        self.ros_manager.set_nav_waypoint(waypoint)
+                        self.ros_manager.set_elevator(self.get_height_of_blocks())
+
+                        estimated_distance_to_wall = self.ros_manager.block_wall_y - self.ros_manager.pose[1]
+                        print "Estimated Distance to Wall:",estimated_distance_to_wall
+
+                        # Extend the rail, grab the blocks, then pull it back in 
+                        self.ros_manager.set_rail(get_distance_to_gripping_position(estimated_distance_to_wall, this_ee))
+                        self.servo_controller.close_grippers(grippers_to_acutate)
+                        self.ros_manager.set_rail(get_distance_to_gripping_position(0, this_ee))
+
+                    # Go back to a point and then rotate for the other waypoint
+                    self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,.2,0]), pos_acc = .1, rot_acc = .1)
+                    self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,0,3.14]), pos_acc = .1, rot_acc = .1)
+
+
+
+
+            elif self.current_state == 2:
+                '''
+                The goals of this state are:
+                    1. Move to pick up the first set of blocks with first end effector.
+                    2. Do this again for the second end effector and the second set of blocks.
                 '''
                 print "=== STATE 3 ==="
                 print "> Executing waypoints."
@@ -430,17 +588,18 @@ class TestingStateMachine():
                 # Used to determine if we need to rotate or naw.
                 last_ee = ee[0]
                 # Go through each waypoint and make sure we dont hit anything
-                for gripper, waypoint, grippers_to_acutate, qr_rotation in arm_waypoints:
+                for gripper, block, grippers_to_acutate in arm_waypoints:
                     # We don't want to move and rotate here (unless we arent rotating) - so just rotate and get lined up away from the wall.
                     # Should move this to be part of the controller, but for now it can just go here.
                     this_ee = [ee for ee in self.ee_list if ee.frame_id == ("EE"+gripper[:1])]
+
                     if this_ee != last_ee:
                         # We need to back up slighly in order to rotate
                         backup_movement = np.copy(self.ros_manager.pose)
                         backup_movement[1] = self.ros_manager.block_wall_y - self.qr_distances[0]/100.0 #m
                         self.ros_manager.set_nav_waypoint(backup_movement)
 
-                        # Then rotate in place
+                        # Then rotate in places
                         rotate_waypoint = np.copy(waypoint)
                         rotate_waypoint[1] = self.ros_manager.block_wall_y - self.qr_distances[0]/100.0 #m
                         print "Lining Up"
@@ -564,12 +723,17 @@ class RosManager():
         self.nav_waypoint_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=1)
         self.state_pub = rospy.Publisher("/robot/current_state", Int8, queue_size=1)
         self.nav_start_pub = rospy.Publisher("/robot/start_navigation", StartNavigation, queue_size=1)
+        self.ultrasonic_side_pub = rospy.Publisher("/robot/navigation/set_ultrasonic_side", String, queue_size=1)
+        self.rail = rospy.Publisher("/robot/arms/rail", Float64, queue_size=2)
+
 
         request_map = rospy.Service('/robot/request_map', RequestMap, self.get_map)
         
         self.set_init_pose = rospy.ServiceProxy('/set_pose', SetPose)
         self.nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
         self.arm_waypoint = rospy.ServiceProxy('/robot/arm_waypoint', ArmWaypoint)
+        self.set_elevator = rospy.ServiceProxy('/robot/arm/elevator_target', DynamixelControl)
+        self.set_rail = rospy.ServiceProxy('/robot/arm/rail_target', DynamixelControl)
 
         rospy.Subscriber("/odometry/filtered", Odometry, self.got_odom, queue_size=1)
 
@@ -676,6 +840,9 @@ class RosManager():
         print "> Moving..."
         success = self.nav_waypoint(p_s, pos_acc, rot_acc)
         print "> Movement Complete!"
+
+    def set_elevator_height(self,height):
+        self.elevator = rospy.Publisher("/robot/arms/elevator", Float64, queue_size=2)
 
     def set_arm_waypoint(self,gripper,waypoint):
         q = tf.transformations.quaternion_from_euler(0, 0, 1.5707)

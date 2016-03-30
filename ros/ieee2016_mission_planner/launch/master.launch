@@ -28,8 +28,9 @@
 
   
   <group ns="robot">
-      <node name="particle_filter" pkg="ieee2016_navigation" type="particle_filter.py"/>
-<!--       <node name="ultrasonic_estimator" pkg="ieee2016_navigation" type="ultrasonic_pose_estimator.py"/> -->
+      <node name="particle_filter" pkg="ieee2016_navigation" type="particle_filter.py" />
+      <node name="ultrasonic_estimator" pkg="ieee2016_navigation" type="ultrasonic_pose_estimator.py" />
+      <node name="arm_controller" pkg="ieee2016_arm_control" type="arm_controller.py" output="screen" />
       <node name="tf_broadcaster" pkg="ieee2016_tf_broadcaster" type="tf_broadcaster.py" />
       <node name="mecanum_control" pkg="ieee2016_controller" type="mecanum_controller.py" output="screen" />
       <node name="vehicle_control" pkg="ieee2016_controller" type="vehicle_controller.py" output="screen" />
@@ -47,7 +48,7 @@
     <param name="cam_1_width" value="1920"/>
     <param name="cam_1_heigth" value="1080"/>
 
-    <param name="cam_2_index" value="0"/>
+    <param name="cam_2_index" value="1"/>
     <param name="cam_2_width" value="1920"/>
     <param name="cam_2_heigth" value="1080"/>
   </node>
