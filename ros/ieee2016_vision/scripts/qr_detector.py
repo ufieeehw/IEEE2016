@@ -217,7 +217,7 @@ class DetectQRCodeTemplateMethod(object):
             self.base_path = os.path.join(TEMPLATES_FOLDER, str(dist)) #str(min(QR_DISTANCES, key=lambda x:abs(x-dist))))
 
             colors = {"/blue":blues,"/red":reds,"/green":greens,"/yellow":yellows}
-            thetas = [0,2,88,90,92,178,180,182,268,270,272,358]
+            thetas = [0,90,180,270]
 
             # Save raw image for manually getting templates from. Need to specify a camera for this.
             #cv2.imwrite(self.base_path+"/raw.jpg",self.camera.image)
@@ -258,8 +258,10 @@ class DetectQRCodeTemplateMethod(object):
                 rot_mat = cv2.getRotationMatrix2D((cols/2,rows/2),theta,1)
                 cv2.imwrite(self.base_path+color+"/"+str(theta)+".jpg",cv2.warpAffine(template,rot_mat,(cols,rows)))
 
-    def match_templates(self, camera, directive, args):
+    def match_templates(self, camera, args):
         '''
+        **Depreciated**
+
         Called by main program to process an image from the specified camera and to find QR Codes in that image.
         
         This method takes in the distance to the blocks. We will probably work at 2-4 different distances. Close up and far
@@ -268,9 +270,9 @@ class DetectQRCodeTemplateMethod(object):
         This method will publish BlockStamped messages that can be recived by the processing node.
 
         Derectives and special arguments are as follows (distances are from the camera to the wall):
-            inital_scan: perform normal scan for blocks .5 m away.
+            inital_scan: perform normal scan for blocks .29 m away.
                 args: distance_to_wall
-            half_block_scan: perform half block scan for blocks .5625 m away.
+            half_block_scan: perform half block scan for blocks .3525 m away.
                 args: distance_to_wall
             close_up_scan: Scan for a single block to line ourselves up with at .095 m away.
                 args: [distance_to_wall, block_color, qr_rotation]. These are specified so we don't have to search every color and every rotation.
@@ -278,19 +280,19 @@ class DetectQRCodeTemplateMethod(object):
 
         self.threshold = .65
         self.camera = camera
-        cam_to_base_link = 0#np.abs(camera.get_tf()[1])
+        self.normal_scan(args)
 
-        if directive == "inital_scan":
-            #distance_to_wall = args - cam_to_base_link
-            self.normal_scan(args)
-        elif directive == "half_block_scan":
-            #distance_to_wall = args - cam_to_base_link
-            self.normal_scan(args, offset=.0625)
-        elif directive == "close_up_scan":
-            #distance_to_wall = args - cam_to_base_link[0]
-            self.visual_servo(distance_to_wall)
+        # if directive == "inital_scan":
+        #     #distance_to_wall = args - cam_to_base_link
+        #     self.normal_scan(args)
+        # elif directive == "half_block_scan":
+        #     #distance_to_wall = args - cam_to_base_link
+        #     self.normal_scan(args, offset=.0625)
+        # elif directive == "close_up_scan":
+        #     #distance_to_wall = args - cam_to_base_link[0]
+        #     self.visual_servo(distance_to_wall)
 
-    def normal_scan(self, dist, offset=0, frames=8):
+    def normal_scan(self, camera, dist, frames=8):
         '''
         Uses template matching to test all combinations of colors and rotation for the specified dist and for the number of frames.
 
@@ -300,6 +302,10 @@ class DetectQRCodeTemplateMethod(object):
         etc etc until we've reached the fourth frame, then we restart again until weve checked 'frames' frames. This was done to keep image
         up to date.
         '''
+        fixed_distance = 29
+        offset = dist - fixed_distance
+        self.camera = camera
+
         colors = self.colors[self.distances.index(dist+offset)]
         blues = colors["/blue"]  
         reds = colors["/red"]
@@ -311,7 +317,7 @@ class DetectQRCodeTemplateMethod(object):
             # The process is detecing qr codes. 
             for frame_count in range(4):
                 # Load image from camera, save it
-                #
+                image = np.copy(self.camera.image)
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
                 gray = cv2.equalizeHist(gray)
 

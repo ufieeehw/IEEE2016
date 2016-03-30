@@ -154,6 +154,7 @@ class WaypointGenerator():
                     print "GRIPPER:", this_gripper
                     this_ee.gripper_positions[this_gripper] = block.color
                     grippers_to_actuate.append(this_gripper)
+                    self.picked_up += 1
 
                     # If we are out of grippers on the end effector we need to make the waypoint and start looking for the blocks with the next end effector.
                     if this_gripper+1 >= this_ee.gripper_count:
