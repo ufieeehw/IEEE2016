@@ -135,6 +135,6 @@ if __name__ == "__main__":
 	camera.activate()
 	waypoint_server = waypoint_utils.WaypointServer(1)
 	train = TrainBoxes(camera, waypoint_server)
-	print train.get_box_order(["red", "blue", "yellow"], ["box_1", "box_2", "box_3"], 8)
+	print train.get_box_order(["red", "blue", "yellow", "green"], ["box_1", "box_2", "box_3", "box_4"], 16)
 	camera.deactivate()
 	exit()
