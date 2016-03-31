@@ -464,8 +464,9 @@ class TestingStateMachine():
         print "> ========= Creating Limbs ========="
         # Defining Shia's limbs. 
         # 1 is on the left, 2 is on the right
+        self.ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=2) 
         self.ee2 = EndEffector(gripper_count=4, ee_number=2, cam_position=2)
-        self.ee_list = [self.ee2]
+        self.ee_list = [self.ee1,self.ee2]
 
         self.cam1 = Camera(cam_number=1)
         self.cam2 = Camera(cam_number=2)
@@ -482,8 +483,6 @@ class TestingStateMachine():
         self.waypoint_generator = WaypointGenerator(self.ee1, self.ee2)
         self.servo_controller = ServoController(self.ee1, self.ee2)
 
-        #self.point_cloud_generator = temp_GenerateBlockPoints(16)
-        #self.point_cloud_generator.generate_b_blocks()
         print
         print "> ========= State Machine Init Complete ========="
         print "> Waiting for map selection and start command."
@@ -578,17 +577,26 @@ class TestingStateMachine():
                 '''
                 The goals of this state are:
                     1. Move to pick up the first set of blocks with first end effector.
-                    2. Do this again for the second end effector and the second set of blocks.
+                    2. Visual Servo if possible.
+                    3. Do this again for the second end effector and the second set of blocks.
                 '''
                 print "=== STATE 3 ==="
 
                 print "> Executing waypoints."
 
-                # The arm waypoints list has 2 elements composed of each of the end effectors waypoints.
+                # The arm waypoints list has 2 elements composed of each of the end effector's waypoints.
                 for ee,arm_waypoint in enumerate(arm_waypoints):
                     for gripper, block_position, grippers_to_acutate in arm_waypoint:
                         waypoint = self.waypoint_generator.get_block_waypoint(ee_number, gripper_number, block_number)
-                        self.perform_pickup(waypoint)
+                        self.ros_manager.set_nav_waypoint(waypoint)
+
+                        # Check if we can do visual servoing to line ourselves up better.
+                        camera_block = self.ee_list[ee].gripper_positions[self.ee_list[ee].cam_position]
+                        if camera_block.orientation is not None:
+                            color = camera_block.color
+                            orientation = =camera_block.orientation                            
+
+                        self.perform_pickup()
 
                     # Go back to a point and then rotate for the other waypoint
                     self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,.2,0]), pos_acc = .1, rot_acc = .1, vel_profile=1)
@@ -598,7 +606,7 @@ class TestingStateMachine():
                         self.ros_manager.set_nav_waypoint(self.ros_manager.pose - np.array([0,0,3.14]), pos_acc = .1, rot_acc = .1, vel_profile=1)
                         self.ros_manager.ultrasonic_side_pub.publish(String(data="right"))
 
-            elif self.current_state == 3:
+            elif self.current_state == 4:
                 '''
                 The goals of this state are:
                     1. Move to train box_4.
@@ -607,11 +615,12 @@ class TestingStateMachine():
                     4. Turn around and repeat with the other end effector - starting from box 1.
                     5. If there are still blocks we haven't gotten, move back to reprocess B blocks.
                 '''
-                print "=== STATE 3 ==="
+                print "=== STATE 4 ==="
                 self.ros_manager.ultrasonic_side_pub.publish(String(data="None"))
 
-                # The boxes are 6 inches off the ground (.17m = 6.69in)
+                # The boxes are 6 inches off the ground (.17m = 6.69in) and we need to extend 4 inches out (4 inches = .1016 m).
                 self.ros_manager.set_elevator(.17)
+                self.ros_manager.set_rail(.1016)
 
                 # We are going to iterate over 2 directions and to the 4 boxes. The first direction drops off ee1 and the second drops off ee2.
                 # Right now we have to stop at each box, it would be good if we didnt have to.
@@ -666,17 +675,19 @@ class TestingStateMachine():
                     # Go back and reprocess B blocks
                     self.current_state = 2
 
-            elif self.current_state == 4:
+            elif self.current_state == 5:
                 '''
                 The goals of this state are:
                     1. Move to pickup solid blue blocks.
                     2. Pickup with both end effectors
                     3. Move to boat.
                     4. Drop blocks off.
+
+                We may need to retract the rail for this part.
                 '''
-                print "=== STATE 4 ==="
+                print "=== STATE 5 ==="
                 self.control.next_stage()
-                safe_space = self.waypoints['safe_c_rotate']
+                safe_space = self.waypoints['safe_a_rotate']
 
                 # Move to a place that we can move and rotate
                 self.ros_manager.set_nav_waypoint(safe_space, pos_acc = .1, rot_acc = .1, vel_profile=1)
@@ -685,7 +696,9 @@ class TestingStateMachine():
                 # Pick up with EE1
                 ee_1_waypoint = self.control.get_block_waypoint(ee_number=1, gripper_number=0, block_number=0)
                 self.control.get_pickup_stage()
-                self.perform_pickup(ee_1_waypoint)
+
+                self.ros_manager.set_nav_waypoint(ee_1_waypoint)
+                self.perform_pickup()
 
                 # Go back to a point and then rotate for the other waypoint
                 self.ros_manager.set_nav_waypoint(safe_space, pos_acc = .1, rot_acc = .1, vel_profile=1)
@@ -696,7 +709,9 @@ class TestingStateMachine():
                 # Pick up with EE2
                 ee_2_waypoint = self.control.get_block_waypoint(ee_number=2, gripper_number=0, block_number=8)
                 self.control.get_pickup_stage()
-                self.perform_pickup(ee_2_waypoint)
+
+                self.ros_manager.set_nav_waypoint(ee_2_waypoint)
+                self.perform_pickup()
 
                 self.ros_manager.set_nav_waypoint(safe_space, pos_acc = .1, rot_acc = .1, vel_profile=1)
 
@@ -718,13 +733,12 @@ class TestingStateMachine():
             #if self.current_state > 50: self.current_state = 0
             rate.sleep()
 
-    def perform_pickup(self, waypoint):
+    def perform_pickup(self):
         '''
-        Performs a pickup maneuver given a position of a place to be.
+        Performs a pickup maneuver with the elevator, rail, and servos.
         This requires that the control flow has been maintained so that we are on the right stage and block zone.
         '''
-        # Set nav waypoint then move the elevator to the correct height.
-        self.ros_manager.set_nav_waypoint(waypoint)
+        # Move the elevator to the desired height.
         self.ros_manager.set_elevator(self.get_height_of_blocks())
 
         estimated_distance_to_wall = self.ros_manager.block_wall_y - self.ros_manager.pose[1]
@@ -762,7 +776,6 @@ class RosManager():
         
         rospy.Subscriber("/odometry/filtered", Odometry, self.got_odom, queue_size=1)
         rospy.Subscriber('/settings/start_command', Bool, self.recieve_start_command)
-        rospy.Subscriber('/settings/map_version', Int8, self.determine_map_version)
 
     def got_odom(self,msg):
         msg = msg.pose
@@ -770,32 +783,33 @@ class RosManager():
         self.pose = np.array([msg.pose.position.x,msg.pose.position.y,yaw])
 
     def recieve_start_command(self,msg):
-        if msg.data: #and not self.state_machine.running:
-            if self.state_machine.map_version:
-                print "> State Machine Starting..."
-                nav_start = StartNavigation()
-                nav_start.map = self.get_map(None)[3]
+        rospy.Subscriber('/settings/map_version', Int8, self.determine_map_version)
+        while self.map_version = None:
+            print "Waiting for map version..."
+            time.sleep(.1)
 
-                # 1 is the map configuration where we start on the left, 2 is on the right.
-                    #self.state_machine.begin_1()
-                if self.state_machine.map_version == 1:
-                    start_pose = np.array([.2,2,1.57])
+        print "> State Machine Starting..."
+        nav_start = StartNavigation()
+        nav_start.map = self.get_map(None)[3]
 
-                    self.start_ekf(start_pose)
-                    nav_start.init_pose = start_pose
-                    self.nav_start_pub.publish(nav_start)
-                    self.state_machine.begin()
+        # 1 is the map configuration where we start on the left, 2 is on the right.
+            #self.state_machine.begin_1()
+        if self.state_machine.map_version == 1:
+            start_pose = np.array([.2,2,1.57])
 
-                elif self.state_machine.map_version == 2:
+            self.start_ekf(start_pose)
+            nav_start.init_pose = start_pose
+            self.nav_start_pub.publish(nav_start)
+            self.state_machine.begin()
 
-                    start_pose = np.array([self.far_wall_x - .2,.4,1.57])
+        elif self.state_machine.map_version == 2:
 
-                    self.start_ekf(start_pose)
-                    nav_start.init_pose = start_pose
-                    self.nav_start_pub.publish(nav_start)
-                    self.state_machine.begin()
-            else:
-                print "Error, no map version set."
+            start_pose = np.array([self.far_wall_x - .2,.4,1.57])
+
+            self.start_ekf(start_pose)
+            nav_start.init_pose = start_pose
+            self.nav_start_pub.publish(nav_start)
+            self.state_machine.begin()
 
     def start_ekf(self, position):
         q = tf.transformations.quaternion_from_euler(0, 0, position[2])

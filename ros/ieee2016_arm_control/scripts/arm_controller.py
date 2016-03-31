@@ -52,15 +52,22 @@ def make_2D_rotation_mat(angle):
 
 class ArmController():
     def __init__(self):
+        '''
+        There should be 3 dynamixles plugged into the system Index 1 for the arm controller and Index 2 and 3 for the elevator.
+        The height or extension can be specified with the services.
+
+        Dynamixles should rotate clockwise to extend or raise.
+        '''
+
         self.arm_waypoint = rospy.Publisher('/robot/arm_waypoint', PoseStamped, queue_size=2)
         self.nav_goal_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=2) #Just for visualization
-        self.elevator = rospy.Publisher("/robot/arms/elevator", Float64, queue_size=2)
-        self.rail = rospy.Publisher("/robot/arms/rail", Float64, queue_size=2)
+        # self.elevator = rospy.Publisher("/robot/arms/elevator", Float64, queue_size=2)
+        # self.rail = rospy.Publisher("/robot/arms/rail", Float64, queue_size=2)
 
         # For this we will use a service. When the arm moves to the desired location,
         # the service will return True to the person who called it
         rospy.Service('/robot/arm_waypoint', ArmWaypoint, self.move_arm)
-        rospy.Service("/robot/arm/extension_target", DynamixelControl, self.set_rail)
+        rospy.Service("/robot/arm/rail_target", DynamixelControl, self.set_rail)
         rospy.Service("/robot/arm/elevator_target", DynamixelControl, self.set_elevator)
 
         # For actually moving to the desired location.
@@ -68,6 +75,11 @@ class ArmController():
         
         self.tf_broad = tf.TransformBroadcaster()
         self.tf_listener = tf.TransformListener()
+
+        r = rospy.Rate(10) #hz
+        while not rospy.is_shutdown():
+            self.publish_tf()
+            r.sleep()
 
     def move_arm(self,srv):
         # Find the position of the Gripper in the base_link frame
@@ -92,7 +104,26 @@ class ArmController():
 
         return True
 
-    def publish_nav_goal(self,frame_id):
+    def publish_tf(self):
+        # Get all 3 dyanmixles current position
+        #position_1 = 
+        #position_2 = 
+        #position_3 = 
+        
+        #base_link -> elevator
+        self.tf_broad.sendTransform((0,0, .07112 + (position_2 + position_3)/2.0), 
+            tf.transformations.quaternion_from_euler(0,0,1.5707),
+            rospy.Time.now(), "elevator", "base_link")
+
+        #elevator -> end_effectors
+        self.tf_broad.sendTransform((0,.02667 + position_1,-.06925), 
+            tf.transformations.quaternion_from_euler(0,0,0),
+            rospy.Time.now(), "EE1", "elevator")
+        self.tf_broad.sendTransform((0,-.02667 - position_1,-.06925), 
+            tf.transformations.quaternion_from_euler(0,0,3.1416),
+            rospy.Time.now(), "EE2", "elevator")
+
+    def publish_nav_goal(self, frame_id):
         q = tf.transformations.quaternion_from_euler(0, 0, self.nav_goal[2])
         p_s = PoseStamped(
                 header=Header(
@@ -121,41 +152,49 @@ class ArmController():
         Set the elevator to some height in the tf frame: 'frame'.
 
         **These parameters needs to be set from the mech team.**
-        
         '''
+        # Remove the base height from it.
         des_height = srv.position - .119
 
         min_height = 0 #m
-        max_height = .3 #m
+        max_height = .31 #m
 
         radius = .007 #m
+
         print "Sending",des_height
         if min_height <= des_height <= max_height:
-            self.elevator.publish(Float64(data=des_height))
+            #self.elevator.publish(Float64(data=des_height))
             return True
         else:
             print "Too high! Can not move to height:",des_height
             return False
 
-    def set_rail(self, des_extend, frame="base_link"):
+    def set_rail(self, srv):
         '''
         Set the rail to some extended from base_link.
 
         **These parameters needs to be set from the mech team.**
         
+        Not sure how the TF will work, make sure to test this.
         '''
-        t = self.tf_listener.getLatestCommonTime(frame, '/base_link')
-        trans,rot = self.tf_listener.lookupTransform(frame, '/base_link', t)
-        des_height += np.abs(trans[1])
+        # t = self.tf_listener.getLatestCommonTime(frame, ee.frame_id)
+        # trans,rot = self.tf_listener.lookupTransform(frame, ee.frame_id, t)
+        # des_extend -= np.abs(trans[1])
+
+        # Zero extenstion would be where the gripper starts, so make sure to offset for that.
+        des_extend = srv.position - .1163
 
         min_dist = 0 #m
-        max_dist = .3 #m
+        max_dist = .2230 #m
+
         radius = .015875 #m
         print "Sending",des_extend
         if min_dist <= des_extend <= max_dist:
-            self.elevator.publish(Float64(data=des_extend/radius))
+            #self.elevator.publish(Float64(data=des_extend/radius))
+            return True
         else:
             print "Too extended! Can not move to extension:",des_extend
+            return False
 
 class ServoController():
     '''
@@ -169,17 +208,20 @@ class ServoController():
     def __init__(self, *ee):
         self.ee_list = ee
 
-        # Populate list of servos, associating each with a port on the maestro.
-        index = 0
-        for ee in self.ee_list:
-            for gripper in ee.gripper_positions:
-                print index
-                gripper.servo_id = index
-                index += 1
+        # List of servo positions and their corresponding actual plugged in positions.
+        self.acutal_servos = {self.ee_list[0]:{0:7,1:6,2:5,3:4},self.ee_list[1]:{0:0,1:1,2:2,3:3}}
+
+        # Populate list of servos, associating each with the correct port on the maestro.
+        for ee in self.acutal_servos:
+            for gripper in self.acutal_servos[ee]:
+                ee.gripper_positions[gripper].servo_id = self.acutal_servos[ee][gripper]
         
+        # It takes the servos time to move so we just wait for them to move
+        self.travel_time = 1 #s
+
         self.load_calibration_data()
         self.servos = maestro.Controller()
-        print "Servo Controller Initailzed"
+        print "> Servo Controller Initailzed."
 
     def load_calibration_data(self):
         '''
@@ -188,31 +230,37 @@ class ServoController():
         '''
         with open(CALIBRATION_FILE_URI, 'r') as infile:
             self.calibration_data = yaml.load(infile)
-        print "Data Loaded."
+        print "> Servo Calibration Data Loaded."
 
 
-    def close_grippers(self, ee, grippers_to_actuate):
+    def close_grippers(self, ee, grippers_to_actuate = -1):
         #Given an end effector and a list of grippers to close on that ee, close them.
+        if grippers_to_actuate == -1:
+            grippers_to_actuate = [0,1,2,3]
+
         for gripper_number in grippers_to_actuate:
             servo_id = ee.gripper_positions[gripper_number].servo_id
             self.servos.set_target(servo_id, self.calibration_data[servo_id]['closed'])
+        time.sleep(self.travel_time)
 
-    def open_grippers(self, ee, grippers_to_actuate):
+    def open_grippers(self, ee, grippers_to_actuate = -1):
         #Given an end effector and a list of grippers to open on that ee, open them.
+        if grippers_to_actuate == -1:
+            grippers_to_actuate = [0,1,2,3]
+
         for gripper_number in grippers_to_actuate:
             servo_id = ee.gripper_positions[gripper_number].servo_id
             self.servos.set_target(servo_id, self.calibration_data[servo_id]['opened'])
+        time.sleep(self.travel_time)
 
 if __name__ == "__main__":
-    rospy.init_node("arm_controller")
-    ee = EndEffector(4, 1, 2)
-    s = ServoController(ee)
+    #rospy.init_node("arm_controller")
+    ee_1 = EndEffector(4, 1, 2)
+    ee_2 = EndEffector(4, 1, 2)
+    s = ServoController(ee_1,ee_2)
 
-    r = rospy.Rate(10)
-    while not rospy.is_shutdown():
-        s.close_grippers(ee,[0,1,3])
-        print "closing"
-        time.sleep(2)
-        s.open_grippers(ee,[0,1,3])
-        print "opening"
-        time.sleep(2)
+    # r = rospy.Rate(10)
+    # while not rospy.is_shutdown():
+    s.close_grippers(ee_2   ,[0,1,3])
+    print "closing"
+    time.sleep(2)

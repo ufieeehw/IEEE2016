@@ -13,22 +13,25 @@ from geometry_msgs.msg import PoseStamped
 
 rospack = rospkg.RosPack()
 
-class WaypointGenerator():
+class NavWaypointGenerator():
 	'''
 	Simple way of saving all the waypoints we need to run.
+
+	Make sure all the vision waypoints are tested throughly.
+
+	There's a chance that the pickup wapypoints for ee2 are 3.14 rads off of ee1 waypoints.
+
+	Box_1 should be the leftmost box regardless of the map orientation.
 	'''
 	def __init__(self): 
-		self.req_waypoints = ['through_box', 'vision_b_1', 'vision_b_2', 'vision_c_1', 'vision_c_2', 'pickup_a_ee1_block0',
-		                     'pickup_a_ee1_block1','pickup_a_ee1_block2','pickup_a_ee1_block3','pickup_a_ee1_block4','pickup_a_ee1_block5',
-		                     'pickup_a_ee1_block6','pickup_a_ee1_block7','pickup_a_ee2_block0','pickup_a_ee2_block1','pickup_a_ee2_block',
-		                     'pickup_a_ee2_block3','pickup_a_ee2_block4','pickup_a_ee2_block5','pickup_a_ee2_block6','pickup_a_ee2_block7',
-		                     'pickup_b_ee1_block0','pickup_b_ee1_block1','pickup_b_ee1_block2','pickup_b_ee1_block3','pickup_b_ee1_block4',
-		                     'pickup_b_ee1_block5','pickup_b_ee1_block6','pickup_b_ee1_block7','pickup_b_ee2_block0','pickup_b_ee2_block1',
-		                     'pickup_b_ee2_block2','pickup_b_ee2_block3','pickup_b_ee2_block4','pickup_b_ee2_block5','pickup_b_ee2_block6',
-		                     'pickup_b_ee2_block7','pickup_c_ee1_block0','pickup_c_ee1_block1','pickup_c_ee1_block2','pickup_c_ee1_block3',
-		                     'pickup_c_ee1_block4','pickup_c_ee1_block5','pickup_c_ee1_block6','pickup_c_ee1_block7','pickup_c_ee2_block0',
-		                     'pickup_c_ee2_block1','pickup_c_ee2_block2','pickup_c_ee2_block3','pickup_c_ee2_block4','pickup_c_ee2_block5',
-		                     'pickup_c_ee2_block6','pickup_c_ee2_block7','safe_c_rotate', 'box_1','box_2','box_3','box_4', 'boat']
+		self.req_waypoints = ['through_box', 'vision_b_1', 'vision_b_2', 'vision_c_1', 'vision_c_2', 
+		'pickup_a_ee1_block0','pickup_a_ee1_block1','pickup_a_ee1_block2','pickup_a_ee1_block3','pickup_a_ee1_block4','pickup_a_ee1_block5','pickup_a_ee1_block6','pickup_a_ee1_block7',
+		'pickup_a_ee2_block0','pickup_a_ee2_block1','pickup_a_ee2_block2','pickup_a_ee2_block3','pickup_a_ee2_block4','pickup_a_ee2_block5','pickup_a_ee2_block6','pickup_a_ee2_block7',
+		'pickup_b_ee1_block0','pickup_b_ee1_block1','pickup_b_ee1_block2','pickup_b_ee1_block3','pickup_b_ee1_block4','pickup_b_ee1_block5','pickup_b_ee1_block6','pickup_b_ee1_block7',
+		'pickup_b_ee2_block0','pickup_b_ee2_block1','pickup_b_ee2_block2','pickup_b_ee2_block3','pickup_b_ee2_block4','pickup_b_ee2_block5','pickup_b_ee2_block6','pickup_b_ee2_block7',
+		'pickup_c_ee1_block0','pickup_c_ee1_block1','pickup_c_ee1_block2','pickup_c_ee1_block3','pickup_c_ee1_block4','pickup_c_ee1_block5','pickup_c_ee1_block6','pickup_c_ee1_block7',
+		'pickup_c_ee2_block0','pickup_c_ee2_block1','pickup_c_ee2_block2','pickup_c_ee2_block3','pickup_c_ee2_block4','pickup_c_ee2_block5','pickup_c_ee2_block6','pickup_c_ee2_block7',
+		'safe_a_rotate', 'box_1','box_2','box_3','box_4', 'boat']
 
 		map_version = raw_input("Which map version? ")
 
@@ -142,6 +145,6 @@ if __name__ == "__main__":
 	if len(sys.argv) > 1:
 		sub = rospy.Subscriber("/odometry/filtered", Odometry, callback)
 	else:
-		w = WaypointGenerator()
+		w = NavWaypointGenerator()
 
 	rospy.spin()

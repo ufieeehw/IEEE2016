@@ -89,39 +89,31 @@ class TFPublisher():
                         rospy.Time.now(), "cam_1_vision", "elevator")
         self.tf_broad.sendTransform((-.072,-.0584,.0354), 
                         tf.transformations.quaternion_from_euler(1.57,3.1415,-1.57),
-                        rospy.Time.now(), "cam_2_vision", "cam_2_adjust")
+                        rospy.Time.now(), "cam_2_vision", "elevator")
         self.tf_broad.sendTransform((.072,.0584,.0354), 
                         tf.transformations.quaternion_from_euler(0,0,0),
                         rospy.Time.now(), "cam_1_pose", "elevator")
         self.tf_broad.sendTransform((-.072,-.0584,.0354), 
                         tf.transformations.quaternion_from_euler(0,0,3.1415),
-                        rospy.Time.now(), "cam_2_pose", "cam_2_adjust")
-        
-        # self.tf_broad.sendTransform((0,.004,.006), 
-        #                 tf.transformations.quaternion_from_euler(0,0,0),
-        #                 rospy.Time.now(), "cam_2_adjust", "elevator")
-        self.tf_broad.sendTransform((0,0,0), 
-                        tf.transformations.quaternion_from_euler(0,0,0),
-                        rospy.Time.now(), "cam_2_adjust", "elevator")
-
-
+                        rospy.Time.now(), "cam_2_pose", "elevator")
+    
         # # base_link -> imu
         # self.tf_broad.sendTransform((0,0,0), 
         #                 tf.transformations.quaternion_from_euler(0,0,0),
         #                 rospy.Time.now(), "imu", "base_link")
 
-        # elevator -> Each End Effector
-        self.tf_broad.sendTransform((0,.02667,-.06925), 
-                tf.transformations.quaternion_from_euler(0,0,0),
-                rospy.Time.now(), "EE1", "elevator")
-        self.tf_broad.sendTransform((0,-.02667,-.06925), 
-                tf.transformations.quaternion_from_euler(0,0,3.1416),
-                rospy.Time.now(), "EE2", "elevator")
+        # elevator -> Each End Effector   -   being published by arm_controller
+        # self.tf_broad.sendTransform((0,.02667,-.06925), 
+        #         tf.transformations.quaternion_from_euler(0,0,0),
+        #         rospy.Time.now(), "EE1", "elevator")
+        # self.tf_broad.sendTransform((0,-.02667,-.06925), 
+        #         tf.transformations.quaternion_from_euler(0,0,3.1416),
+        #         rospy.Time.now(), "EE2", "elevator")
 
-        # base_link -> elevator 
-        self.tf_broad.sendTransform((0,0,.07112), 
-                tf.transformations.quaternion_from_euler(0,0,1.5707),
-                rospy.Time.now(), "elevator", "base_link")
+        # base_link -> elevator  -   being published by arm_controller
+        # self.tf_broad.sendTransform((0,0,.07112), 
+        #         tf.transformations.quaternion_from_euler(0,0,1.5707),
+        #         rospy.Time.now(), "elevator", "base_link")
 
         # base_footprint -> base_link
         self.tf_broad.sendTransform((0,0,.119), 

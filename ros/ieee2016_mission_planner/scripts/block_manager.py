@@ -22,6 +22,7 @@ class Block():
     def __init__(self, color, orientation = None, coordinate = 'na'):
         self.color = color
         self.orientation = orientation
+        self.coordinate = None
         # This will allow the program to input a point message from ros or a list from python.
         try:
             self.coordinate = np.array([coordinate.x,coordinate.y,coordinate.z])
@@ -30,8 +31,8 @@ class Block():
 
     def __repr__(self):
         # How the object prints
-        return "%06s : %.2f,%.2f" % (self.color,self.coordinate[0],self.coordinate[1])
-
+        return "%06s - rot: %d" % (self.color, self.orientation)
+        
 class Gripper():
     '''
     There are multiple grippers on the end of each end effector. This deals with keeping track of the blocks in
@@ -40,6 +41,7 @@ class Gripper():
     def __init__(self, parent_ee_number, gripper_number, block):
         self.frame_id = str(parent_ee_number) + "-G" + str(gripper_number)
         self.block = block
+        self.block_rotation = None
         self.servo_id = None
 
     def  __repr__(self):
@@ -117,20 +119,18 @@ class WaypointGenerator():
 
     '''
     def __init__(self, *ee):
-        self.ee_pose_pub = rospy.Publisher("/arm/waypoint", PoseStamped, queue_size=1)
-
         self.ee_list = ee
 
         self.picked_up = 0
 
-        #self.tf_listener = tf.TransformListener()
         print "> Waypoint Generator Online."
 
     def generate_arm_waypointsV2(self, blocks_list):
         '''
         New waypoint generator since the data we will get is slightly different after some design changes.
 
-        Waypoints are returned as a list [[ee1_gripper, ee1_block_number_for_gripper, grippers_to_actuate],[ee2_gripper, ee2_block_number_for_gripper, grippers_to_actuate]]
+        Waypoints are returned as a list [[ee1_gripper, ee1_block_number_for_gripper, grippers_to_actuate],[ee2_gripper, ee2_block_number_for_gripper, grippers_to_actuate]].
+        The updated end effector list can be read from this class too.
         '''
         waypoints_list = [[],[]]
 
@@ -152,7 +152,7 @@ class WaypointGenerator():
                 if block.color is not None:
                     # Add block to gripper and flag that we need to actuate that gripper
                     print "GRIPPER:", this_gripper
-                    this_ee.gripper_positions[this_gripper] = block.color
+                    this_ee.gripper_positions[this_gripper] = block
                     grippers_to_actuate.append(this_gripper)
                     self.picked_up += 1
 
@@ -185,8 +185,8 @@ class WaypointGenerator():
                 waypoints_list[ee_number-1].append([this_gripper-1, block_number-1, grippers_to_actuate])
                 grippers_to_actuate = []
                 
-
-        waypoints_list[ee_number-1].append([this_gripper-1, block_number-1, grippers_to_actuate])
+        if len(grippers_to_actuate) < 1: return waypoints_list
+        waypoints_list[ee_number-1].append([this_gripper-1, block_number, grippers_to_actuate])
 
         print self.ee_list
         return waypoints_list
@@ -534,17 +534,19 @@ if __name__ == "__main__":
     ee2 = EndEffector(gripper_count=4, ee_number=2, cam_position=2)
     ee_list = [ee1,ee2]
     w = WaypointGenerator(ee1,ee2)
-    blocks_1 = [Block(None),Block(None),Block(None),Block(None)]
-    blocks_2 = [Block('blue'),Block('red'),Block('green'),Block(None)]
-    blocks_3 = [Block('red'),Block('blue'),Block(None),Block('red')]
-    blocks_4 = [Block('green'),Block('red'),Block('blue'),Block('yellow')]
+    blocks_1 = [Block("red", 0),Block('blue', 1),Block('red', 2),Block('yellow', 5)]
+    blocks_2 = [Block(None, 3),Block(None, 0),Block(None, 1),Block(None, 6)]
+    blocks_3 = [Block(None),Block(None),Block(None),Block(None)]
+    blocks_4 = [Block(None),Block(None),Block(None),Block(None)]
     
     waypoints = w.generate_arm_waypointsV2([blocks_1,blocks_2,blocks_3,blocks_4])
     print waypoints
 
-    for ee_number in range(2):
-        for target in waypoints[ee_number]:
-            print w.get_block_waypoint(ee_number, target[0], target[1])
+    print w.ee_list
+
+    # for ee_number in range(2):
+    #     for target in waypoints[ee_number]:
+    #         print w.get_block_waypoint(ee_number, target[0], target[1])
 
     # ee1 = EndEffector(gripper_count=4, ee_number=1, cam_position=1)
     # ProcessBlocks(ee1)
