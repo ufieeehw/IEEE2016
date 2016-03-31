@@ -53,6 +53,12 @@ class DynamixelController():
 		print servo_id
 		print distance_meters
 
+	def dynamixel_motion(self, servo_id):
+		if self.d.get_speed(servo_id) < 10:
+			return True
+		else:
+			return False
+
 d = DynamixelController()
 d.set_dynamixels([1, 2], .006, 1)
 d.dynamixel_state([1, 2], 1)
