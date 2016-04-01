@@ -769,8 +769,6 @@ class RosManager():
         self.nav_start_pub = rospy.Publisher("/robot/start_navigation", StartNavigation, queue_size = 1)
         self.ultrasonic_side_pub = rospy.Publisher("/robot/navigation/set_ultrasonic_side", String, queue_size = 1)
 
-        request_map = rospy.Service('/robot/request_map', RequestMap, self.get_map)
-
         self.set_init_pose = rospy.ServiceProxy('/set_pose', SetPose)
         self.nav_waypoint = rospy.ServiceProxy('/robot/nav_waypoint', NavWaypoint)
         self.arm_waypoint = rospy.ServiceProxy('/robot/arm_waypoint', ArmWaypoint)
@@ -781,7 +779,11 @@ class RosManager():
         rospy.init_node('main_control')
 
         rospy.Subscriber("/odometry/filtered", Odometry, self.got_odom, queue_size = 1)
+        rospy.Subscriber('/settings/map_version', Int8, self.determine_map_version)
         rospy.Subscriber('/settings/start_command', Bool, self.recieve_start_command)
+
+        # Used to listen for the map version before the start command is recieved.
+        self.listen_for_map = True
 
     def got_odom(self, msg):
         msg = msg.pose
@@ -789,17 +791,19 @@ class RosManager():
         self.pose = np.array([msg.pose.position.x, msg.pose.position.y, yaw])
 
     def recieve_start_command(self, msg):
-        rospy.Subscriber('/settings/map_version', Int8, self.determine_map_version)
+        
         while self.map_version == None:
             print "Waiting for map version..."
             time.sleep(.1)
+        self.listen_for_map = False
+        
+        request_map = rospy.Service('/robot/request_map', RequestMap, self.get_map)
 
         print "> State Machine Starting..."
         nav_start = StartNavigation()
         nav_start.map = self.get_map(None)[3]
 
         # 1 is the map configuration where we start on the left, 2 is on the right.
-            # self.state_machine.begin_1()
         if self.state_machine.map_version == 1:
             start_pose = np.array([.2, 2, 1.57])
 
@@ -855,10 +859,8 @@ class RosManager():
         self.set_init_pose(p_c_s)
 
     def determine_map_version(self, msg):
-        self.state_machine.map_version = msg.data
-        self.map_version_set = True
-
-        print "> Map Version:", self.state_machine.map_version
+        if self.listen_for_map:
+            self.state_machine.map_version = msg.data
 
     def set_nav_waypoint(self, waypoint, pos_acc = 0, rot_acc = 0, vel_profile = 2):
         q = tf.transformations.quaternion_from_euler(0, 0, waypoint[2])

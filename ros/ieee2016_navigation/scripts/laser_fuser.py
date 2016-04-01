@@ -127,7 +127,8 @@ class LaserFuser():
         self.scan_pub.publish(self.fused_scan)
 
     def check_map_version(self):
-        if np.mean(self.scans[0]) < np.mean(self.scans[2]):
+        # Take the average of the left and right sides, removing any NaN's or Inf's 
+        if np.nanmean(self.scans[0][np.isfinite(self.scans[0])]) < np.nanmean(self.scans[2][np.isfinite(self.scans[2])]):
             self.map_version_pub.publish(Int8(data=1))
         else:
             self.map_version_pub.publish(Int8(data=2))
