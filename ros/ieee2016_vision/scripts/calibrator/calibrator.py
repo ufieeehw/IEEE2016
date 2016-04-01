@@ -45,6 +45,7 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 	def __init__(self, camera):
 		self.camera = camera
 		self.colors = {}
+		self.__hold_values = False
 
 		# The dimensions of a display frame on the GUI
 		self.__image_shape = [480, 270]
@@ -116,6 +117,22 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 			return self.__image_shape[1]
 		else:
 			return self.__image_shape
+
+	def get_hold_value(self, state):
+		'''
+		Returns whether or not to hold a value instead of clearing it upon
+		being disabled.
+		'''
+		return self.__hold_values
+
+	def set_hold_value(self, state):
+		'''
+		Makes certain GUI objects hold their values upon being disabled when
+		set to true as opposed to clearing them when set to false. The objects
+		aforementioned objects are the selection sliders, new color name
+		setting, and the selection frame display stream.
+		'''
+		self.__hold_values = state
 
 	def disable_interface(self):
 		'''
@@ -313,6 +330,7 @@ class SelectionPane(Pane):
 		self.__gui.selection_color_label.setEnabled(True)
 		self.__gui.selection_color_setting.setEnabled(True)
 		self.__gui.selection_frame.setEnabled(True)
+
 		self.is_enabled = True
 
 	def disable(self):
@@ -322,10 +340,14 @@ class SelectionPane(Pane):
 		self.__gui.selection_color_label.setEnabled(False)
 		self.__gui.selection_color_setting.setEnabled(False)
 		self.__gui.selection_frame.setEnabled(False)
-		self.stop_display()
+
+		if (not self.__gui.get_hold_value):
+			self.stop_display()
+
 		self.__selection_manager.disable()
 		self.__overlap_prevention_manager.disable()
 		self.__calibration_manager.disable()
+
 		self.is_enabled = False
 
 	def set_color(self, color):
@@ -430,6 +452,7 @@ class DetectionPane(Pane):
 		self.__gui.averaging_setting.setEnabled(True)
 		self.__gui.display_type_group.setEnabled(True)
 		self.__gui.detection_frame.setEnabled(True)
+
 		self.is_enabled = True
 
 	def disable(self):
@@ -442,8 +465,11 @@ class DetectionPane(Pane):
 		self.__gui.averaging_setting.setEnabled(False)
 		self.__gui.display_type_group.setEnabled(False)
 		self.__gui.detection_frame.setEnabled(False)
+
 		self.stop_display()
+
 		self.__range_manager.disable()
+
 		self.is_enabled = False
 
 	def set_color(self, color):
@@ -583,7 +609,8 @@ class ColorManager(QtCore.QObject):
 		self.__gui.delete_color_button.setEnabled(False)
 		self.__is_enabled = False
 
-		self.__clear()
+		if (not self.__gui.get_hold_value):
+			self.__clear()
 
 	def __clear(self):
 		'''
@@ -696,7 +723,8 @@ class SelectionManager():
 		self.__gui.selection_managment_group.setEnabled(False)
 		self.__is_enabled = False
 
-		self.__clear()
+		if (not self.__gui.get_hold_value):
+			self.__clear()
 
 	def __clear(self):
 		'''
@@ -1016,6 +1044,8 @@ class CalibrationManager(QtGui.QMainWindow):
 		Takes control of the GUI, any interface objects that could interfere
 		with the running calibration.
 		'''
+		self.__gui.set_hold_value(True)
+
 		self.__gui.disable_interface()
 		self.enable()
 		self.__gui.progress_bar.setTextVisible(True)
