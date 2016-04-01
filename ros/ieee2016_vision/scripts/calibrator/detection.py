@@ -1,7 +1,7 @@
 #!/usr/bin/python2
 #==============================================================================
 # Project: Machine Vision - Color Detection
-# Module: Detection														v5.0
+# Module: Detection														v5.1
 #
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
@@ -99,7 +99,7 @@ class Image():
 			raise ValueError("The point that was passed is not within the boundaries of the frame")
 
 		else:
-			cv2.circle(self.__frame, point, 2, (255, 255, 255), 4)
+			cv2.circle(self.__frame, tuple(point), 2, (255, 255, 255), 4)
 
 	def draw_box(self, box_points):
 		'''
@@ -109,7 +109,7 @@ class Image():
 			raise TypeError("The value of box_points must be four (x, y) points")
 
 		else:
-			for point in range(4):
+			for point in box_points:
 				if (len(point) != 2):
 					raise TypeError("The value of box_points must be four (x, y) points")
 				elif ((point[0] > self.__original_dimensions[0]) or (point[1] > self.__original_dimensions[1])):
@@ -292,7 +292,7 @@ class ObjectDetector():
 
 		else:
 			for color in colors:
-				center = self.__get_box_center(color)
+				center = self.get_box_center(color)
 				if (center):
 					self.__image.draw_point(center)
 					self.__image.draw_box(self.__boxes[color])
