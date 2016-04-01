@@ -244,3 +244,84 @@ class CalibrationFile():
 
 		else:
 			self.__overlap_prevention_rules[color].remove(rule)
+
+
+class ColorCalibrator():
+	'''
+	This class contains all of the methods needed to generate a calibration
+	based on the selected area in a frame. Specifically, it ensures that the
+	range will lead to selecting nothing in the prevention selection boxes, the
+	center point is kept within the specified selection box, and determines the
+	average saturation and value over the hue range for balancing later frames.
+	'''
+	def __init__(self, camera, calibration_file, gui_calibration_manager = None):
+		self.__calibration_file = calibration_file
+		self.__camera = camera
+		self.__color = ""
+
+		# The number of frames to average for object detection
+		self.__averaging = 16
+
+		# The manager object if the GUI is being used (not required)
+		self.__gui = gui_calibration_manager
+
+	def get_averaging(self):
+		'''
+		Returns the averaging value for color calibration.
+		'''
+		return self.__averaging
+
+	def get_step_range(self):
+		'''
+		Returns the HSV range for the last detection step.
+		'''
+		if (self.__gui and self.__step_range):
+			return self.__step_range
+
+	def get_step_progress(self):
+		'''
+		Returns the overall progress of the calibrator.
+		'''
+		if (self.__gui and self.__step_progress):
+			return self.__step_progress
+
+	def get_step_frame(self):
+		'''
+		Returns the detection frame for the last detection step.
+		'''
+		if (self.__gui):
+
+			# Pull the requested frame to display the image on
+			self.__image.set_hold_reduced(True)
+			display_type = self.__gui.get_display_type()
+			if (display_type == "unfiltered"):
+				self.__image.resize()
+			elif (display_type == "reduced"):
+				self.__image.reduce_colors(16)
+			elif ((display_type == "extracted") and self.__color):
+				self.__image.extract_color(self.__color)
+			self.__image.set_hold_reduced(False)
+
+			# Draw the detection bounding box and center point if one exists
+			self.__detect.draw_selection([self.__color])
+
+			# Reformat the image to RGB, which is what QImage takes, and emit an update signal
+			self.__image.reformat_to_rgb()
+			step_frame = self.__image.get_frame()
+
+			return step_frame
+
+	def calibrate(self, color):
+		pass
+
+	def __calculate_hsv_range(self, frame):
+		pass
+
+	def __eliminate_overlap(self):
+		pass
+
+	def __filter_background(self):
+		pass
+
+	def __calculate_sv_average(self):
+		pass
