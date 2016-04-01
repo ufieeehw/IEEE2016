@@ -15,7 +15,7 @@ import time
 
 from calibrator_gui import Ui_MainWindow
 from camera import Camera
-from color_calibration import CalibrationFile
+from color_calibration import CalibrationFile, ColorCalibrator
 from detection import Image, ObjectDetector
 
 
@@ -44,7 +44,7 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 
 	def __init__(self, camera):
 		self.camera = camera
-		self.__colors = {}
+		self.colors = {}
 
 		# The dimensions of a display frame on the GUI
 		self.__image_shape = [480, 270]
@@ -58,9 +58,10 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.__selection_manager = SelectionManager(self)
 		self.__overlap_prevention_manager = OverlapPreventionManager(self)
 		self.__range_manager = RangeManager(self)
-		self.__selection_pane = SelectionPane(self, self.__color_manager, self.__selection_manager, self.__overlap_prevention_manager)
+		self.__calibration_manager = CalibrationManager(self, self.__color_manager.colors_updated)
+		self.__selection_pane = SelectionPane(self, self.__color_manager, self.__selection_manager, self.__overlap_prevention_manager, self.__calibration_manager)
 		self.__detection_pane = DetectionPane(self, self.__range_manager)
-		self.__disable_interface()
+		self.disable_interface()
 
 		# Enable menu file manipulation and program quitting
 		self.menu_new.triggered.connect(lambda: self.__load_file("new"))
@@ -74,16 +75,17 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.selection_color_setting.activated.connect(self.set_selection_color)
 		self.detection_color_setting.activated.connect(self.set_detection_color)
 
-		# Links the color getter functions to the ones in their panes
+		# Links the pane getter functions to the ones in their panes
 		self.get_selection_color = self.__selection_pane.get_color
 		self.get_detection_color = self.__detection_pane.get_color
+		self.get_averaging = self.__detection_pane.get_averaging
 
 	def set_selection_color(self, index):
 		'''
 		Sets the selection color based on its GUI button.
 		'''
 		if (index >= 0):
-			color = self.__colors[index]
+			color = self.colors[index]
 		else:
 			color = ""
 
@@ -95,7 +97,7 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		Sets the detection color based on its GUI button.
 		'''
 		if (index >= 0):
-			color = self.__colors[index]
+			color = self.colors[index]
 		else:
 			color = ""
 
@@ -114,7 +116,7 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		else:
 			return self.__image_shape
 
-	def __disable_interface(self):
+	def disable_interface(self):
 		'''
 		Disables all components of the GUI via their managers.
 		'''
@@ -124,7 +126,7 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.__detection_pane.disable()
 		self.__color_manager.disable()
 
-	def __file_loaded_interface(self):
+	def file_loaded_interface(self):
 		'''
 		Enables all GUI objects that are not dependent on colors being set.
 		'''
@@ -132,37 +134,6 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.__selection_pane.enable()
 		self.__color_manager.enable()
 		self.__detection_pane.enable()
-
-	def __calibration_interface(self, stage):
-		'''
-		Freezes parts of the interface that could interfere with an ongoing
-		calibration and sets the detection frame, averaging setting, and
-		HSV values based on incomming calibration data.
-		'''
-		# Disable parts of the interface that could interfere with the calibration
-		if (stage == "capture"):
-
-			# Uses the no loaded file interface as a base
-			self.__no_file_interface()
-
-			# Display type
-			self.display_type_group.setEnabled(True)
-
-			# Holds the detection color so it can be restored after calibration
-			self.__detection_color_hold = self.__detection_pane.get_color()
-
-		# Update relevant areas of the interface to display ongoing calibration data
-		elif (stage == "update"):
-			pass
-
-		# Enable the interface to the extent that it was enabled before calibration
-		elif (stage == "release"):
-
-			# Enables the interface and restores the detection setting that was held
-			self.__file_loaded_interface()
-			self.__selection_pane.set_color(self.__selection_pane.get_color())
-			self.__detection_pane.set_color(self.__detection_color_hold)
-
 
 	def __load_file(self, mode):
 		'''
@@ -180,7 +151,8 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 	 		self.__selection_pane.stop_display()
 			self.calibration_file = CalibrationFile(file, mode, self.__image_shape)
  			self.__update_colors()
-			self.__file_loaded_interface()
+ 			self.__calibration_manager.reload()
+			self.file_loaded_interface()
 
 			# Prints the message relevant to the operation performed
 			if (mode == "new"):
@@ -205,7 +177,7 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		# Clears the existing items in the relevant objects
 		self.selection_color_setting.clear()
 		self.detection_color_setting.clear()
-		self.__colors = {}
+		self.colors = {}
 
 		for color in self.calibration_file.get_available_colors():
 
@@ -216,12 +188,12 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 			self.detection_color_setting.setItemText(item, _translate("MainWindow", color, None))
 
 			# A dictionary storing which index each color is stored under
-			self.__colors[item] = color
+			self.colors[item] = color
 			item += 1
 
 		# Selects previously set selection color from index if available
-		for index in range(len(self.__colors)):
-			if (self.__colors[index] == self.get_selection_color()):
+		for index in range(len(self.colors)):
+			if (self.colors[index] == self.get_selection_color()):
 				self.selection_color_setting.setCurrentIndex(index)
 				break
 			else:
@@ -229,8 +201,8 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.set_selection_color(self.selection_color_setting.currentIndex())
 
 		# Selects previously set detection color from index if available
-		for index in range(len(self.__colors)):
-			if (self.__colors[index] == self.get_detection_color()):
+		for index in range(len(self.colors)):
+			if (self.colors[index] == self.get_detection_color()):
 				self.detection_color_setting.setCurrentIndex(index)
 				break
 			else:
@@ -323,7 +295,7 @@ class SelectionPane(Pane):
 	SelectionManager, and OverlapPreventionManager objects and functions
 	related to object detection.
 	'''
-	def __init__(self, gui, color_manager, selection_manager, overlap_prevention_manager):
+	def __init__(self, gui, color_manager, selection_manager, overlap_prevention_manager, calibration_manager):
 		self.__gui = gui
 		super(self.__class__, self).__init__(self.__gui.selection_frame, self.__stream_frames)
 
@@ -331,6 +303,7 @@ class SelectionPane(Pane):
 		self.__color_manager = color_manager
 		self.__selection_manager = selection_manager
 		self.__overlap_prevention_manager = overlap_prevention_manager
+		self.__calibration_manager = calibration_manager
 
 	def enable(self):
 		'''
@@ -348,8 +321,10 @@ class SelectionPane(Pane):
 		self.__gui.selection_color_label.setEnabled(False)
 		self.__gui.selection_color_setting.setEnabled(False)
 		self.__gui.selection_frame.setEnabled(False)
+		self.stop_display()
 		self.__selection_manager.disable()
 		self.__overlap_prevention_manager.disable()
+		self.__calibration_manager.disable()
 		self._Pane__is_enabled = False
 
 	def set_color(self, color):
@@ -363,10 +338,12 @@ class SelectionPane(Pane):
 			self._Pane__start_display()
 			self.__selection_manager.enable()
 			self.__overlap_prevention_manager.enable()
+			self.__calibration_manager.enable()
 
 		else:
 			self.__selection_manager.disable()
 			self.__overlap_prevention_manager.disable()
+			self.__calibration_manager.disable()
 			self.stop_display()
 			self._Pane__color = ""
 
@@ -464,6 +441,7 @@ class DetectionPane(Pane):
 		self.__gui.averaging_setting.setEnabled(False)
 		self.__gui.display_type_group.setEnabled(False)
 		self.__gui.detection_frame.setEnabled(False)
+		self.stop_display()
 		self.__range_manager.disable()
 		self._Pane__is_enabled = False
 
@@ -482,6 +460,13 @@ class DetectionPane(Pane):
 			self.__range_manager.disable()
 			self.stop_display()
 			self._Pane__color = ""
+
+	def get_averaging(self):
+		'''
+		Returns the amount of frames that are currently being averaged for
+		detection.
+		'''
+		return self.__averaging
 
 	def __set_averaging(self, value):
 		'''
@@ -955,6 +940,100 @@ class RangeManager():
 			# Saves the values to the calibration object
 			self.__gui.calibration_file.set_hsv_range(self.__gui.get_detection_color(), [minimum_values, maximum_values])
 			self.__gui.status_bar.showMessage("The HSV value ranges for '%s' have been saved to memory" % (self.__gui.get_detection_color()))
+
+
+class CalibrationManager():
+	'''
+	Used when calibrating for a specific color. Locks the interface and uses
+	the display frame, HSV range display, and progress bar to show the ongoing
+	status of the calibration.
+	'''
+	def __init__(self, gui, colors_updated_signal):
+		self.__gui = gui
+		self.__colors_updated = colors_updated_signal
+		self.__is_enabled = False
+
+		# Variables used to manage the captured state and reset it afterwards
+		self.__state = "released"
+		self.__detection_color_cap = -1
+		self.__averaging_cap = 2
+
+		# Links the calibrate button to it's manager function
+		self.__gui.calibrate_button.clicked.connect(self.__calibrate_clicked)
+
+	def enable(self):
+		'''
+		Enables calibration functionality.
+		'''
+		self.__gui.calibrate_button.setEnabled(True)
+		self.__gui.progress_bar.setEnabled(True)
+		self.__is_enabled = True
+
+	def disable(self):
+		'''
+		Disables calibration functionality.
+		'''
+		self.__gui.calibrate_button.setEnabled(False)
+		self.__gui.progress_bar.setEnabled(False)
+		self.__is_enabled = False
+
+	def reload(self):
+		'''
+		Used to reload the actual calibration object if the calibration file
+		is changed.
+		'''
+		self.__calibrator = ColorCalibrator(self.__gui.calibration_file, self)
+
+	def __calibrate_clicked(self):
+		'''
+		Manages the function of the calibrate button based on the current state
+		of this object (i.e. captured or released)
+		'''
+		if (self.__is_enabled):
+			if (self.__state == "captured"):
+				self.__release()
+			elif (self.__state == "released" and self.__calibrator):
+				self.__capture()
+			else:
+				self.__gui.status_bar.showMessage("ERROR: Unable to calibrate because no calibration file loaded.")
+
+	def __capture(self):
+		'''
+		Takes control of the GUI, any interface objects that could interfere
+		with the running calibration.
+		'''
+		self.__gui.disable_interface()
+		self.enable()
+		self.__gui.display_type_group.setEnabled(True)
+
+		# Storing variables to be restored after capture is released
+		self.__detection_color_cap = self.__gui.detection_color_setting.currentIndex()
+		self.__averaging_cap = self.__gui.get_averaging()
+
+		# Managing the captured state
+		self.__gui.calibrate_button.setText("Cancel")
+		self.__state = "captured"
+
+		# Sets the detection color and averaging parameters in the GUI
+		self.__gui.detection_color_setting.setCurrentIndex(self.__gui.selection_color_setting.currentIndex())
+		self.__gui.averaging_setting.setValue(self.__calibrator.get_averaging())
+
+	def __release(self):
+		'''
+		Restores the values that were originally on the GUI and enables all of
+		the objects that were active before the calibration began.
+		'''
+		self.__gui.file_loaded_interface()
+		self.__colors_updated.emit()
+
+		# Restoring the captured variables
+		self.__gui.detection_color_setting.setCurrentIndex(self.__detection_color_cap)
+		self.__gui.set_detection_color(self.__detection_color_cap)
+		self.__gui.averaging_setting.setValue(self.__averaging_cap)
+
+		# Managing the captured state
+		self.__gui.calibrate_button.setText("Calibrate")
+		self.__state = "released"
 
 
 if __name__ == '__main__':

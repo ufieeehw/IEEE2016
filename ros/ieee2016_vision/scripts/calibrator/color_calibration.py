@@ -244,3 +244,42 @@ class CalibrationFile():
 
 		else:
 			self.__overlap_prevention_rules[color].remove(rule)
+
+
+class ColorCalibrator():
+	'''
+	This class contains all of the methods needed to generate a calibration
+	based on the selected area in a frame. Specifically, it ensures that the
+	range will lead to selecting nothing in the prevention selection boxes, the
+	center point is kept within the specified selection box, and determines the
+	average saturation and value over the hue range for balancing later frames.
+	'''
+	def __init__(self, calibration_file, gui_calibration_manager = None):
+		self.__calibration_file = calibration_file
+
+		# The number of frames to average for object detection
+		self.__averaging = 16
+
+		# The manager object if the GUI is being used (not required)
+		self.__gui = gui_calibration_manager
+
+	def get_averaging(self):
+		'''
+		Returns the averaging value for color calibration.
+		'''
+		return self.__averaging
+
+	def calibrate(self, color):
+		pass
+
+	def __calculate_hsv_range(self, frame):
+		pass
+
+	def __eliminate_overlap(self):
+		pass
+
+	def __filter_background(self):
+		pass
+
+	def __calculate_sv_average(self):
+		pass
