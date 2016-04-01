@@ -371,14 +371,13 @@ class DetectQRCodeTemplateMethod(object):
                 #cv2.imshow("found",image)
                 #cv2.waitKey(1)
 
-    def visual_servo(self, dist, block_color, orientation):
+    def visual_servo(self, dist, block_color, orientation, threshold=20, timeout=5):
         '''
-        Returns a more accurate location to put the camera gripper
+        Publishes a twist in order to move the robot and line ourselves up with the block in question.
         We specify a color and orientation so we don't have to check every combination of color and rotation when template matching.
         
         Orientation is an index to the color list NOT an absolute rotation.
         '''
-
         color_name = "/"+block_color
         this_color = self.colors[self.distances.index(dist)][color_name]
 
@@ -386,19 +385,27 @@ class DetectQRCodeTemplateMethod(object):
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gray = cv2.equalizeHist(gray)
 
-        mid_point = np.array(this_color[0].shape[::-1])/2
-        template = this_color[orientation]
+        image_center = image.shape[1]/2
+        print "CENTER:",image_center
 
-        # Apply matching threshold for this rotation
-        res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
-        loc = np.where( res >= self.threshold)
 
-        # We are going to average and display all the points here.
-        pt = np.mean(loc[::-1], axis=1) + mid_point
+        delta = threshold + 1
+        start_time = time.time()
+        while delta > threshold and time.time() - start_time > timeout:
+
+            template_mid_point = np.array(this_color[0].shape[::-1])/2
+            template = this_color[orientation]
+
+            # Apply matching threshold for this rotation
+            res = cv2.matchTemplate(gray,template,cv2.TM_CCOEFF_NORMED)
+            loc = np.where( res >= self.threshold)
+
+            # We are going to average and display all the points here.
+            pt = np.mean(loc[::-1], axis=1) + template_mid_point
+            delta = pt[0] - image_center
+            print delta
+
         #cv2.circle(image, (_pt[0] + mid_point[0],pt[1] + mid_point[1]), 15, (255,0,0), -1)    
-
-        # Calculate estimated block position in space.
-        return self.point_intersector.intersect_point(self.camera, pt)
 
     def publish_block(self,uv_point,color,offset,rotation):
         print "block detected:",uv_point
@@ -413,17 +420,8 @@ class DetectQRCodeTemplateMethod(object):
                 color=color,
                 rotation_index=rotation
             )
-        self.blocks.append(b_s)
         self.block_pub.publish(b_s)
-
-    def continuous_publish(self):
-        r = rospy.Rate(10)
-        while not rospy.is_shutdown():
-            rospy.loginfo("beep")
-            for b_s in self.blocks:
-                self.block_pub.publish(b_s)
-            r.sleep()
-
+        
 if __name__ == "__main__":
     #d = DetectQRCodeZBar(qr_code_count=1, timeout=10)
     rospy.init_node("detect_qr")
