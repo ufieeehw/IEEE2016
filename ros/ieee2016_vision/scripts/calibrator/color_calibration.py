@@ -1,7 +1,7 @@
 #!/usr/bin/python2
 #==============================================================================
 # Project: Machine Vision - Color Detection
-# Module: Color Calibration												v2.0
+# Module: Color Calibration												v2.2
 #
 # Author: Anthony Olive	<anthony@iris-systems.net>
 #==============================================================================
@@ -87,14 +87,14 @@ class CalibrationFile():
 
 	def create_color(self, color):
 		'''
-		Creates and initializes a new color calibration with the specified name
-		and some sane defaults (based on the display image size in
+		Creates and initializes a new color calibration with the specified
+		color name and some sane defaults (based on the display image size in
 		[width, height]).
 		'''
-		if (not str.isalnum(name)):
+		if (not str.isalnum(color)):
 			raise ValueError("The entered name is not alphanumeric")
 
-		elif (name in self.get_available_colors()):
+		elif (color in self.get_available_colors()):
 			raise KeyError("A calibration for this color already exists")
 
 		else:
@@ -115,9 +115,9 @@ class CalibrationFile():
 			raise KeyError("No color calibration exists for '%s'" % (color))
 
 		else:
-			del self.hsv_ranges[color]
-			del self.selection_boxes[color]
-			del self.overlap_prevention_rules[color]
+			del self.__hsv_ranges[color]
+			del self.__selection_boxes[color]
+			del self.__overlap_prevention_rules[color]
 
 	def get_hsv_range(self, color):
 		'''
@@ -143,10 +143,10 @@ class CalibrationFile():
 			raise ValueError("The maximum and minimum must be specified as follows: [H, S, V]")
 
 		for value in range[0]:
-			if (value < 0 or point >= 256):
+			if (value < 0 or value >= 256):
 				raise ValueError("The HSV values must be within the range [0, 256)")
 		for value in range[1]:
-			if (value < 0 or point >= 256):
+			if (value < 0 or value >= 256):
 				raise ValueError("The HSV values must be within the range [0, 256)")
 
 		self.__hsv_ranges[color] = range
@@ -186,10 +186,10 @@ class CalibrationFile():
 		if (not color in self.get_available_colors()):
 			raise KeyError("No color calibration exists for '%s'" % (color))
 
-		elif (not type(box_points) != list):
+		elif (type(box_points) != list):
 			raise ValueError("The points must be specified in a list as follows: [x1, x2, y1, y2]")
 
-		elif (not len(box_points) != 4):
+		elif (len(box_points) != 4):
 			raise ValueError("The points must be specified in a list as follows: [x1, x2, y1, y2]")
 
 		width = abs(box_points[1] - box_points[0])
@@ -225,8 +225,8 @@ class CalibrationFile():
 		if (not color in self.get_available_colors()):
 			raise KeyError("No color calibration exists for '%s'" % (color))
 
-		elif (not rule in self.__overlap_prevention_rules[color]):
-			print("Warning: There is no prevention rule for '%s' in the calibration for '%s'" % (rule, color))
+		elif (rule in self.__overlap_prevention_rules[color]):
+			print("Warning: There is already a prevention rule for '%s' in the calibration for '%s'" % (rule, color))
 
 		else:
 			self.__overlap_prevention_rules[color].append(rule)
@@ -239,8 +239,8 @@ class CalibrationFile():
 		if (not color in self.get_available_colors()):
 			raise KeyError("No color calibration exists for '%s'" % (color))
 
-		elif (rule in self.__overlap_prevention_rules[color]):
-			print("Warning: There is already a prevention rule for '%s' in the calibration for '%s'" % (rule, color))
+		elif (not rule in self.__overlap_prevention_rules[color]):
+			print("Warning: There is no prevention rule for '%s' in the calibration for '%s'" % (rule, color))
 
 		else:
 			self.__overlap_prevention_rules[color].remove(rule)
