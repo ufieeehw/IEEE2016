@@ -79,6 +79,7 @@ class Calibrator(QtGui.QMainWindow, Ui_MainWindow):
 		self.get_selection_color = self.__selection_pane.get_color
 		self.get_detection_color = self.__detection_pane.get_color
 		self.get_averaging = self.__detection_pane.get_averaging
+		self.get_display_type = self.__detection_pane.get_display_type
 
 	def set_selection_color(self, index):
 		'''
@@ -231,58 +232,58 @@ class Pane(QtGui.QMainWindow):
 	This is the base class for both panes. It contains shared functions such
 	as returning color values and managing the frame display.
 	'''
-	__frame_updated = QtCore.pyqtSignal()
+	frame_updated = QtCore.pyqtSignal()
 
 	def __init__(self, display_frame, stream_frames):
 		super(Pane, self).__init__()
-		self.__is_enabled = False
-		self.__is_displaying = False
-		self.__color = ""
-		self.__frame = None
+		self.is_enabled = False
+		self.is_displaying = False
+		self.color = ""
+		self.frame = None
 
 		# Values specific to the child object
 		self.__display_frame = display_frame
 		self.__stream_frames = stream_frames
 
 		# Links the update signal to the frame updater
-		self.__frame_updated.connect(self.__update_frame)
+		self.frame_updated.connect(self.__update_frame)
 
 	def get_color(self):
 		'''
 		Returns the currently selected detection color.
 		'''
-		return self.__color
+		return self.color
 
-	def __start_display(self):
+	def start_display(self):
 		'''
 		Starts a new thread to display selection frames from the camera if they
 		are not already being displayed.
 		'''
-		if (self.__is_enabled and not self.__is_displaying):
+		if (self.is_enabled and not self.is_displaying):
 			self.__display_thread = threading.Thread(target = self.__stream_frames)
 			self.__display_thread.daemon = True
 			self.__display_thread.start()
-			self.__is_displaying = True
+			self.is_displaying = True
 
 	def stop_display(self):
 		'''
 		Stops the frame display thread if it is running. Will wait until it
 		terminates and clear the last frame.
 		'''
-		if (self.__is_displaying):
-			self.__is_displaying = False
+		if (self.is_displaying):
+			self.is_displaying = False
 	 		while (self.__display_thread.isAlive()):
 	 			time.sleep(0.0001)
-	 		self.__display_frame.clear()
+	 	self.__display_frame.clear()
 
 	def __update_frame(self):
 		'''
 		Updates the frame displayed in one of the two display areas.
 		'''
-		if (self.__is_displaying):
+		if (self.is_displaying):
 
 			# Reformats the image as a pixmap
-			image = QtGui.QImage(self.__frame, self.__frame.shape[1], self.__frame.shape[0], QtGui.QImage.Format_RGB888)
+			image = QtGui.QImage(self.frame, self.frame.shape[1], self.frame.shape[0], QtGui.QImage.Format_RGB888)
 			pixmap = QtGui.QPixmap.fromImage(image)
 
 			# Embeds the pixmap into the selected label object
@@ -312,7 +313,7 @@ class SelectionPane(Pane):
 		self.__gui.selection_color_label.setEnabled(True)
 		self.__gui.selection_color_setting.setEnabled(True)
 		self.__gui.selection_frame.setEnabled(True)
-		self._Pane__is_enabled = True
+		self.is_enabled = True
 
 	def disable(self):
 		'''
@@ -325,7 +326,7 @@ class SelectionPane(Pane):
 		self.__selection_manager.disable()
 		self.__overlap_prevention_manager.disable()
 		self.__calibration_manager.disable()
-		self._Pane__is_enabled = False
+		self.is_enabled = False
 
 	def set_color(self, color):
 		'''
@@ -333,9 +334,9 @@ class SelectionPane(Pane):
 		and initializes the color ColorManager, SelectionManager, and
 		OverlapPreventionManager objects based on the set detection color.
 		'''
-		if (self._Pane__is_enabled and color):
-			self._Pane__color = color
-			self._Pane__start_display()
+		if (self.is_enabled and color):
+			self.color = color
+			self.start_display()
 			self.__selection_manager.enable()
 			self.__overlap_prevention_manager.enable()
 			self.__calibration_manager.enable()
@@ -345,7 +346,7 @@ class SelectionPane(Pane):
 			self.__overlap_prevention_manager.disable()
 			self.__calibration_manager.disable()
 			self.stop_display()
-			self._Pane__color = ""
+			self.color = ""
 
 	def __stream_frames(self):
 		'''
@@ -356,8 +357,8 @@ class SelectionPane(Pane):
 		self.__gui.camera.activate()
 		image = Image(self.__gui.camera, self.__gui.calibration_file, self.__gui.get_image_shape("width"))
 
-		while (self._Pane__is_displaying):
-			color = self._Pane__color
+		while (self.is_displaying):
+			color = self.color
 
 			if (color):
 				image.resize()
@@ -370,8 +371,8 @@ class SelectionPane(Pane):
 
 				# Reformat the image to RGB, which is what QImage takes, and emit an update signal
 				image.reformat_to_rgb()
-				self._Pane__frame = image.get_frame()
-				self._Pane__frame_updated.emit()
+				self.frame = image.get_frame()
+				self.frame_updated.emit()
 
 				# Keep the refresh rate at or below 20 FPS
 				time.sleep(1.0 / 20)
@@ -429,7 +430,7 @@ class DetectionPane(Pane):
 		self.__gui.averaging_setting.setEnabled(True)
 		self.__gui.display_type_group.setEnabled(True)
 		self.__gui.detection_frame.setEnabled(True)
-		self._Pane__is_enabled = True
+		self.is_enabled = True
 
 	def disable(self):
 		'''
@@ -443,7 +444,7 @@ class DetectionPane(Pane):
 		self.__gui.detection_frame.setEnabled(False)
 		self.stop_display()
 		self.__range_manager.disable()
-		self._Pane__is_enabled = False
+		self.is_enabled = False
 
 	def set_color(self, color):
 		'''
@@ -451,15 +452,15 @@ class DetectionPane(Pane):
 		and initializes the color RangeManager object based on the set
 		detection color.
 		'''
-		if (self._Pane__is_enabled and color):
-			self._Pane__color = color
-			self._Pane__start_display()
+		if (self.is_enabled and color):
+			self.color = color
+			self.start_display()
 			self.__range_manager.enable()
 
 		else:
 			self.__range_manager.disable()
 			self.stop_display()
-			self._Pane__color = ""
+			self.color = ""
 
 	def get_averaging(self):
 		'''
@@ -467,6 +468,13 @@ class DetectionPane(Pane):
 		detection.
 		'''
 		return self.__averaging
+
+	def get_display_type(self):
+		'''
+		Returns the type of frame that has been specified for displaying
+		detection frames.
+		'''
+		return self.__display_type
 
 	def __set_averaging(self, value):
 		'''
@@ -478,13 +486,12 @@ class DetectionPane(Pane):
 		'''
 		Sets the frame to display on the detection side of the GUI.
 		'''
-		if (self._Pane__is_enabled):
-			if self.__gui.display_unfiltered_button.isChecked():
-				self.__display_type = "unfiltered"
-			if self.__gui.display_reduced_button.isChecked():
-				self.__display_type = "reduced"
-			if self.__gui.display_extracted_button.isChecked():
-				self.__display_type = "extracted"
+		if self.__gui.display_unfiltered_button.isChecked():
+			self.__display_type = "unfiltered"
+		if self.__gui.display_reduced_button.isChecked():
+			self.__display_type = "reduced"
+		if self.__gui.display_extracted_button.isChecked():
+			self.__display_type = "extracted"
 
 	def __stream_frames(self):
 		'''
@@ -497,8 +504,8 @@ class DetectionPane(Pane):
 		image = Image(self.__gui.camera, self.__gui.calibration_file, self.__gui.get_image_shape("width"))
 		detect = ObjectDetector(image)
 
-		while (self._Pane__is_displaying):
-			color = self._Pane__color
+		while (self.is_displaying):
+			color = self.color
 			averaging = self.__averaging
 
 			if (color):
@@ -513,7 +520,7 @@ class DetectionPane(Pane):
 				elif (self.__display_type == "reduced"):
 					image.reduce_colors(16)
 				elif (self.__display_type == "extracted"):
-					image.extract_color(self._Pane__color)
+					image.extract_color(self.color)
 				image.set_hold_reduced(False)
 
 				# Draw the detection bounding box and center point if one exists
@@ -521,8 +528,8 @@ class DetectionPane(Pane):
 
 				# Reformat the image to RGB, which is what QImage takes, and emit an update signal
 				image.reformat_to_rgb()
-				self._Pane__frame = image.get_frame()
-				self._Pane__frame_updated.emit()
+				self.frame = image.get_frame()
+				self.frame_updated.emit()
 
 				# Keep the refresh rate at or below 20 FPS
 				time.sleep(1.0 / 20)
@@ -942,13 +949,17 @@ class RangeManager():
 			self.__gui.status_bar.showMessage("The HSV value ranges for '%s' have been saved to memory" % (self.__gui.get_detection_color()))
 
 
-class CalibrationManager():
+class CalibrationManager(QtGui.QMainWindow):
 	'''
 	Used when calibrating for a specific color. Locks the interface and uses
 	the display frame, HSV range display, and progress bar to show the ongoing
 	status of the calibration.
 	'''
+	calibration_step = QtCore.pyqtSignal()
+
 	def __init__(self, gui, colors_updated_signal):
+		super(CalibrationManager, self).__init__()
+
 		self.__gui = gui
 		self.__colors_updated = colors_updated_signal
 		self.__is_enabled = False
@@ -960,6 +971,9 @@ class CalibrationManager():
 
 		# Links the calibrate button to it's manager function
 		self.__gui.calibrate_button.clicked.connect(self.__calibrate_clicked)
+
+		# Links the calibration step signal to the display update function
+		self.calibration_step.connect(self.__update_display)
 
 	def enable(self):
 		'''
@@ -982,7 +996,7 @@ class CalibrationManager():
 		Used to reload the actual calibration object if the calibration file
 		is changed.
 		'''
-		self.__calibrator = ColorCalibrator(self.__gui.calibration_file, self)
+		self.__calibrator = ColorCalibrator(self.__gui.camera, self.__gui.calibration_file, self)
 
 	def __calibrate_clicked(self):
 		'''
@@ -1004,6 +1018,7 @@ class CalibrationManager():
 		'''
 		self.__gui.disable_interface()
 		self.enable()
+		self.__gui.progress_bar.setTextVisible(True)
 		self.__gui.display_type_group.setEnabled(True)
 
 		# Storing variables to be restored after capture is released
@@ -1023,6 +1038,8 @@ class CalibrationManager():
 		Restores the values that were originally on the GUI and enables all of
 		the objects that were active before the calibration began.
 		'''
+		self.__gui.progress_bar.setTextVisible(False)
+		self.__gui.detection_frame.clear()
 		self.__gui.file_loaded_interface()
 		self.__colors_updated.emit()
 
@@ -1034,6 +1051,30 @@ class CalibrationManager():
 		# Managing the captured state
 		self.__gui.calibrate_button.setText("Calibrate")
 		self.__state = "released"
+
+	def __update_display(self):
+		'''
+		Publishes data from the ongoing calibration to the HSV range boxes,
+		detection frame, and progress bar.
+		'''
+		if (self.__is_enabled and (self.__state == "captured")):
+			# Updates the HSV range based on what the calibrator doing with it
+			minimum, maximum = self.__calibrator.get_step_range
+			self.__gui.minimum_hsv_text.setText("(%d, %d, %d)" % (minimum[0], minimum[1], minimum[2]))
+			self.__gui.maximum_hsv_text.setText("(%d, %d, %d)" % (maximum[0], maximum[1], maximum[2]))
+
+			# Updates the progress bar based on the calibrator's state
+			self.__gui.progress_bar.setValue(self.__calibrator.step_progress)
+
+			# Retrieves a detection frame of the specified type for this step
+			frame = self.__calibrator.step_display_frame
+
+			# Reformats the image as a pixmap
+			image = QtGui.QImage(frame, frame.shape[1], frame.shape[0], QtGui.QImage.Format_RGB888)
+			pixmap = QtGui.QPixmap.fromImage(image)
+
+			# Embeds the pixmap into the selected label object
+	 		self.__gui.detection_frame.setPixmap(pixmap)
 
 
 if __name__ == '__main__':
