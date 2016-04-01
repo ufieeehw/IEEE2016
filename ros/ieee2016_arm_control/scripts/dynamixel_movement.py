@@ -4,7 +4,7 @@
 import rospy
 from dynamixel_io import DynamixelIO
 
-class DynamixelController():
+class DynamixelControl():
 	def __init__(self):
 		self.d = DynamixelIO('/dev/ttyUSB3', 1000000)
 		self.position = []
@@ -57,6 +57,6 @@ class DynamixelController():
 		else:
 			return False
 
-d = DynamixelController()
+d = DynamixelControl()
 d.set_dynamixels([1, 2], .006, 1)
 d.dynamixel_state([1, 2], 1)
