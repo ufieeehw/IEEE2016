@@ -1068,6 +1068,8 @@ class CalibrationManager(QtGui.QMainWindow):
 		Restores the values that were originally on the GUI and enables all of
 		the objects that were active before the calibration began.
 		'''
+		self.__gui.set_hold_value(False)
+
 		self.__gui.progress_bar.setTextVisible(False)
 		self.__gui.detection_frame.clear()
 		self.__gui.file_loaded_interface()
