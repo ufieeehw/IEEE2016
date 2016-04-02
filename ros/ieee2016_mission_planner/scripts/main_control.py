@@ -9,7 +9,6 @@ from camera_manager import Camera
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseArray, PoseStamped, Twist, TwistStamped, Vector3, Point32, PointStamped, PoseWithCovarianceStamped, PoseWithCovariance
 from ieee2016_msgs.msg import StartNavigation
 from ieee2016_msgs.srv import NavWaypoint, ArmWaypoint, RequestMap, DynamixelControl
-from kd_tree import KDTree
 from nav_msgs.msg import Odometry
 import numpy as np
 from qr_detector import DetectQRCodeTemplateMethod
@@ -387,9 +386,9 @@ class ControlUnit():
     def get_height_of_blocks(self, camera = False):
         # Camera will get the required height of the camera for good vision data.
 
-        a_height = .1778  # m
-        b_height = .254  # m
-        c_height = .127  # m
+        a_height = .19  # m
+        b_height = .27  # m
+        c_height = .142  # m
         block_size = .0381  # m
 
         height = 0
@@ -500,8 +499,7 @@ class TestingStateMachine():
         self.w = WaypointServer()
         self.waypoints = self.w.load_waypoints()
         self.control = ControlUnit(self.ros_manager, self.waypoints)  # Note that Ken does not have any self.control.
-        self.qr_distances = [29]  # ,35.25
-        self.qr_detector = DetectQRCodeTemplateMethod(self.qr_distances)
+        self.qr_detector = DetectQRCodeZBar()
 
         time.sleep(5)
         # self.current_state += 1
@@ -551,7 +549,7 @@ class TestingStateMachine():
                 self.cam1.activate()
                 pickup_parameters = self.control.get_pickup_stage()
                 self.bs_b_1.active = True
-                self.qr_detector.normal_scan(self.cam1, pickup_parameters[0])
+                self.qr_detector.normal_scan(timeout=3)
                 colors_b_1_top = self.bs_b_1.get_block_locations(top = True)[4:]
                 colors_b_1_bot = self.bs_b_1.get_block_locations(top = False)[4:]
                 self.cam1.deactivate()
@@ -565,14 +563,14 @@ class TestingStateMachine():
                 self.cam1.activate()
                 pickup_parameters = self.control.get_pickup_stage()
                 self.bs_b_2.active = True
-                self.qr_detector.normal_scan(self.cam1, pickup_parameters[0])
+                self.qr_detector.normal_scan(timeout=3)
                 colors_b_2_top = self.bs_b_2.get_block_locations(top = True)[-4:]
                 colors_b_2_bot = self.bs_b_2.get_block_locations(top = False)[-4:]
                 self.cam1.deactivate()
 
                 print "> EE2 Colors Generated."
 
-                arm_waypoints = self.waypoint_generator.generate_arm_waypointsV2([colors_b_1_top , colors_b_2_top, colors_b_1_bot , colors_b_2_bot])
+                arm_waypoints = self.waypoint_generator.generate_arm_waypointsV2([colors_b_1_top , colors_b_2_top, colors_b_1_bot, colors_b_2_bot])
                 self.ee_list = self.waypoint_generator.ee_list
 
                 print "> Arm Waypoints Created."
@@ -596,11 +594,11 @@ class TestingStateMachine():
                         waypoint = self.waypoint_generator.get_block_waypoint(ee_number, gripper_number, block_number)
                         self.ros_manager.set_nav_waypoint(waypoint)
 
-                        # Check if we can do visual servoing to line ourselves up better.
-                        camera_block = self.ee_list[ee].gripper_positions[self.ee_list[ee].cam_position]
-                        if camera_block.orientation is not None:
-                            color = camera_block.color
-                            orientation = camera_block.orientation
+                        # # Check if we can do visual servoing to line ourselves up better.
+                        # camera_block = self.ee_list[ee].gripper_positions[self.ee_list[ee].cam_position]
+                        # if camera_block.orientation is not None:
+                        #     color = camera_block.color
+                        #     orientation = camera_block.orientation
 
                         self.perform_pickup()
 
@@ -796,7 +794,7 @@ class RosManager():
             print "Waiting for map version..."
             time.sleep(.1)
         self.listen_for_map = False
-        
+
         request_map = rospy.Service('/robot/request_map', RequestMap, self.get_map)
 
         print "> State Machine Starting..."
@@ -919,12 +917,12 @@ class RosManager():
         self.state_pub.publish(state)
 
     def get_map(self, srv):
-        self.block_wall_y = 2.174  # m
+        self.block_wall_y = 2.135  # m
         self.far_wall_x = 2.438  # m
-        map_1 = np.array([   0, 0, 0, 2.174, 1,  # Left Wall
+        map_1 = np.array([   0, 0, 0, 2.135, 1,  # Left Wall
                              0, 0, 2.438, 0, 1,  # Back Wall
-                             2.438, 0, 2.438, 2.174, 1,  # Right Wall
-                             0, 2.174, 2.438, 2.174, 0,  # Front Wall
+                             2.438, 0, 2.438, 2.135, 1,  # Right Wall
+                             0, 2.135, 2.438, 2.135, 0,  # Front Wall
                              # Tunnel
                              0, .76, .017, .76, 0,  # Rear wall of left side of tunnel
                              .017, .76, .017, 1.14, 0,  # Inside face of left side of tunnel
