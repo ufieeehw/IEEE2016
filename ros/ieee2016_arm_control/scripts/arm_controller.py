@@ -13,6 +13,8 @@ from ieee2016_msgs.srv import ArmWaypoint, NavWaypoint, DynamixelControl
 roslib.load_manifest('ieee2016_mission_planner')
 from block_manager import EndEffector, Block
 
+from dynamixel_movement import DynamixelController
+
 import os
 import time
 import maestro
@@ -59,6 +61,8 @@ class ArmController():
         Dynamixles should rotate clockwise to extend or raise.
         '''
 
+        self.d = DynamixelController()
+
         self.arm_waypoint = rospy.Publisher('/robot/arm_waypoint', PoseStamped, queue_size=2)
         self.nav_goal_pub = rospy.Publisher("/robot/nav_waypoint", PoseStamped, queue_size=2) #Just for visualization
         # self.elevator = rospy.Publisher("/robot/arms/elevator", Float64, queue_size=2)
@@ -76,10 +80,15 @@ class ArmController():
         self.tf_broad = tf.TransformBroadcaster()
         self.tf_listener = tf.TransformListener()
 
-        r = rospy.Rate(10) #hz
-        while not rospy.is_shutdown():
-            self.publish_tf()
-            r.sleep()
+        self.elevator_pulley_radius = .00808507 #m
+        self.rail_pulley_radius = .015875 #m
+
+        rospy.spin()
+
+        # r = rospy.Rate(10) #hz
+        # while not rospy.is_shutdown():
+        #     self.publish_tf()
+        #     r.sleep()
 
     def move_arm(self,srv):
         # Find the position of the Gripper in the base_link frame
@@ -106,9 +115,9 @@ class ArmController():
 
     def publish_tf(self):
         # Get all 3 dyanmixles current position
-        #position_1 = 
-        #position_2 = 
-        #position_3 = 
+        position_1 = self.d.dynamixel_state(1, elevator_pulley_radius)
+        position_2 = self.d.dynamixel_state(2, elevator_pulley_radius)
+        position_3 = self.d.dynamixel_state(3, rail_pulley_radius)
         
         #base_link -> elevator
         self.tf_broad.sendTransform((0,0, .07112 + (position_2 + position_3)/2.0), 
@@ -147,6 +156,7 @@ class ArmController():
         self.nav_goal_pub.publish(p_s)
         self.goto_nav_goal(p_s)
 
+
     def set_elevator(self, srv):
         '''
         Set the elevator to some height in the tf frame: 'frame'.
@@ -159,11 +169,16 @@ class ArmController():
         min_height = 0 #m
         max_height = .31 #m
 
-        radius = .007 #m
-
         print "Sending",des_height
         if min_height <= des_height <= max_height:
-            #self.elevator.publish(Float64(data=des_height))
+            self.d.set_dynamixels([1,2],self.elevator_pulley_radius)
+            
+            # # Loop until we stop moving.
+            # r = rospy.Rate(10) #hz
+            # while not rospy.is_shutdown():
+            #     if self.d.dynamixel_motion():
+            #         break
+            #     r.sleep()
             return True
         else:
             print "Too high! Can not move to height:",des_height
@@ -182,15 +197,22 @@ class ArmController():
         # des_extend -= np.abs(trans[1])
 
         # Zero extenstion would be where the gripper starts, so make sure to offset for that.
-        des_extend = srv.position - .1163
+        des_extend = srv.position - .11
 
         min_dist = 0 #m
-        max_dist = .2230 #m
+        max_dist = .11 #m
 
-        radius = .015875 #m
         print "Sending",des_extend
         if min_dist <= des_extend <= max_dist:
-            #self.elevator.publish(Float64(data=des_extend/radius))
+            self.d.set_dynamixels([3],self.rail_pulley_radius)
+
+            # # Loop until we stop moving.
+            # r = rospy.Rate(10) #hz
+            # while not rospy.is_shutdown():
+            #     if self.d.dynamixel_motion():
+            #         break
+            #     r.sleep()
+
             return True
         else:
             print "Too extended! Can not move to extension:",des_extend
@@ -209,7 +231,7 @@ class ServoController():
         self.ee_list = ee
 
         # List of servo positions and their corresponding actual plugged in positions.
-        self.acutal_servos = {self.ee_list[0]:{0:7,1:6,2:5,3:4},self.ee_list[1]:{0:0,1:1,2:2,3:3}}
+        self.acutal_servos = {self.ee_list[0]:{0:4,1:5,2:6,3:7},self.ee_list[1]:{0:11,1:10,2:9,3:8}}
 
         # Populate list of servos, associating each with the correct port on the maestro.
         for ee in self.acutal_servos:
@@ -231,7 +253,6 @@ class ServoController():
         with open(CALIBRATION_FILE_URI, 'r') as infile:
             self.calibration_data = yaml.load(infile)
         print "> Servo Calibration Data Loaded."
-
 
     def close_grippers(self, ee, grippers_to_actuate = -1):
         #Given an end effector and a list of grippers to close on that ee, close them.
@@ -257,10 +278,24 @@ if __name__ == "__main__":
     #rospy.init_node("arm_controller")
     ee_1 = EndEffector(4, 1, 2)
     ee_2 = EndEffector(4, 1, 2)
-    s = ServoController(ee_1,ee_2)
+    s = ServoController(ee _1,ee_2)
 
     # r = rospy.Rate(10)
-    # while not rospy.is_shutdown():
-    s.close_grippers(ee_2   ,[0,1,3])
-    print "closing"
+    while not rospy.is_shutdown():
+        s.close_grippers(ee_2,[0])
+        time.sleep(.1)
+        s.close_grippers(ee_2,[1])
+        time.sleep(.1)
+        s.close_grippers(ee_2,[2])
+        time.sleep(.1)
+        s.close_grippers(ee_2,[3])
+        time.sleep(.1)
+        s.open_grippers(ee_2,[0])
+        time.sleep(.1)
+        s.open_grippers(ee_2,[1])
+        time.sleep(.1)
+        s.open_grippers(ee_2,[2])
+        time.sleep(.1)
+        s.open_grippers(ee_2,[3])
+        time.sleep(.1)
     time.sleep(2)

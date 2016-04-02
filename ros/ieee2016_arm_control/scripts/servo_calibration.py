@@ -45,7 +45,7 @@ class CalibrateServos():
         command_listener = threading.Thread(target=self.command_listener)
         command_listener.start()
 
-        for servo in range(12):
+        for servo in range(20):
             self.servos.set_range(servo, self.min_range, self.max_range)
             self.servos.set_speed(servo, 200)
             self.servos.set_acceleration(servo, 200)
@@ -63,6 +63,7 @@ class CalibrateServos():
             if position < self.min_range or position > self.max_range:
                 return
             self.current_position = position
+            #print self.current_position
             self.servos.set_target(self.current_servo, self.current_position)
             #print position
 

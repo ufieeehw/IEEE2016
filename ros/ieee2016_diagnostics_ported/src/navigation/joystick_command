@@ -3,7 +3,7 @@
 from __future__ import division
 
 # import roslib
-# roslib.load_manifest('joystick_command')
+# roslib.load_manifest('joystick_command
 
 import rospy
 
@@ -11,6 +11,8 @@ from sensor_msgs.msg import Joy
 from geometry_msgs.msg import Twist, TwistStamped, Vector3
 from std_msgs.msg import String, Int8, Bool
 from ieee2016_msgs.srv import StopMecanum, StopController
+from dynamixel_movement import DynamixelControl
+from arm_controller import ArmController
 
 import time
 
@@ -19,26 +21,34 @@ rospy.init_node('joystick_command')
 pub = rospy.Publisher('/robot/twist', TwistStamped, queue_size=3)
 start = rospy.Publisher('/settings/start_command', Bool, queue_size=3)
 map_version = rospy.Publisher('/settings/map_version', Int8, queue_size=3)
+dynamixel = rospy.Publisher('/joy', )
+elevator = rospy.Publisher('/robot/arm/elevator_target', Bool, queue_size=3)
+rail = rospy.Publisher('/robot/arm/rail_target', Bool, queue_size=3)
 
 stop_proxy = rospy.ServiceProxy('/robot/mecanum/stop', StopMecanum)
 speed = .1
 def got_joy_msg(joy_msg):
     global twist_stamped_msg, active, pub, speed
-
+    #no button
     if joy_msg.buttons[0]:
        active = not active
 
-    if joy_msg.buttons[3]:
+    #x button
+    if joy_msg.buttons[2]:
        map_version.publish(Int8(data=1))
        time.sleep(.2)
        start.publish(Bool(data=True))
+       elevator.publish(Bool(data=True))
+    #b button
     if joy_msg.buttons[1]:
        map_version.publish(Int8(data=2))
        time.sleep(.2)
        start.publish(Bool(data=True))
-
+       rail.publish(Bool(data=True))
+    #right click
     if joy_msg.buttons[5]:
         stop_proxy(False)
+    #left click
     if joy_msg.buttons[4]:
         stop_proxy(True)
 

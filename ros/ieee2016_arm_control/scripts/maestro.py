@@ -25,10 +25,26 @@ class Controller:
     # ports, then you can specify the port number when intiating a controller
     # object. Ports will typically start at 0 and count by twos.  So with two
     # controllers ports 0 and 2 would be used.
-    def __init__(self,port=0):
-        # Open the command port
-        ttyStr = '/dev/ttyACM' + str(port)
-        self.usb = serial.Serial(ttyStr)
+    def __init__(self, port = 3):
+        # Open the correct port
+        # real_port = None
+        # for port_index in range(5):
+        #     port = '/dev/ttyACM%d'%port_index
+        #     try:
+        #         self.usb = serial.Serial(port)
+        #         if 0 < self.get_position(1) < 0:
+        #             print "USING PORT %s!"%port
+        #             break
+        #         print "PORT %s NOT CORRECT."%port
+        #     except:
+        #         print "PORT %s NOT AVAILABLE."%port
+        #         pass
+
+        # if real_port is None:
+        #     print "NO PORT FOUND!"
+        #     exit()
+        real_port = "/dev/ttyACM%d"%port
+        self.usb = serial.Serial(real_port)
         # Command lead-in and device 12 are sent for each Pololu serial commands.
         self.PololuCmd = chr(0xaa) + chr(0xc)
         # Track target position for each servo. The function isMoving() will
@@ -123,7 +139,7 @@ class Controller:
         self.usb.write(cmd)
         lsb = ord(self.usb.read())
         msb = ord(self.usb.read())
-        return (msb << 8) + lsb
+        return ((msb << 8) + lsb)/4
 
     # Test to see if a servo has reached its target position.  This only provides
     # useful results if the Speed parameter is set slower than the maximum speed of
