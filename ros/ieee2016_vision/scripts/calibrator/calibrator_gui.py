@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'calibrator_gui.ui'
 #
-# Created: Sun Mar 27 08:20:54 2016
+# Created: Fri Apr  1 16:49:04 2016
 #      by: PyQt4 UI code generator 4.11.2
 #
 # WARNING! All changes made in this file will be lost!
@@ -247,10 +247,10 @@ class Ui_MainWindow(object):
         self.gridLayout_2.addWidget(self.maximum_hsv_label, 1, 0, 1, 1)
         self.maximum_hsv_text = QtGui.QLineEdit(self.color_ranges_group)
         self.maximum_hsv_text.setObjectName(_fromUtf8("maximum_hsv_text"))
-        self.gridLayout_2.addWidget(self.maximum_hsv_text, 1, 1, 1, 1)
+        self.gridLayout_2.addWidget(self.maximum_hsv_text, 1, 2, 1, 1)
         self.minimum_hsv_text = QtGui.QLineEdit(self.color_ranges_group)
         self.minimum_hsv_text.setObjectName(_fromUtf8("minimum_hsv_text"))
-        self.gridLayout_2.addWidget(self.minimum_hsv_text, 0, 1, 1, 1)
+        self.gridLayout_2.addWidget(self.minimum_hsv_text, 0, 2, 1, 1)
         self.horizontal_layout_8 = QtGui.QHBoxLayout()
         self.horizontal_layout_8.setObjectName(_fromUtf8("horizontal_layout_8"))
         self.save_changes_button = QtGui.QPushButton(self.color_ranges_group)
@@ -259,7 +259,13 @@ class Ui_MainWindow(object):
         self.undo_changes_button = QtGui.QPushButton(self.color_ranges_group)
         self.undo_changes_button.setObjectName(_fromUtf8("undo_changes_button"))
         self.horizontal_layout_8.addWidget(self.undo_changes_button)
-        self.gridLayout_2.addLayout(self.horizontal_layout_8, 2, 1, 1, 1)
+        self.gridLayout_2.addLayout(self.horizontal_layout_8, 3, 2, 1, 1)
+        self.average_v_label = QtGui.QLabel(self.color_ranges_group)
+        self.average_v_label.setObjectName(_fromUtf8("average_v_label"))
+        self.gridLayout_2.addWidget(self.average_v_label, 2, 0, 1, 1)
+        self.average_v_text = QtGui.QLineEdit(self.color_ranges_group)
+        self.average_v_text.setObjectName(_fromUtf8("average_v_text"))
+        self.gridLayout_2.addWidget(self.average_v_text, 2, 2, 1, 1)
         self.vertical_layout_2.addWidget(self.color_ranges_group)
         spacerItem9 = QtGui.QSpacerItem(20, 40, QtGui.QSizePolicy.Minimum, QtGui.QSizePolicy.Expanding)
         self.vertical_layout_2.addItem(spacerItem9)
@@ -330,6 +336,7 @@ class Ui_MainWindow(object):
         self.maximum_hsv_label.setText(_translate("MainWindow", "Maximum:", None))
         self.save_changes_button.setText(_translate("MainWindow", "Save to Memory Only", None))
         self.undo_changes_button.setText(_translate("MainWindow", "Undo Changes", None))
+        self.average_v_label.setText(_translate("MainWindow", "Average V:", None))
         self.menu_file.setTitle(_translate("MainWindow", "File", None))
         self.menu_new.setText(_translate("MainWindow", "New", None))
         self.menu_load.setText(_translate("MainWindow", "Load", None))

@@ -9,6 +9,7 @@
 import os
 import yaml
 
+from detection import Image, ObjectDetector
 import numpy as np
 
 
@@ -129,27 +130,31 @@ class CalibrationFile():
 		else:
 			return self.__hsv_ranges[color]
 
-	def set_hsv_range(self, color, range):
+	def set_hsv_range(self, color, values):
 		'''
-		Sets the HSV range for the specified color.
+		Sets the HSV range  values for the specified color.
 		'''
 		if (not color in self.get_available_colors()):
 			raise KeyError("No color calibration exists for '%s'" % (color))
 
-		elif (type(range) != list):
-			raise ValueError("Both a maximum and minimum value must be passed to set the HSV range")
+		elif (len(values) != 3):
+			raise ValueError("Maximum, minimum, and value average must be passed to set the HSV range")
 
-		elif (type(range) != list):
-			raise ValueError("The maximum and minimum must be specified as follows: [H, S, V]")
+		elif (type(values[0]) != list or type(values[1]) != list):
+			raise TypeError("The maximum and minimum must be specified as follows: [H, S, V]")
 
-		for value in range[0]:
-			if (value < 0 or value >= 256):
-				raise ValueError("The HSV values must be within the range [0, 256)")
-		for value in range[1]:
-			if (value < 0 or value >= 256):
-				raise ValueError("The HSV values must be within the range [0, 256)")
+		elif (type(values[2]) != int):
+			raise TypeError("The value average must be specified as an integer in the range [0, 256)")
 
-		self.__hsv_ranges[color] = range
+		elif (values[2] < 0 or values[2] >= 256):
+			raise ValueError("The value average must be within the range [0, 256)")
+
+		for index in range(2):
+			for value in values[index]:
+				if (value < 0 or value >= 256):
+					raise ValueError("The HSV values must be within the range [0, 256)")
+
+		self.__hsv_ranges[color] = values
 
 	def get_np_hsv_range(self, color):
 		'''
@@ -254,16 +259,19 @@ class ColorCalibrator():
 	center point is kept within the specified selection box, and determines the
 	average saturation and value over the hue range for balancing later frames.
 	'''
-	def __init__(self, camera, calibration_file, gui_calibration_manager = None):
-		self.__calibration_file = calibration_file
+	def __init__(self, camera, calibration_file, image_width, gui_calibrator = None):
 		self.__camera = camera
-		self.__color = ""
+		self.__calibration_file = calibration_file
 
 		# The number of frames to average for object detection
 		self.__averaging = 16
 
 		# The manager object if the GUI is being used (not required)
-		self.__gui = gui_calibration_manager
+		self.__gui = gui_calibrator
+
+		self.__color = ""
+		self.__range = None
+		self.__value_avg = None
 
 	def get_averaging(self):
 		'''
@@ -312,10 +320,31 @@ class ColorCalibrator():
 			return step_frame
 
 	def calibrate(self, color):
-		pass
+		self.__gui.status_bar.showMessage("Starting calibration for '%s'" % (color))
 
-	def __calculate_hsv_range(self, frame):
-		pass
+		# Creates image and detection objects separate from any that exist
+		self.__image = Image(self.__camera, self.__calibration_file, image_width)
+		self.__detector = ObjectDetector(image)
+
+
+	def __calculate_hsv_range(self, box):
+		'''
+		Slices the box from the array and calculates the maximum and minimum
+		HSV values to two standard deviations from the mean on either side.
+		'''
+		frame = self.__image.get_frame()
+		sliced_box = frame[box[0]:box[1], box[2]:box[3]]
+		sliced_box = sliced_box.reshape((-1, 3))
+
+		# Calculates the mean and standard deviation of the H, S, and V
+		means = np.mean(sliced_box, axis = 0)
+		std = np.std(sliced_box, axis = 0)
+
+		# Sets the range to one standard deviation above and below the mean
+		h_range = [means[0] - std[0], means[0] + std[0]]
+		s_range = [means[1] - std[1], means[1] + std[1]]
+		v_range = [means[2] - std[2], means[2] + std[2]]
+		self.__range = [[h_range[0], s_range[0], v_range[0]], [h_range[1], s_range[1], v_range[1]]]
 
 	def __eliminate_overlap(self):
 		pass
@@ -323,5 +352,17 @@ class ColorCalibrator():
 	def __filter_background(self):
 		pass
 
-	def __calculate_sv_average(self):
-		pass
+	def __calculate_average_v(self):
+		'''
+		Calculates the average value for all pixels in which the hue and
+		saturation fall within the range. The range MUST be generated first or
+		this will not work!
+		'''
+		if (self.__range):
+			frame = self.__image.get_frame()
+			pixels = frame.reshape((-1, 3))
+
+			within_min = np.ma.MaskedArray(frame[:, 2], mask = (np.ones_like(frame[:, 0]) * ((frame[:, 0] < self.__range[0][0]))))
+			within_max = np.ma.MaskedArray(within_min, mask = (np.ones_like(frame[:, 0]) * ((frame[:, 0] > self.__range[1][0]))))
+
+			self.__value_avg = np.mean(within_max)

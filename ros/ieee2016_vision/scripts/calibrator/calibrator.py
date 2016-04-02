@@ -392,8 +392,7 @@ class SelectionPane(Pane):
 				image.draw_point(self.__get_box_center(selection_box))
 
 				# Reformat the image to RGB, which is what QImage takes, and emit an update signal
-				image.reformat_to_rgb()
-				self.frame = image.get_frame()
+				self.frame = image.reformat_to_rgb()
 				self.frame_updated.emit()
 
 				# Keep the refresh rate at or below 20 FPS
@@ -528,7 +527,7 @@ class DetectionPane(Pane):
 		# Separate image manipulation and detection objects for this frame
 		self.__gui.camera.activate()
 		image = Image(self.__gui.camera, self.__gui.calibration_file, self.__gui.get_image_shape("width"))
-		detect = ObjectDetector(image)
+		detector = ObjectDetector(image)
 
 		while (self.is_displaying):
 			color = self.color
@@ -536,8 +535,8 @@ class DetectionPane(Pane):
 
 			if (color):
 				# Average detection of the selected color to obtain box and center points
-				detect.average_box(detect.select_largest_solid, [color], averaging)
-				center = detect.get_box_center(color)
+				detector.average_box(detector.select_largest_solid, [color], averaging)
+				center = detector.get_box_center(color)
 
 				# Pull the requested frame to display the image on
 				image.set_hold_reduced(True)
@@ -550,11 +549,10 @@ class DetectionPane(Pane):
 				image.set_hold_reduced(False)
 
 				# Draw the detection bounding box and center point if one exists
-				detect.draw_selection([color])
+				detector.draw_selection([color])
 
 				# Reformat the image to RGB, which is what QImage takes, and emit an update signal
-				image.reformat_to_rgb()
-				self.frame = image.get_frame()
+				self.frame = image.reformat_to_rgb()
 				self.frame_updated.emit()
 
 				# Keep the refresh rate at or below 20 FPS
@@ -933,9 +931,10 @@ class RangeManager():
 		box. Also used to reset the ranges if changes are undone by the user.
 		'''
 		if (self.__is_enabled):
-			minimum, maximum = self.__gui.calibration_file.get_hsv_range(self.__gui.get_detection_color())
+			minimum, maximum, average = self.__gui.calibration_file.get_hsv_range(self.__gui.get_detection_color())
 			self.__gui.minimum_hsv_text.setText("(%d, %d, %d)" % (minimum[0], minimum[1], minimum[2]))
 			self.__gui.maximum_hsv_text.setText("(%d, %d, %d)" % (maximum[0], maximum[1], maximum[2]))
+			self.__gui.average_v_text.setText("%d" % (average))
 
 	def __save(self):
 		'''
@@ -946,6 +945,7 @@ class RangeManager():
 		if (self.__is_enabled):
 			minimum = self.__gui.minimum_hsv_text.text()
 			maximum = self.__gui.maximum_hsv_text.text()
+			average = int(self.__gui.average_v_text.text())
 
 			# Determine if the tupple is properly formatted to (x, y, z)
 			if not (minimum and maximum):
@@ -959,21 +959,28 @@ class RangeManager():
 					self.__gui.status_bar.showMessage("ERROR: The values entered must be integers")
 					return None
 			else:
-				self.__gui.status_bar.showMessage("ERROR: One or more of the HSV ranges is not formatted properly")
+				self.__gui.status_bar.showMessage("ERROR: One or more of the HSV range values is not formatted properly")
 				return None
 
 			# Ensures that the HSV values are within the range limits
 			for value in minimum_values:
-				if not (value >= 0 and value <= 255):
+				if (value < 0 or value >= 256):
 					self.__gui.status_bar.showMessage("ERROR: One or more of the HSV values is out of the expected range of [0, 256)")
 					return None
 			for value in maximum_values:
-				if not (value >= 0 and value <= 255):
+				if (value < 0 or value >= 256):
+					self.__gui.status_bar.showMessage("ERROR: One or more of the HSV values is out of the expected range of [0, 256)")
+					return None
+
+			if (type(average) != int):
+					self.__gui.status_bar.showMessage("ERROR: The values entered must be integers")
+					return None
+			elif (average < 0 or average >= 256):
 					self.__gui.status_bar.showMessage("ERROR: One or more of the HSV values is out of the expected range of [0, 256)")
 					return None
 
 			# Saves the values to the calibration object
-			self.__gui.calibration_file.set_hsv_range(self.__gui.get_detection_color(), [minimum_values, maximum_values])
+			self.__gui.calibration_file.set_hsv_range(self.__gui.get_detection_color(), [minimum_values, maximum_values, average])
 			self.__gui.status_bar.showMessage("The HSV value ranges for '%s' have been saved to memory" % (self.__gui.get_detection_color()))
 
 
@@ -1001,7 +1008,7 @@ class CalibrationManager(QtGui.QMainWindow):
 		self.__gui.calibrate_button.clicked.connect(self.__calibrate_clicked)
 
 		# Links the calibration step signal to the display update function
-		self.calibration_step.connect(self.__update_display)
+		self.calibration_step.connect(self.update_display)
 
 	def enable(self):
 		'''
@@ -1024,7 +1031,7 @@ class CalibrationManager(QtGui.QMainWindow):
 		Used to reload the actual calibration object if the calibration file
 		is changed.
 		'''
-		self.__calibrator = ColorCalibrator(self.__gui.camera, self.__gui.calibration_file, self)
+		self.__calibrator = ColorCalibrator(self.__gui.camera, self.__gui.calibration_file, self.__gui.get_image_shape("width"), self.__gui)
 
 	def __calibrate_clicked(self):
 		'''
@@ -1036,6 +1043,7 @@ class CalibrationManager(QtGui.QMainWindow):
 				self.__release()
 			elif (self.__state == "released" and self.__calibrator):
 				self.__capture()
+				self.__calibrator.calibrate(self.__gui.get_selection_color())
 			else:
 				self.__gui.status_bar.showMessage("ERROR: Unable to calibrate because no calibration file loaded.")
 
@@ -1084,7 +1092,7 @@ class CalibrationManager(QtGui.QMainWindow):
 		self.__gui.calibrate_button.setText("Calibrate")
 		self.__state = "released"
 
-	def __update_display(self):
+	def update_display(self):
 		'''
 		Publishes data from the ongoing calibration to the HSV range boxes,
 		detection frame, and progress bar.

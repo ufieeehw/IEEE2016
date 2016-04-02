@@ -39,6 +39,12 @@ class Image():
 		'''
 		return self.__frame
 
+	def reformat_to_rgb(self):
+		'''
+		Converts the frame from BGR to RGB for a frame display and returns it.
+		'''
+		return cv2.cvtColor(self.__frame, cv2.COLOR_BGR2RGB)
+
 	def set_hold_reduced(self, state):
 		'''
 		Sets the state of the hold_reduced variable. This is used to hold a
@@ -50,6 +56,24 @@ class Image():
 
 		else:
 			self.__hold_reduced = state
+
+	def scale_point(self, point):
+		'''
+		Scales a point from an image of lower resolution to the camera's true
+		image resolution. The scaling ratio is based on the operating image
+		dimensions.
+		'''
+		if (len(point) != 2):
+			raise TypeError("The value that was passed is not an (x, y) point")
+
+		elif ((point[0] > self.__original_dimensions[0]) or (point[1] > self.__original_dimensions[1])):
+			print("Warning: The point that was passed is not within the boundaries of the frame")
+
+		else:
+			for i in range(2):
+				point[i] = point[i] * self.__scaling_ratio
+
+			return point
 
 	def resize(self):
 		'''
@@ -69,24 +93,6 @@ class Image():
 		height = int(width / self.__aspect_ratio)
 		new_dimensions = (width, height)
 		self.__frame = cv2.resize(self.__frame, new_dimensions, interpolation = cv2.INTER_AREA)
-
-	def scale_point(self, point):
-		'''
-		Scales a point from an image of lower resolution to the camera's true
-		image resolution. The scaling ratio is based on the operating image
-		dimensions.
-		'''
-		if (len(point) != 2):
-			raise TypeError("The value that was passed is not an (x, y) point")
-
-		elif ((point[0] > self.__original_dimensions[0]) or (point[1] > self.__original_dimensions[1])):
-			print("Warning: The point that was passed is not within the boundaries of the frame")
-
-		else:
-			for i in range(2):
-				point[i] = point[i] * self.__scaling_ratio
-
-			return point
 
 	def draw_point(self, point):
 		'''
@@ -174,12 +180,6 @@ class Image():
 		working_frame = cv2.cvtColor(self.__frame, cv2.COLOR_BGR2HSV)
 		mask = cv2.inRange(working_frame, self.__calibration_file.get_np_hsv_range(color)[0], self.__calibration_file.get_np_hsv_range(color)[1])
 		self.__frame = cv2.bitwise_and(working_frame, working_frame, mask = mask)
-
-	def reformat_to_rgb(self):
-		'''
-		Converts the frame from BGR to RGB for a display.
-		'''
-		self.__frame = cv2.cvtColor(self.__frame, cv2.COLOR_BGR2RGB)
 
 
 class ObjectDetector():
