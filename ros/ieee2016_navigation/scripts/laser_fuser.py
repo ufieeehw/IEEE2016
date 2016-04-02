@@ -3,10 +3,11 @@ import numpy as np
 import math
 import pyopencl as cl
 import os
+import time
 
 import rospy
 import tf
-from std_msgs.msg import Header, Int8
+from std_msgs.msg import Header, Int8, Bool
 from geometry_msgs.msg import Point32
 from sensor_msgs.msg import LaserScan, PointCloud
 import message_filters
@@ -14,6 +15,7 @@ import message_filters
 class LaserFuser():
     def __init__(self):
         self.map_version_pub = rospy.Publisher('/settings/map_version', Int8, queue_size=3)
+        self.start_pub = rospy.Publisher('/settings/start_command', Bool, queue_size=3)
         self.scan_pub = rospy.Publisher('/robot/navigation/lidar/scan_fused', LaserScan, queue_size=3)
         #self.scan_pc_pub = rospy.Publisher('/robot/navigation/lidar/scan_fused_pc', PointCloud, queue_size=3)
         rospy.init_node('laser_fuser')
@@ -54,8 +56,6 @@ class LaserFuser():
         rospy.Subscriber('/robot/navigation/lidar/scan_right',LaserScan,self.got_scan, queue_size=3)
         rospy.Subscriber('/robot/navigation/lidar/scan_back',LaserScan,self.got_scan, queue_size=3) 
 
-        self.left,self.front,self.right,self.back = False, False, False, False
-
         r = rospy.Rate(10)
         while not rospy.is_shutdown():
             # Since message filters don't work sometimes this is required.
@@ -63,11 +63,18 @@ class LaserFuser():
                 self.got_scans()
             r.sleep()
 
+
+        # For checking for gestures
+        self.left,self.front,self.right,self.back = False, False, False, False
+        self.started = False
+        self.time_checker = time.time()
+        self.listen_for_start()
+
         rospy.spin()
         
     def got_scan(self, msg):
         info = msg.header.frame_id,msg.header.stamp
-        rospy.loginfo(info)
+        #rospy.loginfo(info)
         if msg.header.frame_id == 'laser_left':
             self.left = True
             self.scans[0] = msg
@@ -81,10 +88,9 @@ class LaserFuser():
             self.back = True
             self.scans[3] = msg
 
-
     def got_scans(self):
         # Take all four scans, trim to a new FOV, convert them to cartesian, apply transformations, pub pointcloud, tranform back to cart, and pub laserscan
-        rospy.loginfo("got")
+        #rospy.loginfo("got")
         fused_cartesian = np.array([-1,-1])
         for i,s in enumerate(self.scans):
             # Define parameters based on scan data
@@ -100,10 +106,6 @@ class LaserFuser():
             ranges_size = ranges.size
             #self.pubish_scan(s,ranges,self.frames[i],angle_min,angle_max,angle_increment)
 
-            # This function will publish the map version. If the left lidar data is closer then the right, assume we are in map 1. If not assume map_2.
-            # This NEEDS to be tested.
-            self.check_map_version()
-
             # Get TF data about the LIDAR position
             (trans,q_rot) = self.tf_listener.lookupTransform('base_link',self.frames[i], rospy.Time(0))
             rot = tf.transformations.euler_from_quaternion(q_rot)
@@ -117,7 +119,7 @@ class LaserFuser():
 
         #print ranges_size*3
         self.fused_cartesian = fused_cartesian[1:]
-        self.publish_pc(self.fused_cartesian)
+        #self.publish_pc(self.fused_cartesian)
 
 
         # Now we convert back to polar and publish
@@ -126,12 +128,41 @@ class LaserFuser():
         self.fused_scan.ranges = self.cart_to_polar()
         self.scan_pub.publish(self.fused_scan)
 
+    def listen_for_start(self):
+        '''
+        Check for the start gesture (covering front amd back lidars), then use the left and right lidars to determine the map layout.
+        '''
+        # Publish start command.
+        r = rospy.Rate(10)
+        while not self.started and not rospy.is_shutdown():
+            self.check_start_command()
+            r.sleep()
+
+        time.sleep(.5)
+        # Publish map version
+        self.check_map_version()
+
     def check_map_version(self):
         # Take the average of the left and right sides, removing any NaN's or Inf's 
-        if np.nanmean(self.scans[0][np.isfinite(self.scans[0])]) < np.nanmean(self.scans[2][np.isfinite(self.scans[2])]):
+        l_scan = np.array(self.scans[0].ranges)
+        r_scan = np.array(self.scans[2].ranges)
+
+        if np.nanmean(l_scan[np.isfinite(l_scan)]) < np.nanmean(r_scan[np.isfinite(r_scan)]):
             self.map_version_pub.publish(Int8(data=1))
         else:
             self.map_version_pub.publish(Int8(data=2))
+
+    def check_start_command(self):
+        f_scan = np.array(self.scans[1].ranges)
+        b_scan = np.array(self.scans[3].ranges)
+
+        if np.nanmean(f_scan[np.isfinite(f_scan)]) < .2 and np.nanmean(b_scan[np.isfinite(b_scan)]) < .2:
+            print time.time() - self.time_checker
+            if time.time() - self.time_checker > 2:
+                self.start_pub.publish(Bool(data=True))
+                self.started = True
+        else:
+            self.time_checker = time.time()
 
     def polar_to_cart(self,r_theta,translation,frame):
         # Convert (r,theta) into (x,y)
@@ -144,7 +175,6 @@ class LaserFuser():
             y = (r_theta[0] * np.sin(r_theta[1])) + translation[1]
 
         return x,y
-
 
     def cart_to_polar(self):
         x_y = self.fused_cartesian
@@ -180,6 +210,8 @@ class LaserFuser():
 
 class GPULaserFuser():
     '''
+    Not implemented.
+
     Another laser fuser that uses the gpu to compute the transforms of the points.
     The data is returned like [theta_0, dist_0, theta_1, dist_1, ...] and needs to be digitized into the output laserscan.
     '''
