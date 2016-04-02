@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import rospy
 
-from ieee2016_msgs.srv import GetOdometry, SetWheelSpeeds
+from edison.srv import GetOdometry, SetWheelSpeeds
 
 import numpy as np
 import copy
